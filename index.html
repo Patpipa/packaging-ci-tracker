@@ -367,10 +367,10 @@ function renderNewRecord(){
     </div>
     ${draft.product==='Other' ? `<div class="field"><label>Specify Product</label><input type="text" value="${draft.productOther}" oninput="draft.productOther=this.value" placeholder="Enter product"></div>` : ''}
     <div class="timerow">
-      <div class="field"><label>Start Time</label><input type="time" value="${draft.startTime}" oninput="draft.startTime=this.value; render()"></div>
-      <div class="field"><label>End Time</label><input type="time" value="${draft.endTime}" oninput="draft.endTime=this.value; render()"></div>
+      <div class="field"><label>Start Time</label><input id="startTimeInput" type="time" value="${draft.startTime}" oninput="draft.startTime=this.value; updateDurationBadge()"></div>
+      <div class="field"><label>End Time</label><input id="endTimeInput" type="time" value="${draft.endTime}" oninput="draft.endTime=this.value; updateDurationBadge()"></div>
     </div>
-    ${draft.startTime && draft.endTime ? `<div class="duration-badge">Duration: ${fmtDur(dur)} (${dur} min)</div>` : ''}
+    <div id="durationBadgeWrap">${draft.startTime && draft.endTime ? `<div class="duration-badge">Duration: ${fmtDur(dur)} (${dur} min)</div>` : ''}</div>
   </div>
   <div class="card">
     <h3>Status — Why Is the Machine Not Running?</h3>
@@ -401,6 +401,16 @@ function toggleBreakMachine(m){
   const i = draft.breakMachines.indexOf(m);
   if(i>-1) draft.breakMachines.splice(i,1); else draft.breakMachines.push(m);
   render();
+}
+function updateDurationBadge(){
+  const wrap = document.getElementById('durationBadgeWrap');
+  if(!wrap) return;
+  if(draft.startTime && draft.endTime){
+    const dur = duration(draft.startTime, draft.endTime);
+    wrap.innerHTML = `<div class="duration-badge">Duration: ${fmtDur(dur)} (${dur} min)</div>`;
+  } else {
+    wrap.innerHTML = '';
+  }
 }
 async function saveRecord(){
   if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
