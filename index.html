@@ -290,11 +290,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift') return 'reports'; if(v==='history') return 'history'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly') return 'reports'; if(v==='history') return 'history'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', endShift:'End Shift', settings:'Settings'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings'};
   document.getElementById('pageTitle').textContent = titles[Router.current] || 'CI Tracker';
   updateClock();
   let html = '';
@@ -305,6 +305,7 @@ function render(){
     case 'history': html += renderHistory(); break;
     case 'reports': html += renderReportsList(); break;
     case 'reportView': html += renderReportView(Router.arg); break;
+    case 'weekly': html += renderWeeklyView(); break;
     case 'settings': html += renderSettings(); break;
     default: html += renderDashboard();
   }
@@ -552,6 +553,218 @@ function buildReport(date){
   }
   return {date, shiftStart:shiftTimes.start, shiftEnd:shiftTimes.end, generatedAt: Date.now(), totals: dt, perMachine, bottlenecks:bn, bottleneckMeta, machineMostAffected: mmw, observation, ciAction:'', recordCount: recs.length};
 }
+/* ============ WEEKLY / RANGE SUMMARY ============ */
+function recordsInRange(startDate, endDate){
+  return Store.records.filter(r=>r.date>=startDate && r.date<=endDate);
+}
+function buildRangeReport(startDate, endDate){
+  const recs = recordsInRange(startDate, endDate);
+  const dt = dayTotals(recs);
+  const bn = bottlenecks(recs,5);
+  const bottleneckMeta = {};
+  bn.forEach(([label])=>{ bottleneckMeta[label] = bottleneckCategory(recs, label); });
+  const mmw = machineMostWaiting(recs);
+  const perMachine = {};
+  MACHINES.forEach(m=>{ perMachine[m]=machineTotals(recs,m); });
+  const dayMap = {};
+  recs.forEach(r=>{ if(!dayMap[r.date]) dayMap[r.date]={WAITING:0,RUNNING:0,CHANGEOVER:0}; if(dayMap[r.date][r.status]!==undefined) dayMap[r.date][r.status]+=r.durationMin; });
+  const dayTrend = Object.keys(dayMap).sort().map(d=>({date:d, waiting:dayMap[d].WAITING, running:dayMap[d].RUNNING}));
+  const daysWithData = Object.keys(dayMap).length;
+  let observation = 'No production data recorded in this date range.';
+  if(bn.length){
+    const top = bn[0];
+    observation = `Across ${daysWithData} day${daysWithData===1?'':'s'}, the largest recurring source of lost time was ${top[0].toLowerCase()}, totaling ${fmtDur(top[1])}${dt.upstream>dt.internal?' of upstream delay':''}.`;
+    if(mmw.minutes>0) observation += ` ${mmw.machine} accumulated the most waiting time overall at ${fmtDur(mmw.minutes)}.`;
+    const worstDay = dayTrend.slice().sort((a,b)=>b.waiting-a.waiting)[0];
+    if(worstDay && worstDay.waiting>0) observation += ` ${fmtDate(worstDay.date)} was the worst single day for downtime, at ${fmtDur(worstDay.waiting)}.`;
+  }
+  return {startDate, endDate, totals:dt, perMachine, bottlenecks:bn, bottleneckMeta, machineMostAffected:mmw, dayTrend, daysWithData, observation, recordCount: recs.length};
+}
+let weeklyRange = null;
+function defaultWeeklyRange(){
+  const end = new Date();
+  const start = new Date(); start.setDate(end.getDate()-6);
+  return {start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10)};
+}
+function renderWeeklyView(){
+  if(!weeklyRange) weeklyRange = defaultWeeklyRange();
+  const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
+  const t = rep.totals;
+  const upPct = (t.upstream+t.internal)>0 ? Math.round(t.upstream/(t.upstream+t.internal)*100) : 0;
+  const intPct = 100-upPct;
+  const machineRows = MACHINES.map(m=>{
+    const mt = rep.perMachine[m]||{};
+    return `<div class="card"><h3>${m}</h3>
+      <div class="statrow"><span class="lbl">Running</span><span class="val" style="color:var(--run)">${fmtDur(mt.RUNNING||0)}</span></div>
+      <div class="statrow"><span class="lbl">Waiting</span><span class="val" style="color:var(--wait)">${fmtDur(mt.WAITING||0)}</span></div>
+      <div class="statrow"><span class="lbl">Changeover</span><span class="val" style="color:var(--change)">${fmtDur(mt.CHANGEOVER||0)}</span></div>
+      <div class="statrow"><span class="lbl">Break</span><span class="val" style="color:var(--brk)">${fmtDur(mt.BREAK||0)}</span></div>
+      <div class="statrow"><span class="lbl">No Work</span><span class="val" style="color:var(--nowork)">${fmtDur(mt.NO_WORK||0)}</span></div>
+    </div>`;
+  }).join('');
+  const bnList = rep.bottlenecks.length ? rep.bottlenecks.map(([name,min],i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-bar-wrap"><div class="rank-name">${name}</div></div><div class="rank-min">${fmtDur(min)}</div></div>`).join('') : '<div class="empty">No bottlenecks recorded.</div>';
+  const maxDayWait = Math.max(1, ...rep.dayTrend.map(d=>d.waiting));
+  const trendRows = rep.dayTrend.length ? rep.dayTrend.map(d=>`
+    <div class="rank-item"><div class="rank-bar-wrap"><div class="rank-name">${fmtDate(d.date)}</div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.round(d.waiting/maxDayWait*100)}%;background:var(--wait);"></div></div></div><div class="rank-min">${fmtDur(d.waiting)}</div></div>
+  `).join('') : '<div class="empty">No data in this range yet.</div>';
+
+  return `
+  <div class="card">
+    <h3>Date Range</h3>
+    <div class="timerow">
+      <div class="field"><label>Start</label><input type="date" value="${weeklyRange.start}" onchange="weeklyRange.start=this.value; render()"></div>
+      <div class="field"><label>End</label><input type="date" value="${weeklyRange.end}" onchange="weeklyRange.end=this.value; render()"></div>
+    </div>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="setWeeklyPreset(7)">Last 7 Days</button>
+      <button class="btn btn-ghost" onclick="setWeeklyPreset(30)">Last 30 Days</button>
+    </div>
+  </div>
+  <div class="reporthead">
+    <div class="eyebrow">Packaging Continuous Improvement</div>
+    <h2>Weekly Bottleneck Summary</h2>
+    <div class="sub">${fmtDate(rep.startDate)} – ${fmtDate(rep.endDate)} · ${rep.daysWithData} day${rep.daysWithData===1?'':'s'} with data</div>
+  </div>
+  ${machineRows}
+  <div class="card">
+    <h3>Accumulated Totals</h3>
+    <div class="statrow"><span class="lbl">Running</span><span class="val">${fmtDur(t.RUNNING)}</span></div>
+    <div class="statrow"><span class="lbl">Waiting / Downtime</span><span class="val" style="color:var(--wait)">${fmtDur(t.WAITING)}</span></div>
+    <div class="statrow"><span class="lbl">Changeover</span><span class="val">${fmtDur(t.CHANGEOVER)}</span></div>
+    <div class="statrow"><span class="lbl">Break</span><span class="val">${fmtDur(t.BREAK)}</span></div>
+    <div class="statrow"><span class="lbl">No Work Scheduled</span><span class="val">${fmtDur(t.NO_WORK)}</span></div>
+  </div>
+  <div class="card">
+    <h3>Downtime Analysis</h3>
+    <div class="statrow"><span class="lbl">Upstream Delay</span><span class="val" style="color:var(--up)">${fmtDur(t.upstream)} (${upPct}%)</span></div>
+    <div class="statrow"><span class="lbl">Packaging/Internal Delay</span><span class="val" style="color:var(--int)">${fmtDur(t.internal)} (${intPct}%)</span></div>
+  </div>
+  <div class="card">
+    <h3>Daily Downtime Trend</h3>${trendRows}
+  </div>
+  <div class="card">
+    <h3>Top Bottlenecks This Period</h3>${bnList}
+  </div>
+  <div class="card">
+    <h3>Machine With Most Downtime</h3>
+    <div class="bignum">${rep.machineMostAffected.machine||'--'}</div>
+    <div style="color:var(--muted);font-size:13px;margin-top:2px;">${fmtDur(rep.machineMostAffected.minutes||0)} waiting</div>
+  </div>
+  <div class="card">
+    <h3>Observation</h3>
+    <div class="obs">${rep.observation}</div>
+  </div>
+  <div class="btnrow" style="margin-bottom:10px;">
+    <button class="btn btn-secondary" onclick="exportWeeklyPDF()">Export PDF</button>
+    <button class="btn btn-secondary" onclick="shareWeekly()">Share</button>
+  </div>
+  <button class="btn btn-ghost" onclick="copyWeeklySummary()">Copy Share Summary</button>
+  `;
+}
+function setWeeklyPreset(days){
+  const end = new Date();
+  const start = new Date(); start.setDate(end.getDate()-(days-1));
+  weeklyRange = {start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10)};
+  render();
+}
+function weeklySummaryText(){
+  const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
+  const t = rep.totals;
+  return `PACKAGING CI WEEKLY SUMMARY
+${fmtDate(rep.startDate)} – ${fmtDate(rep.endDate)}
+
+Total Waiting/Downtime: ${fmtDur(t.WAITING)}
+Upstream Delay: ${fmtDur(t.upstream)}
+Packaging/Internal Delay: ${fmtDur(t.internal)}
+
+Top Bottleneck:
+${rep.bottlenecks.length ? rep.bottlenecks[0][0]+' — '+fmtDur(rep.bottlenecks[0][1]) : 'None'}
+
+Machine with Most Downtime:
+${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}
+
+Observation:
+${rep.observation}`;
+}
+async function copyWeeklySummary(){
+  try{ await navigator.clipboard.writeText(weeklySummaryText()); toast('Summary copied'); }
+  catch(e){ window.prompt('Copy this text manually:', weeklySummaryText()); }
+}
+async function shareWeekly(){
+  const text = weeklySummaryText();
+  if(navigator.share){
+    try{ await navigator.share({title:'Packaging CI Weekly Summary', text}); return; }
+    catch(e){ if(e && e.name==='AbortError') return; }
+  }
+  toast('Share not available here — using Copy instead');
+  copyWeeklySummary();
+}
+function exportWeeklyPDF(){
+  const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'letter'});
+  let y = 50;
+  doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('PACKAGING CONTINUOUS IMPROVEMENT', 40, y); y+=20;
+  doc.text('WEEKLY BOTTLENECK SUMMARY', 40, y); y+=26;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(`Range: ${fmtDate(rep.startDate)} - ${fmtDate(rep.endDate)}    Days with data: ${rep.daysWithData}`, 40, y); y+=26;
+
+  function section(title){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, 40, y); y+=6; doc.setDrawColor(200); doc.line(40,y,570,y); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
+  function row(label, val){ doc.text(label, 46, y); doc.text(String(val), 400, y); y+=15; }
+  function ensure(space){ if(y+space>760){ doc.addPage(); y=50; } }
+
+  section('MACHINE SUMMARY');
+  MACHINES.forEach(m=>{
+    ensure(90);
+    doc.setFont('helvetica','bold'); doc.text(m,46,y); y+=15; doc.setFont('helvetica','normal');
+    const mt = rep.perMachine[m]||{};
+    row('Running Time', fmtDur(mt.RUNNING||0));
+    row('Waiting/Downtime', fmtDur(mt.WAITING||0));
+    row('Changeover Time', fmtDur(mt.CHANGEOVER||0));
+    row('Break Time', fmtDur(mt.BREAK||0));
+    row('No Work Scheduled', fmtDur(mt.NO_WORK||0));
+    y+=6;
+  });
+
+  ensure(120); section('ACCUMULATED TOTALS');
+  const t = rep.totals;
+  row('Total Running Time', fmtDur(t.RUNNING));
+  row('Total Waiting/Downtime', fmtDur(t.WAITING));
+  row('Total Changeover', fmtDur(t.CHANGEOVER));
+  row('Total Break Time', fmtDur(t.BREAK));
+  row('Total No Work Scheduled', fmtDur(t.NO_WORK));
+
+  ensure(110); y+=6; section('DOWNTIME ANALYSIS');
+  const tot = t.upstream+t.internal;
+  row('Total Upstream Delay', fmtDur(t.upstream));
+  row('Total Packaging/Internal Delay', fmtDur(t.internal));
+  row('% Upstream', tot? Math.round(t.upstream/tot*100)+'%':'0%');
+  row('% Packaging/Internal', tot? Math.round(t.internal/tot*100)+'%':'0%');
+
+  ensure(30+rep.dayTrend.length*15); y+=6; section('DAILY DOWNTIME TREND');
+  if(rep.dayTrend.length){ rep.dayTrend.forEach(d=>row(fmtDate(d.date), fmtDur(d.waiting))); }
+  else { doc.text('No data in this range.',46,y); y+=15; }
+
+  ensure(140); y+=6; section('TOP BOTTLENECKS');
+  if(rep.bottlenecks.length){ rep.bottlenecks.forEach(([name,min],i)=>row(`${i+1}. ${name}`, fmtDur(min))); }
+  else { doc.text('No bottlenecks recorded.',46,y); y+=15; }
+
+  ensure(60); y+=6; section('MACHINE WITH MOST DOWNTIME');
+  doc.text(`${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}`, 46, y); y+=20;
+
+  ensure(90); section('OBSERVATION');
+  const obsLines = doc.splitTextToSize(rep.observation, 520);
+  doc.text(obsLines, 46, y); y += obsLines.length*14+10;
+
+  try{
+    doc.save(`Packaging_CI_Weekly_${rep.startDate}_to_${rep.endDate}.pdf`);
+    toast('PDF exported');
+  }catch(e){
+    try{ window.open(doc.output('bloburl'), '_blank'); toast('PDF opened in new tab — use Share/Save from there'); }
+    catch(e2){ toast('PDF export not available here'); }
+  }
+}
 async function confirmEndShift(){
   const rep = buildReport(todayStr());
   const existingIdx = Store.dailyReports.findIndex(r=>r.date===rep.date);
@@ -563,8 +776,9 @@ async function confirmEndShift(){
 }
 function renderReportsList(){
   const list = Store.dailyReports.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if(!list.length) return '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>';
-  return list.map(r=>`
+  let html = `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
+  if(!list.length){ html += '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>'; return html; }
+  html += list.map(r=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
       <div>
         <div style="font-family:'Oswald';font-size:15px;">${fmtDate(r.date)}</div>
@@ -573,6 +787,7 @@ function renderReportsList(){
       <button class="btn btn-secondary" style="width:auto;padding:10px 16px;" onclick="Router.go('reportView','${r.date}')">View →</button>
     </div>
   `).join('');
+  return html;
 }
 function renderReportView(date){
   const rep = Store.dailyReports.find(r=>r.date===date) || buildReport(date||todayStr());
