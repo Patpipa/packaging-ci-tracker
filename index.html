@@ -271,6 +271,17 @@ function bottlenecks(recs, limit){
   });
   return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,limit||5);
 }
+/* Collects a couple of real operator notes behind each ranked bottleneck, so reports show the actual floor context (e.g. which specific product/machine) rather than just the bucket label */
+function bottleneckNotesFor(recs, label, max){
+  max = max || 2;
+  const seen = new Set(); const notes = [];
+  recs.filter(r=>(r.status==='WAITING'||r.status==='CHANGEOVER') && effectiveReasonLabel(r)===label && r.notes && r.notes.trim()).forEach(r=>{
+    const n = r.notes.trim();
+    if(n===label) return; // avoid echoing the label back when it was itself sourced from this note (the "Other" case)
+    if(!seen.has(n) && notes.length<max){ seen.add(n); notes.push(n); }
+  });
+  return notes;
+}
 /* Finds which category/status a bottleneck label came from, for the suggestion engine — looks past the "Other"-swap to the real underlying record */
 function bottleneckCategory(recs, label){
   const rec = recs.find(r=>(r.status==='WAITING'||r.status==='CHANGEOVER') && effectiveReasonLabel(r)===label);
@@ -543,13 +554,22 @@ saveRecord = async function(){
   return _origSave();
 };
 
-/* ============ END SHIFT / REPORT ============ */
+/* Renders a bottleneck ranking list with real operator notes shown under each entry */
+function renderBottleneckListWithNotes(rep){
+  if(!rep.bottlenecks.length) return '<div class="empty">No bottlenecks recorded.</div>';
+  return rep.bottlenecks.map(([name,min],i)=>{
+    const notes = (rep.bottleneckNotes && rep.bottleneckNotes[name]) || [];
+    const noteHtml = notes.length ? `<div style="margin-top:4px;padding-left:2px;">${notes.map(n=>`<div style="font-size:11.5px;color:var(--muted);line-height:1.4;">— ${escapeHtml(n)}</div>`).join('')}</div>` : '';
+    return `<div class="rank-item" style="align-items:flex-start;"><div class="rank-num">${i+1}</div><div class="rank-bar-wrap"><div class="rank-name">${name}</div>${noteHtml}</div><div class="rank-min">${fmtDur(min)}</div></div>`;
+  }).join('');
+}
 function buildReport(date){
   const recs = recordsForDate(date);
   const dt = dayTotals(recs);
   const bn = bottlenecks(recs,5);
   const bottleneckMeta = {};
-  bn.forEach(([label])=>{ bottleneckMeta[label] = bottleneckCategory(recs, label); });
+  const bottleneckNotes = {};
+  bn.forEach(([label])=>{ bottleneckMeta[label] = bottleneckCategory(recs, label); bottleneckNotes[label] = bottleneckNotesFor(recs, label); });
   const mmw = machineMostWaiting(recs);
   const perMachine = {};
   MACHINES.forEach(m=>{ perMachine[m]=machineTotals(recs,m); });
@@ -560,7 +580,14 @@ function buildReport(date){
     observation = `Today's largest source of lost production time was ${top[0].toLowerCase()}, accounting for ${fmtDur(top[1])}${dt.upstream>dt.internal?' of upstream delay':''}.`;
     if(mmw.minutes>0) observation += ` ${mmw.machine} experienced the highest waiting time at ${fmtDur(mmw.minutes)}.`;
   }
-  return {date, shiftStart:shiftTimes.start, shiftEnd:shiftTimes.end, generatedAt: Date.now(), totals: dt, perMachine, bottlenecks:bn, bottleneckMeta, machineMostAffected: mmw, observation, ciAction:'', recordCount: recs.length};
+  return {date, shiftStart:shiftTimes.start, shiftEnd:shiftTimes.end, generatedAt: Date.now(), totals: dt, perMachine, bottlenecks:bn, bottleneckMeta, bottleneckNotes, machineMostAffected: mmw, observation, ciAction:'', recordCount: recs.length};
+}
+/* Always recomputes the report live from current records (so edits/new notes/new records show up immediately), while preserving any CI Action text the user already typed into a previously-saved report for that date. */
+function getReportForView(date){
+  const rep = buildReport(date);
+  const saved = Store.dailyReports.find(r=>r.date===date);
+  if(saved && saved.ciAction) rep.ciAction = saved.ciAction;
+  return rep;
 }
 /* ============ WEEKLY / RANGE SUMMARY ============ */
 function recordsInRange(startDate, endDate){
@@ -571,7 +598,8 @@ function buildRangeReport(startDate, endDate){
   const dt = dayTotals(recs);
   const bn = bottlenecks(recs,5);
   const bottleneckMeta = {};
-  bn.forEach(([label])=>{ bottleneckMeta[label] = bottleneckCategory(recs, label); });
+  const bottleneckNotes = {};
+  bn.forEach(([label])=>{ bottleneckMeta[label] = bottleneckCategory(recs, label); bottleneckNotes[label] = bottleneckNotesFor(recs, label); });
   const mmw = machineMostWaiting(recs);
   const perMachine = {};
   MACHINES.forEach(m=>{ perMachine[m]=machineTotals(recs,m); });
@@ -587,7 +615,7 @@ function buildRangeReport(startDate, endDate){
     const worstDay = dayTrend.slice().sort((a,b)=>b.waiting-a.waiting)[0];
     if(worstDay && worstDay.waiting>0) observation += ` ${fmtDate(worstDay.date)} was the worst single day for downtime, at ${fmtDur(worstDay.waiting)}.`;
   }
-  return {startDate, endDate, totals:dt, perMachine, bottlenecks:bn, bottleneckMeta, machineMostAffected:mmw, dayTrend, daysWithData, observation, recordCount: recs.length};
+  return {startDate, endDate, totals:dt, perMachine, bottlenecks:bn, bottleneckMeta, bottleneckNotes, machineMostAffected:mmw, dayTrend, daysWithData, observation, recordCount: recs.length};
 }
 let weeklyRange = null;
 function defaultWeeklyRange(){
@@ -611,7 +639,7 @@ function renderWeeklyView(){
       <div class="statrow"><span class="lbl">No Work</span><span class="val" style="color:var(--nowork)">${fmtDur(mt.NO_WORK||0)}</span></div>
     </div>`;
   }).join('');
-  const bnList = rep.bottlenecks.length ? rep.bottlenecks.map(([name,min],i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-bar-wrap"><div class="rank-name">${name}</div></div><div class="rank-min">${fmtDur(min)}</div></div>`).join('') : '<div class="empty">No bottlenecks recorded.</div>';
+  const bnList = renderBottleneckListWithNotes(rep);
   const maxDayWait = Math.max(1, ...rep.dayTrend.map(d=>d.waiting));
   const trendRows = rep.dayTrend.length ? rep.dayTrend.map(d=>`
     <div class="rank-item"><div class="rank-bar-wrap"><div class="rank-name">${fmtDate(d.date)}</div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.round(d.waiting/maxDayWait*100)}%;background:var(--wait);"></div></div></div><div class="rank-min">${fmtDur(d.waiting)}</div></div>
@@ -756,7 +784,18 @@ function exportWeeklyPDF(){
   else { doc.text('No data in this range.',46,y); y+=15; }
 
   ensure(140); y+=6; section('TOP BOTTLENECKS');
-  if(rep.bottlenecks.length){ rep.bottlenecks.forEach(([name,min],i)=>row(`${i+1}. ${name}`, fmtDur(min))); }
+  if(rep.bottlenecks.length){
+    rep.bottlenecks.forEach(([name,min],i)=>{
+      ensure(40);
+      row(`${i+1}. ${name}`, fmtDur(min));
+      const notes = (rep.bottleneckNotes && rep.bottleneckNotes[name]) || [];
+      if(notes.length){
+        doc.setFontSize(9); doc.setTextColor(120);
+        notes.forEach(n=>{ ensure(20); const lines = doc.splitTextToSize(`— ${n}`, 480); doc.text(lines, 56, y); y += lines.length*12; });
+        doc.setFontSize(10.5); doc.setTextColor(0);
+      }
+    });
+  }
   else { doc.text('No bottlenecks recorded.',46,y); y+=15; }
 
   ensure(60); y+=6; section('MACHINE WITH MOST DOWNTIME');
@@ -799,7 +838,7 @@ function renderReportsList(){
   return html;
 }
 function renderReportView(date){
-  const rep = Store.dailyReports.find(r=>r.date===date) || buildReport(date||todayStr());
+  const rep = getReportForView(date||todayStr());
   const t = rep.totals;
   const upPct = (t.upstream+t.internal)>0 ? Math.round(t.upstream/(t.upstream+t.internal)*100) : 0;
   const intPct = 100-upPct;
@@ -813,7 +852,7 @@ function renderReportView(date){
       <div class="statrow"><span class="lbl">No Work</span><span class="val" style="color:var(--nowork)">${fmtDur(mt.NO_WORK||0)}</span></div>
     </div>`;
   }).join('');
-  const bnList = rep.bottlenecks.length ? rep.bottlenecks.map(([name,min],i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-bar-wrap"><div class="rank-name">${name}</div></div><div class="rank-min">${fmtDur(min)}</div></div>`).join('') : '<div class="empty">No bottlenecks recorded.</div>';
+  const bnList = renderBottleneckListWithNotes(rep);
 
   return `
   <div class="reporthead">
@@ -914,7 +953,7 @@ async function useSuggestion(date, i){
   toast('Added to Action for Tomorrow');
 }
 function generateSuggestions(date){
-  const rep = Store.dailyReports.find(r=>r.date===date) || buildReport(date);
+  const rep = getReportForView(date);
   suggestionCache[date] = craftSuggestions(rep);
   const el = document.getElementById('suggestChips');
   if(el) el.innerHTML = renderSuggestionChips(date);
@@ -932,7 +971,7 @@ function renderEndShiftConfirm(){
 }
 
 function summaryText(date){
-  const rep = Store.dailyReports.find(r=>r.date===date) || buildReport(date);
+  const rep = getReportForView(date);
   const t = rep.totals;
   return `PACKAGING CI DAILY REPORT
 Date: ${fmtDate(rep.date)}
@@ -965,7 +1004,7 @@ async function shareReport(date){
   copySummary(date);
 }
 function exportReportPDF(date){
-  const rep = Store.dailyReports.find(r=>r.date===date) || buildReport(date);
+  const rep = getReportForView(date);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'letter'});
   let y = 50;
@@ -1008,7 +1047,18 @@ function exportReportPDF(date){
   row('% Packaging/Internal', tot? Math.round(t.internal/tot*100)+'%':'0%');
 
   ensure(140); y+=6; section('TOP BOTTLENECKS');
-  if(rep.bottlenecks.length){ rep.bottlenecks.forEach(([name,min],i)=>row(`${i+1}. ${name}`, fmtDur(min))); }
+  if(rep.bottlenecks.length){
+    rep.bottlenecks.forEach(([name,min],i)=>{
+      ensure(40);
+      row(`${i+1}. ${name}`, fmtDur(min));
+      const notes = (rep.bottleneckNotes && rep.bottleneckNotes[name]) || [];
+      if(notes.length){
+        doc.setFontSize(9); doc.setTextColor(120);
+        notes.forEach(n=>{ ensure(20); const lines = doc.splitTextToSize(`— ${n}`, 480); doc.text(lines, 56, y); y += lines.length*12; });
+        doc.setFontSize(10.5); doc.setTextColor(0);
+      }
+    });
+  }
   else { doc.text('No bottlenecks recorded.',46,y); y+=15; }
 
   ensure(60); y+=6; section('MACHINE WITH MOST DOWNTIME');
