@@ -154,6 +154,11 @@ const WAITING_CATEGORIES = {
 };
 function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
 function reasonClassification(category){ return WAITING_CATEGORIES[category] ? WAITING_CATEGORIES[category].cls : 'internal'; }
+/* When a generic "Other" reason was picked, use the operator's note as the specific label wherever reasons are shown or ranked */
+function effectiveReasonLabel(r){
+  if(r.reason && /other/i.test(r.reason) && r.notes && r.notes.trim()){ return r.notes.trim(); }
+  return r.reason;
+}
 
 /* ============ STORAGE LAYER ============ */
 const Store = {
@@ -261,10 +266,16 @@ function dayTotals(recs){
 function bottlenecks(recs, limit){
   const map = {};
   recs.filter(r=>r.status==='WAITING' || r.status==='CHANGEOVER').forEach(r=>{
-    const key = r.reason || r.status;
+    const key = effectiveReasonLabel(r) || r.status;
     map[key] = (map[key]||0)+r.durationMin;
   });
   return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,limit||5);
+}
+/* Finds which category/status a bottleneck label came from, for the suggestion engine — looks past the "Other"-swap to the real underlying record */
+function bottleneckCategory(recs, label){
+  const rec = recs.find(r=>(r.status==='WAITING'||r.status==='CHANGEOVER') && effectiveReasonLabel(r)===label);
+  if(!rec) return null;
+  return rec.status==='CHANGEOVER' ? 'Changeover' : rec.reasonCategory;
 }
 function machineMostWaiting(recs){
   let best=null,bestMin=-1;
@@ -311,7 +322,7 @@ function renderDashboard(){
   let mcards = MACHINES.map(m=>{
     const t = machineTotals(recs,m);
     const chips = STATUSES.filter(s=>t[s.key]>0).map(s=>`<span class="pill ${s.pillClass}"><span class="dot" style="background:${s.color}"></span>${fmtDur(t[s.key])}</span>`).join('');
-    return `<div class="machine-card"><div class="mname">${m}</div><div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div></div>`;
+    return `<div class="machine-card" style="cursor:pointer;position:relative;" onclick="quickNewRecord('${m}')"><div class="mname">${m}</div><div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div><div style="margin-top:8px;color:var(--amber);font-size:10px;font-family:'Oswald';letter-spacing:0.05em;">＋ NEW</div></div>`;
   }).join('');
 
   let bnList = bn.length ? bn.map(([name,min],i)=>{
@@ -346,7 +357,12 @@ function renderDashboard(){
 
 /* ============ NEW RECORD ============ */
 let draft = null;
-function freshDraft(){ return {machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime:'', endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', notes:''}; }
+function freshDraft(){ return {machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime:'', endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
+function quickNewRecord(machine){
+  draft = freshDraft();
+  draft.machine = machine;
+  Router.go('new');
+}
 function renderNewRecord(){
   if(!draft) draft = freshDraft();
   const isBreak = draft.status==='BREAK';
@@ -379,15 +395,17 @@ function renderNewRecord(){
     </div>
     ${draft.status==='CHANGEOVER' ? `
       <div class="field"><label>Changeover / Setup Reason</label>
-        <select onchange="draft.changeReason=this.value">${CHANGEOVER_REASONS.map(r=>`<option ${draft.changeReason===r?'selected':''}>${r}</option>`).join('')}</select>
-      </div>` : ''}
+        <select onchange="draft.changeReason=this.value; render()">${CHANGEOVER_REASONS.map(r=>`<option ${draft.changeReason===r?'selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      ${draft.changeReason==='Other' ? `<div class="field"><label>Specify Reason</label><input type="text" value="${draft.changeReasonOther}" oninput="draft.changeReasonOther=this.value" placeholder="Describe the changeover reason"></div>` : ''}` : ''}
     ${draft.status==='WAITING' ? `
       <div class="field"><label>Reason Category</label>
         <select onchange="draft.waitCategory=this.value; draft.waitReason=''; render()">${Object.keys(WAITING_CATEGORIES).map(c=>`<option ${draft.waitCategory===c?'selected':''}>${c}</option>`).join('')}</select>
       </div>
       <div class="field"><label>Specific Reason <span class="classtag ${reasonClassification(draft.waitCategory)==='upstream'?'up':'int'}" style="margin-left:6px;">${reasonClassification(draft.waitCategory)==='upstream'?'UPSTREAM':'INTERNAL'}</span></label>
-        <select onchange="draft.waitReason=this.value">${WAITING_CATEGORIES[draft.waitCategory].reasons.map(r=>`<option value="${r}" ${draft.waitReason===r?'selected':''}>${r}</option>`).join('')}</select>
-      </div>` : ''}
+        <select onchange="draft.waitReason=this.value; render()">${WAITING_CATEGORIES[draft.waitCategory].reasons.map(r=>`<option value="${r}" ${draft.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${draft.waitReason==='Other'?'selected':''}>Other</option></select>
+      </div>
+      ${draft.waitReason==='Other' ? `<div class="field"><label>Specify Reason</label><input type="text" value="${draft.waitReasonOther||''}" oninput="draft.waitReasonOther=this.value" placeholder="Describe the waiting reason"></div>` : ''}` : ''}
     ${draft.status==='NO_WORK' ? `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime.</div>` : ''}
     ${draft.status==='BREAK' ? `<div class="warnbanner" style="background:var(--brk-dim);border-color:var(--brk);color:var(--brk);">Break time will NOT be counted as downtime.</div>` : ''}
     <div class="field" style="margin-top:4px;"><label>Notes (optional)</label>
@@ -427,8 +445,8 @@ async function saveRecord(){
   } else {
     const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
     let reasonCategory='', reason='', classification='';
-    if(draft.status==='CHANGEOVER'){ reason = draft.changeReason; }
-    if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; reason = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; classification = reasonClassification(draft.waitCategory); }
+    if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
+    if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
     toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification});
   }
   Store.records = Store.records.concat(toSave);
@@ -454,7 +472,7 @@ function renderHistory(){
     return `<div class="hist-item">
       <div class="hist-top"><span class="mach">${r.machine}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${si.label}</span></div>
       <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${fmtDur(r.durationMin)} ${r.product?('· '+r.product):''}</div>
-      ${r.reason ? `<div class="hist-mid">${r.reason} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
+      ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editRecord('${r.id}')">✎</div>
@@ -485,7 +503,9 @@ async function deleteRecord(id){
 function editRecord(id){
   const r = Store.records.find(r=>r.id===id);
   if(!r) return;
-  draft = {machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER'?r.reason:CHANGEOVER_REASONS[0], waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING'?r.reason:'', notes:r.notes};
+  const isCustomChangeover = r.status==='CHANGEOVER' && !CHANGEOVER_REASONS.includes(r.reason);
+  const isCustomWaiting = r.status==='WAITING' && r.reasonCategory && WAITING_CATEGORIES[r.reasonCategory] && !WAITING_CATEGORIES[r.reasonCategory].reasons.includes(r.reason);
+  draft = {machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
   draft._editId = id;
   Router.go('new');
 }
@@ -500,8 +520,8 @@ saveRecord = async function(){
     if(idx>-1){
       const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
       let reasonCategory='', reason='', classification='';
-      if(draft.status==='CHANGEOVER'){ reason = draft.changeReason; }
-      if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; reason = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; classification = reasonClassification(draft.waitCategory); }
+      if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
+      if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
       Store.records[idx] = {...Store.records[idx], machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
       await Store.saveRecords();
       toast('Record Updated');
@@ -518,6 +538,8 @@ function buildReport(date){
   const recs = recordsForDate(date);
   const dt = dayTotals(recs);
   const bn = bottlenecks(recs,5);
+  const bottleneckMeta = {};
+  bn.forEach(([label])=>{ bottleneckMeta[label] = bottleneckCategory(recs, label); });
   const mmw = machineMostWaiting(recs);
   const perMachine = {};
   MACHINES.forEach(m=>{ perMachine[m]=machineTotals(recs,m); });
@@ -528,7 +550,7 @@ function buildReport(date){
     observation = `Today's largest source of lost production time was ${top[0].toLowerCase()}, accounting for ${fmtDur(top[1])}${dt.upstream>dt.internal?' of upstream delay':''}.`;
     if(mmw.minutes>0) observation += ` ${mmw.machine} experienced the highest waiting time at ${fmtDur(mmw.minutes)}.`;
   }
-  return {date, shiftStart:shiftTimes.start, shiftEnd:shiftTimes.end, generatedAt: Date.now(), totals: dt, perMachine, bottlenecks:bn, machineMostAffected: mmw, observation, ciAction:'', recordCount: recs.length};
+  return {date, shiftStart:shiftTimes.start, shiftEnd:shiftTimes.end, generatedAt: Date.now(), totals: dt, perMachine, bottlenecks:bn, bottleneckMeta, machineMostAffected: mmw, observation, ciAction:'', recordCount: recs.length};
 }
 async function confirmEndShift(){
   const rep = buildReport(todayStr());
@@ -637,7 +659,7 @@ function craftSuggestions(rep){
     return ['No bottleneck data recorded yet — log waiting and changeover reasons on the floor tomorrow so patterns can surface here.'];
   }
   const [reasonName, minutes] = rep.bottlenecks[0];
-  const category = categoryForReason(reasonName);
+  const category = (rep.bottleneckMeta && rep.bottleneckMeta[reasonName]) || categoryForReason(reasonName);
   const cls = reasonClassification(category);
   const ideas = [];
   ideas.push(`Run a 5-Whys session on "${reasonName}" with the ${cls==='upstream' && category!=='Changeover' ? 'upstream production' : 'packaging'} team to find the root cause behind today's ${fmtDur(minutes)}.`);
