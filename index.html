@@ -358,7 +358,7 @@ function renderDashboard(){
 
 /* ============ NEW RECORD ============ */
 let draft = null;
-function freshDraft(){ return {machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime:'', endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
+function freshDraft(){ return {date: todayStr(), machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime:'', endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
 function quickNewRecord(machine){
   draft = freshDraft();
   draft.machine = machine;
@@ -378,6 +378,8 @@ function renderNewRecord(){
 
   return `
   <div class="card">
+    <div class="field"><label>Date</label><input type="date" value="${draft.date||todayStr()}" onchange="draft.date=this.value"></div>
+    ${draft.date && draft.date!==todayStr() ? `<div class="duration-badge" style="color:var(--amber);border-color:var(--amber);">Backdated entry — will be logged under ${fmtDate(draft.date)}</div>` : ''}
     ${machineBlock}
     <div class="field"><label>Product</label>
       <select onchange="draft.product=this.value; render()">${PRODUCTS.map(p=>`<option ${draft.product===p?'selected':''}>${p}</option>`).join('')}</select>
@@ -436,7 +438,7 @@ async function saveRecord(){
   const dur = duration(draft.startTime, draft.endTime);
   if(dur<=0){ toast('End time must be after start'); return; }
   const base = {
-    date: todayStr(), startTime: draft.startTime, endTime: draft.endTime, durationMin: dur,
+    date: draft.date || todayStr(), startTime: draft.startTime, endTime: draft.endTime, durationMin: dur,
     status: draft.status, notes: draft.notes||'', createdAt: Date.now()
   };
   let toSave = [];
@@ -506,7 +508,7 @@ function editRecord(id){
   if(!r) return;
   const isCustomChangeover = r.status==='CHANGEOVER' && !CHANGEOVER_REASONS.includes(r.reason);
   const isCustomWaiting = r.status==='WAITING' && r.reasonCategory && WAITING_CATEGORIES[r.reasonCategory] && !WAITING_CATEGORIES[r.reasonCategory].reasons.includes(r.reason);
-  draft = {machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
+  draft = {date:r.date, machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
   draft._editId = id;
   Router.go('new');
 }
@@ -523,7 +525,7 @@ saveRecord = async function(){
       let reasonCategory='', reason='', classification='';
       if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
       if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
-      Store.records[idx] = {...Store.records[idx], machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
+      Store.records[idx] = {...Store.records[idx], date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
       await Store.saveRecords();
       toast('Record Updated');
     }
