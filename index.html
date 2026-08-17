@@ -455,9 +455,16 @@ async function saveRecord(){
   Store.records = Store.records.concat(toSave);
   const ok = await Store.saveRecords();
   if(!ok){ toast('Save failed — storage unavailable'); return; }
-  toast('Record Saved');
+  const savedDate = base.date;
+  const isToday = savedDate===todayStr();
+  toast(isToday ? 'Record Saved' : `Record Saved to ${fmtDate(savedDate)}`);
   draft = freshDraft();
-  Router.go('dashboard');
+  if(isToday){
+    Router.go('dashboard');
+  } else {
+    histFilters = {date: savedDate, machine:'', product:'', status:'', category:''};
+    Router.go('history');
+  }
 }
 
 /* ============ HISTORY ============ */
