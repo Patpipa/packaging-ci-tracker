@@ -134,7 +134,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const MACHINES = ['Machine 1','Machine 2','Machine 3'];
+const MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
 const STATUSES = [
   {key:'RUNNING', label:'Running', color:'var(--run)', dim:'var(--run-dim)', pillClass:'run'},
@@ -239,12 +239,13 @@ function hideStorageWarning(){
   if(el) el.remove();
 }
 
-function todayStr(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function localDateStr(d){ d = d || new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function todayStr(){ return localDateStr(new Date()); }
 function fmtDate(iso){ const d=new Date(iso+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
 function toMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
 function duration(start,end){ let s=toMin(start), e=toMin(end); if(s==null||e==null) return 0; let d=e-s; if(d<0) d+=1440; return d; }
 function fmtDur(min){ min=Math.round(min); const h=Math.floor(min/60), m=min%60; return h>0? `${h}h ${m}m` : `${m}m`; }
-function fmtTime12(t){ if(!t) return '--'; let [h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; h=h%12; if(h===0)h=12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; }
+function fmtTime12(t){ if(!t) return '--'; const parts=t.split(':'); let h=Number(parts[0]), m=Number(parts[1]); if(isNaN(h)||isNaN(m)) return '--'; const ap=h>=12?'PM':'AM'; h=h%12; if(h===0)h=12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1600); }
 function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
@@ -621,7 +622,7 @@ let weeklyRange = null;
 function defaultWeeklyRange(){
   const end = new Date();
   const start = new Date(); start.setDate(end.getDate()-6);
-  return {start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10)};
+  return {start: localDateStr(start), end: localDateStr(end)};
 }
 function renderWeeklyView(){
   if(!weeklyRange) weeklyRange = defaultWeeklyRange();
@@ -701,7 +702,7 @@ function renderWeeklyView(){
 function setWeeklyPreset(days){
   const end = new Date();
   const start = new Date(); start.setDate(end.getDate()-(days-1));
-  weeklyRange = {start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10)};
+  weeklyRange = {start: localDateStr(start), end: localDateStr(end)};
   render();
 }
 function weeklySummaryText(){
