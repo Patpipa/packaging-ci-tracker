@@ -258,8 +258,14 @@ function machineTotals(recs, machine){
 }
 function dayTotals(recs){
   const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0, upstream:0, internal:0};
+  const seenBreaks = new Set();
   recs.forEach(r=>{
-    t[r.status]=(t[r.status]||0)+r.durationMin;
+    if(r.status==='BREAK'){
+      // A single break logged across multiple machines shares the same createdAt — count its real-world duration once, not once per machine
+      if(!seenBreaks.has(r.createdAt)){ seenBreaks.add(r.createdAt); t.BREAK += r.durationMin; }
+    } else {
+      t[r.status]=(t[r.status]||0)+r.durationMin;
+    }
     if(r.status==='WAITING'){ if(r.classification==='upstream') t.upstream+=r.durationMin; else t.internal+=r.durationMin; }
   });
   return t;
