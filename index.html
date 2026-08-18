@@ -256,6 +256,18 @@ function machineTotals(recs, machine){
   recs.filter(r=>r.machine===machine).forEach(r=>{ t[r.status]=(t[r.status]||0)+r.durationMin; });
   return t;
 }
+/* Efficiency = Running ÷ (Running + Waiting + Changeover) — excludes No Work Scheduled and Break, which aren't the machine's fault */
+function efficiencyPct(mt){
+  const scheduled = (mt.RUNNING||0)+(mt.WAITING||0)+(mt.CHANGEOVER||0);
+  if(scheduled<=0) return null;
+  return Math.round((mt.RUNNING||0)/scheduled*100);
+}
+function efficiencyColor(pct){
+  if(pct===null) return 'var(--muted)';
+  if(pct>=85) return 'var(--run)';
+  if(pct>=60) return 'var(--change)';
+  return 'var(--wait)';
+}
 function dayTotals(recs){
   const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0, upstream:0, internal:0};
   const seenBreaks = new Set();
@@ -341,8 +353,9 @@ function renderDashboard(){
   const mmw = machineMostWaiting(recs);
   let mcards = MACHINES.map(m=>{
     const t = machineTotals(recs,m);
+    const eff = efficiencyPct(t);
     const chips = STATUSES.filter(s=>t[s.key]>0).map(s=>`<span class="pill ${s.pillClass}"><span class="dot" style="background:${s.color}"></span>${fmtDur(t[s.key])}</span>`).join('');
-    return `<div class="machine-card" style="cursor:pointer;position:relative;" onclick="quickNewRecord('${m}')"><div class="mname">${m}</div><div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div><div style="margin-top:8px;color:var(--amber);font-size:10px;font-family:'Oswald';letter-spacing:0.05em;">＋ NEW</div></div>`;
+    return `<div class="machine-card" style="cursor:pointer;position:relative;" onclick="quickNewRecord('${m}')"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div><div style="margin-top:8px;color:var(--amber);font-size:10px;font-family:'Oswald';letter-spacing:0.05em;">＋ NEW</div></div>`;
   }).join('');
 
   let bnList = bn.length ? bn.map(([name,min],i)=>{
@@ -453,6 +466,22 @@ function updateDurationBadge(){
     wrap.innerHTML = '';
   }
 }
+function rangesOverlap(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && bStart < aEnd; }
+/* Warns if a record about to be saved overlaps an existing entry for the same machine/date — catches accidental double-logging before it skews a report. Returns true to proceed, false to cancel. */
+function confirmNoOverlap(newRecords, excludeId){
+  const conflicts = [];
+  newRecords.forEach(nr=>{
+    const nStart = toMin(nr.startTime), nEnd = toMin(nr.endTime) < nStart ? toMin(nr.endTime)+1440 : toMin(nr.endTime);
+    Store.records.filter(r=>r.machine===nr.machine && r.date===nr.date && r.id!==excludeId).forEach(r=>{
+      const eStart = toMin(r.startTime), eEnd = toMin(r.endTime) < eStart ? toMin(r.endTime)+1440 : toMin(r.endTime);
+      if(rangesOverlap(nStart,nEnd,eStart,eEnd)){
+        conflicts.push(`${nr.machine}: ${fmtTime12(nr.startTime)}–${fmtTime12(nr.endTime)} overlaps existing ${statusInfo(r.status).label} (${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)})`);
+      }
+    });
+  });
+  if(!conflicts.length) return true;
+  return confirm(`This overlaps with an existing entry:\n\n${conflicts.join('\n')}\n\nSave anyway?`);
+}
 async function saveRecord(){
   if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
   const dur = duration(draft.startTime, draft.endTime);
@@ -472,6 +501,7 @@ async function saveRecord(){
     if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
     toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification});
   }
+  if(!confirmNoOverlap(toSave)) return;
   Store.records = Store.records.concat(toSave);
   const ok = await Store.saveRecords();
   if(!ok){ toast('Save failed — storage unavailable'); return; }
@@ -553,6 +583,8 @@ saveRecord = async function(){
       let reasonCategory='', reason='', classification='';
       if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
       if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
+      const candidate = {date: draft.date||todayStr(), machine:draft.machine, startTime:draft.startTime, endTime:draft.endTime};
+      if(!confirmNoOverlap([candidate], draft._editId)) return;
       Store.records[idx] = {...Store.records[idx], date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
       await Store.saveRecords();
       toast('Record Updated');
@@ -628,6 +660,35 @@ function buildRangeReport(startDate, endDate){
   return {startDate, endDate, totals:dt, perMachine, bottlenecks:bn, bottleneckMeta, bottleneckNotes, machineMostAffected:mmw, dayTrend, daysWithData, observation, recordCount: recs.length};
 }
 let weeklyRange = null;
+/* Renders a simple SVG bar chart of daily Waiting minutes so a trend (e.g. a fix taking effect) is visible at a glance instead of scanning numbers */
+function renderTrendChart(dayTrend){
+  if(!dayTrend.length) return '<div class="empty">No data in this range yet.</div>';
+  const W = 340, H = 130, padL = 4, padR = 4, padB = 22, padT = 10;
+  const chartW = W - padL - padR, chartH = H - padT - padB;
+  const maxVal = Math.max(1, ...dayTrend.map(d=>d.waiting));
+  const n = dayTrend.length;
+  const barGap = 4;
+  const barW = Math.max(3, (chartW - barGap*(n-1)) / n);
+  let bars = '';
+  let labels = '';
+  const labelEvery = n>14 ? Math.ceil(n/7) : (n>7 ? 2 : 1);
+  dayTrend.forEach((d,i)=>{
+    const x = padL + i*(barW+barGap);
+    const h = (d.waiting/maxVal)*chartH;
+    const y = padT + (chartH-h);
+    const color = d.waiting===maxVal && maxVal>0 ? 'var(--wait)' : 'var(--amber)';
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" rx="2" fill="${color}"><title>${fmtDate(d.date)}: ${fmtDur(d.waiting)}</title></rect>`;
+    if(i % labelEvery === 0 || i===n-1){
+      const dLabel = new Date(d.date+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric'});
+      labels += `<text x="${(x+barW/2).toFixed(1)}" y="${H-6}" font-size="8" fill="var(--muted2)" text-anchor="middle" font-family="IBM Plex Mono">${dLabel}</text>`;
+    }
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+    <line x1="${padL}" y1="${padT+chartH}" x2="${W-padR}" y2="${padT+chartH}" stroke="var(--line)" stroke-width="1"/>
+    ${bars}${labels}
+  </svg>
+  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;"><span>Daily Waiting/Downtime (min)</span><span>Peak: ${fmtDur(maxVal)}</span></div>`;
+}
 function defaultWeeklyRange(){
   const end = new Date();
   const start = new Date(); start.setDate(end.getDate()-6);
@@ -641,7 +702,8 @@ function renderWeeklyView(){
   const intPct = 100-upPct;
   const machineRows = MACHINES.map(m=>{
     const mt = rep.perMachine[m]||{};
-    return `<div class="card"><h3>${m}</h3>
+    const eff = efficiencyPct(mt);
+    return `<div class="card"><h3 style="display:flex;justify-content:space-between;align-items:center;">${m}${eff!==null?`<span class="mono" style="color:${efficiencyColor(eff)};font-size:14px;">${eff}% eff.</span>`:''}</h3>
       <div class="statrow"><span class="lbl">Running</span><span class="val" style="color:var(--run)">${fmtDur(mt.RUNNING||0)}</span></div>
       <div class="statrow"><span class="lbl">Waiting</span><span class="val" style="color:var(--wait)">${fmtDur(mt.WAITING||0)}</span></div>
       <div class="statrow"><span class="lbl">Changeover</span><span class="val" style="color:var(--change)">${fmtDur(mt.CHANGEOVER||0)}</span></div>
@@ -687,7 +749,7 @@ function renderWeeklyView(){
     <div class="statrow"><span class="lbl">Packaging/Internal Delay</span><span class="val" style="color:var(--int)">${fmtDur(t.internal)} (${intPct}%)</span></div>
   </div>
   <div class="card">
-    <h3>Daily Downtime Trend</h3>${trendRows}
+    <h3>Daily Downtime Trend</h3>${renderTrendChart(rep.dayTrend)}<div style="margin-top:10px;">${trendRows}</div>
   </div>
   <div class="card">
     <h3>Top Bottlenecks This Period</h3>${bnList}
@@ -855,7 +917,8 @@ function renderReportView(date){
   const intPct = 100-upPct;
   const machineRows = MACHINES.map(m=>{
     const mt = rep.perMachine[m] || machineTotals(recordsForDate(rep.date), m);
-    return `<div class="card"><h3>${m}</h3>
+    const eff = efficiencyPct(mt);
+    return `<div class="card"><h3 style="display:flex;justify-content:space-between;align-items:center;">${m}${eff!==null?`<span class="mono" style="color:${efficiencyColor(eff)};font-size:14px;">${eff}% eff.</span>`:''}</h3>
       <div class="statrow"><span class="lbl">Running</span><span class="val" style="color:var(--run)">${fmtDur(mt.RUNNING||0)}</span></div>
       <div class="statrow"><span class="lbl">Waiting</span><span class="val" style="color:var(--wait)">${fmtDur(mt.WAITING||0)}</span></div>
       <div class="statrow"><span class="lbl">Changeover</span><span class="val" style="color:var(--change)">${fmtDur(mt.CHANGEOVER||0)}</span></div>
