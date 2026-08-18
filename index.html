@@ -261,8 +261,9 @@ function dayTotals(recs){
   const seenBreaks = new Set();
   recs.forEach(r=>{
     if(r.status==='BREAK'){
-      // A single break logged across multiple machines shares the same createdAt — count its real-world duration once, not once per machine
-      if(!seenBreaks.has(r.createdAt)){ seenBreaks.add(r.createdAt); t.BREAK += r.durationMin; }
+      // A break covering multiple machines should count once toward the shift total, whether logged in one batch or separately per machine — key on the actual time window, not just the save timestamp
+      const key = `${r.date}|${r.startTime}|${r.endTime}`;
+      if(!seenBreaks.has(key)){ seenBreaks.add(key); t.BREAK += r.durationMin; }
     } else {
       t[r.status]=(t[r.status]||0)+r.durationMin;
     }
@@ -376,7 +377,8 @@ function renderDashboard(){
 
 /* ============ NEW RECORD ============ */
 let draft = null;
-function freshDraft(){ return {date: todayStr(), machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime:'', endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
+let lastEndTime = '';
+function freshDraft(){ return {date: todayStr(), machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime: lastEndTime, endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
 function quickNewRecord(machine){
   draft = freshDraft();
   draft.machine = machine;
@@ -475,6 +477,7 @@ async function saveRecord(){
   if(!ok){ toast('Save failed — storage unavailable'); return; }
   const savedDate = base.date;
   const isToday = savedDate===todayStr();
+  lastEndTime = draft.endTime;
   toast(isToday ? 'Record Saved' : `Record Saved to ${fmtDate(savedDate)}`);
   draft = freshDraft();
   if(isToday){
@@ -826,6 +829,7 @@ async function confirmEndShift(){
   if(existingIdx>-1) Store.dailyReports[existingIdx]=rep; else Store.dailyReports.push(rep);
   const ok = await Store.saveDailyReports();
   if(!ok){ toast('Save failed — storage unavailable'); return; }
+  lastEndTime = '';
   toast('Shift Closed — Report Generated');
   Router.go('reportView', rep.date);
 }
