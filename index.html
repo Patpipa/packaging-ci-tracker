@@ -134,7 +134,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v16 - 2026-08-19 (MAREL Cut Meat / MAREL Switching Product)';
+const APP_VERSION = 'v17 - 2026-08-19 (auto 30-min break end time)';
 const MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
 const STATUSES = [
@@ -476,7 +476,7 @@ function renderNewRecord(){
     </div>
     ${draft.product==='Other' ? `<div class="field"><label>Specify Product</label><input type="text" value="${draft.productOther}" oninput="draft.productOther=this.value" placeholder="Enter product"></div>` : ''}
     <div class="timerow">
-      <div class="field"><label>Start Time</label><input id="startTimeInput" type="time" value="${draft.startTime}" oninput="draft.startTime=this.value; updateDurationBadge()"></div>
+      <div class="field"><label>Start Time</label><input id="startTimeInput" type="time" value="${draft.startTime}" oninput="draft.startTime=this.value; onStartTimeChanged(); updateDurationBadge()"></div>
       <div class="field"><label>End Time</label><input id="endTimeInput" type="time" value="${draft.endTime}" oninput="draft.endTime=this.value; updateDurationBadge()"></div>
     </div>
     <div id="durationBadgeWrap">${draft.startTime && draft.endTime ? `<div class="duration-badge">Duration: ${fmtDur(dur)} (${dur} min)</div>` : ''}</div>
@@ -522,6 +522,17 @@ function updateDurationBadge(){
   } else {
     wrap.innerHTML = '';
   }
+}
+/* Breaks are always 30 minutes — auto-fill End Time from Start Time so it doesn't need to be scrolled separately. Doesn't touch other statuses since their durations vary. */
+function onStartTimeChanged(){
+  if(draft.status!=='BREAK' || !draft.startTime) return;
+  let mins = toMin(draft.startTime) + 30;
+  if(mins>=1440) mins -= 1440;
+  const h = String(Math.floor(mins/60)).padStart(2,'0');
+  const m = String(mins%60).padStart(2,'0');
+  draft.endTime = `${h}:${m}`;
+  const endInput = document.getElementById('endTimeInput');
+  if(endInput) endInput.value = draft.endTime;
 }
 function rangesOverlap(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && bStart < aEnd; }
 /* Warns if a record about to be saved overlaps an existing entry for the same machine/date — catches accidental double-logging before it skews a report. Returns true to proceed, false to cancel. */
