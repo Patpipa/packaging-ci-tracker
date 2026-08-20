@@ -302,19 +302,40 @@ function efficiencyColor(pct){
   if(pct>=60) return 'var(--change)';
   return 'var(--wait)';
 }
+/* Merges overlapping/adjacent time windows into their real combined span — e.g. 9:30-10:00, 9:45-10:15, 10:00-10:30 across three machines becomes one 9:30-10:30 span, not three separate 30-min blocks summed */
+function mergeIntervals(intervals){
+  if(!intervals.length) return [];
+  const sorted = intervals.slice().sort((a,b)=>a.start-b.start);
+  const merged = [{...sorted[0]}];
+  for(let i=1;i<sorted.length;i++){
+    const last = merged[merged.length-1];
+    const cur = sorted[i];
+    if(cur.start <= last.end){ last.end = Math.max(last.end, cur.end); }
+    else { merged.push({...cur}); }
+  }
+  return merged;
+}
+/* Total real-world break time for the whole shift — staggered breaks across machines merge into actual elapsed time rather than being summed per-machine. Groups by date first so a multi-day range (Weekly Summary) doesn't merge across different days. */
+function totalBreakMinutes(recs){
+  const byDate = {};
+  recs.filter(r=>r.status==='BREAK').forEach(r=>{
+    if(!byDate[r.date]) byDate[r.date]=[];
+    let s=toMin(r.startTime), e=toMin(r.endTime); if(e<s) e+=1440;
+    byDate[r.date].push({start:s,end:e});
+  });
+  let total = 0;
+  Object.values(byDate).forEach(intervals=>{
+    mergeIntervals(intervals).forEach(iv=>{ total += (iv.end-iv.start); });
+  });
+  return total;
+}
 function dayTotals(recs){
   const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0, upstream:0, internal:0};
-  const seenBreaks = new Set();
   recs.forEach(r=>{
-    if(r.status==='BREAK'){
-      // A break covering multiple machines should count once toward the shift total, whether logged in one batch or separately per machine — key on the actual time window, not just the save timestamp
-      const key = `${r.date}|${r.startTime}|${r.endTime}`;
-      if(!seenBreaks.has(key)){ seenBreaks.add(key); t.BREAK += r.durationMin; }
-    } else {
-      t[r.status]=(t[r.status]||0)+r.durationMin;
-    }
+    if(r.status!=='BREAK'){ t[r.status]=(t[r.status]||0)+r.durationMin; }
     if(r.status==='WAITING'){ if(r.classification==='upstream') t.upstream+=r.durationMin; else t.internal+=r.durationMin; }
   });
+  t.BREAK = totalBreakMinutes(recs);
   return t;
 }
 function bottlenecks(recs, limit){
@@ -438,6 +459,7 @@ function renderNewRecord(){
   const machineBlock = isBreak ? `
     <div class="field"><label>Machines Affected</label>
       <div class="machinechecks">${MACHINES.map(m=>`<div class="mchip ${draft.breakMachines.includes(m)?'sel':''}" onclick="toggleBreakMachine('${m}')">${m}</div>`).join('')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Tap only the machine(s) on this exact break window. If your groups break at different times, log each machine separately with its own time — don't select all three unless the break is truly simultaneous.</div>
     </div>` : `
     <div class="field"><label>Machine</label>
       <select onchange="draft.machine=this.value">${MACHINES.map(m=>`<option ${draft.machine===m?'selected':''}>${m}</option>`).join('')}</select>
@@ -520,13 +542,14 @@ async function saveRecord(){
   if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
   const dur = duration(draft.startTime, draft.endTime);
   if(dur<=0){ toast('End time must be after start'); return; }
+  if(draft.status==='BREAK' && draft.breakMachines.length===0){ toast('Select which machine(s) this break applies to'); return; }
   const base = {
     date: draft.date || todayStr(), startTime: draft.startTime, endTime: draft.endTime, durationMin: dur,
     status: draft.status, notes: draft.notes||'', createdAt: Date.now()
   };
   let toSave = [];
   if(draft.status==='BREAK'){
-    const machines = draft.breakMachines.length ? draft.breakMachines : MACHINES;
+    const machines = draft.breakMachines;
     machines.forEach(m=>{ toSave.push({...base, id:uid(), machine:m, product:'', reasonCategory:'', reason:'', classification:''}); });
   } else {
     const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
