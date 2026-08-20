@@ -134,7 +134,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v14 - 2026-08-19 (merged break-time totals)';
+const APP_VERSION = 'v16 - 2026-08-19 (MAREL Cut Meat / MAREL Switching Product)';
 const MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
 const STATUSES = [
@@ -146,7 +146,7 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for Cut Meat','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
