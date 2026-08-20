@@ -143,9 +143,9 @@ const STATUSES = [
   {key:'NO_WORK', label:'No Work Scheduled', color:'var(--nowork)', dim:'var(--nowork-dim)', pillClass:'nowork'},
   {key:'BREAK', label:'Break', color:'var(--brk)', dim:'var(--brk-dim)', pillClass:'brk'},
 ];
-const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
+const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trim','Waiting for Cut Meat','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for Cut Meat','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
@@ -162,15 +162,45 @@ function effectiveReasonLabel(r){
 
 /* ============ STORAGE LAYER ============ */
 const Store = {
-  ready:false, records:[], dailyReports:[],
+  ready:false, records:[], dailyReports:[], persisted:false,
   async init(){
     try{
       await IDB.open();
-      const r = await IDB.get('records');
+      let r = await IDB.get('records');
+      let d = await IDB.get('dailyReports');
       this.records = r ? JSON.parse(r) : [];
-      const d = await IDB.get('dailyReports');
       this.dailyReports = d ? JSON.parse(d) : [];
+      // Recovery: if IndexedDB looks empty but a localStorage mirror has data, iOS likely evicted IndexedDB — restore from the mirror and re-save it back into IndexedDB
+      if(this.records.length===0){
+        const backupR = safeLocalGet('pct_records_backup');
+        if(backupR){
+          try{
+            const parsed = JSON.parse(backupR);
+            if(Array.isArray(parsed) && parsed.length>0){
+              this.records = parsed;
+              await IDB.set('records', JSON.stringify(this.records));
+              toast('Recovered records from backup storage');
+            }
+          }catch(e){}
+        }
+      }
+      if(this.dailyReports.length===0){
+        const backupD = safeLocalGet('pct_reports_backup');
+        if(backupD){
+          try{
+            const parsed = JSON.parse(backupD);
+            if(Array.isArray(parsed) && parsed.length>0){
+              this.dailyReports = parsed;
+              await IDB.set('dailyReports', JSON.stringify(this.dailyReports));
+            }
+          }catch(e){}
+        }
+      }
       this.ready = true;
+      // Ask the browser to treat this site's storage as persistent (reduces — doesn't fully guarantee — risk of iOS clearing it under storage pressure)
+      if(navigator.storage && navigator.storage.persist){
+        try{ this.persisted = await navigator.storage.persist(); }catch(e){ this.persisted = false; }
+      }
     }catch(e){
       console.error('Storage init failed', e);
       window._lastStorageError = String(e && e.message || e);
@@ -181,6 +211,7 @@ const Store = {
   async saveRecords(){
     try{
       await IDB.set('records', JSON.stringify(this.records));
+      safeLocalSet('pct_records_backup', JSON.stringify(this.records));
       hideStorageWarning();
       return true;
     }catch(e){ console.error('save records failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
@@ -188,11 +219,14 @@ const Store = {
   async saveDailyReports(){
     try{
       await IDB.set('dailyReports', JSON.stringify(this.dailyReports));
+      safeLocalSet('pct_reports_backup', JSON.stringify(this.dailyReports));
       hideStorageWarning();
       return true;
     }catch(e){ console.error('save reports failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
   }
 };
+function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function safeLocalSet(key, val){ try{ localStorage.setItem(key, val); return true; }catch(e){ return false; } }
 /* IndexedDB key-value wrapper — real persistent browser storage for the hosted version */
 const IDB = {
   _db:null,
@@ -768,12 +802,26 @@ function renderWeeklyView(){
     <button class="btn btn-secondary" onclick="shareWeekly()">Share</button>
   </div>
   <button class="btn btn-ghost" onclick="copyWeeklySummary()">Copy Share Summary</button>
+  <button class="btn btn-danger" style="margin-top:10px;" onclick="deleteRangeRecords()">🗑 Delete Records in This Range</button>
   `;
 }
 function setWeeklyPreset(days){
   const end = new Date();
   const start = new Date(); start.setDate(end.getDate()-(days-1));
   weeklyRange = {start: localDateStr(start), end: localDateStr(end)};
+  render();
+}
+async function deleteRangeRecords(){
+  const count = recordsInRange(weeklyRange.start, weeklyRange.end).length;
+  if(count===0){ toast('No records in this range to delete'); return; }
+  const label = weeklyRange.start===weeklyRange.end ? fmtDate(weeklyRange.start) : `${fmtDate(weeklyRange.start)} – ${fmtDate(weeklyRange.end)}`;
+  if(!confirm(`Delete all ${count} record(s) from ${label}? This also removes any saved Daily Reports in that range. This cannot be undone.`)) return;
+  if(!confirm('Are you sure? This is permanent.')) return;
+  Store.records = Store.records.filter(r=> !(r.date>=weeklyRange.start && r.date<=weeklyRange.end));
+  Store.dailyReports = Store.dailyReports.filter(r=> !(r.date>=weeklyRange.start && r.date<=weeklyRange.end));
+  await Store.saveRecords();
+  await Store.saveDailyReports();
+  toast(`Deleted ${count} record(s)`);
   render();
 }
 function weeklySummaryText(){
@@ -1187,6 +1235,8 @@ function renderSettings(){
     <div class="statrow"><span class="lbl">Daily reports saved</span><span class="val">${Store.dailyReports.length}</span></div>
     <div class="statrow"><span class="lbl">Last save error</span><span class="val" style="color:var(--wait);font-size:11px;text-align:right;max-width:220px;">${window._lastStorageError || 'none'}</span></div>
     <div class="statrow"><span class="lbl">IndexedDB available</span><span class="val" style="color:${'indexedDB' in window?'var(--run)':'var(--wait)'}">${'indexedDB' in window ? 'yes' : 'NO'}</span></div>
+    <div class="statrow"><span class="lbl">Persistent storage granted</span><span class="val" style="color:${Store.persisted?'var(--run)':'var(--wait)'}">${Store.persisted ? 'yes' : 'no — device may clear data'}</span></div>
+    <div class="statrow"><span class="lbl">Local backup mirror</span><span class="val" style="color:${safeLocalGet('pct_records_backup')?'var(--run)':'var(--muted)'}">${safeLocalGet('pct_records_backup') ? 'present' : 'none yet'}</span></div>
   </div>
   <div class="card">
     <h3>About</h3>
