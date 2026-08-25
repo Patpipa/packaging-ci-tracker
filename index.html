@@ -134,7 +134,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v18 - 2026-08-19 (added Chicken Diced/Bison/Venison waiting reasons)';
+const APP_VERSION = 'v19 - 2026-08-19 (Weekly Summary: Lean/CI recommended actions)';
 const MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
 const STATUSES = [
@@ -728,6 +728,37 @@ function buildRangeReport(startDate, endDate){
   }
   return {startDate, endDate, totals:dt, perMachine, bottlenecks:bn, bottleneckMeta, bottleneckNotes, machineMostAffected:mmw, dayTrend, daysWithData, observation, recordCount: recs.length};
 }
+/* Weekly version of the suggestion engine — factors in the upstream/internal split and secondary bottleneck across the whole range, not just one day's top reason */
+function craftWeeklySuggestions(rep){
+  if(!rep.bottlenecks.length){
+    return ['No bottleneck data recorded in this range yet — log entries daily so patterns can surface here.'];
+  }
+  const ideas = [];
+  const [topName, topMin] = rep.bottlenecks[0];
+  const topCategory = (rep.bottleneckMeta && rep.bottleneckMeta[topName]) || categoryForReason(topName);
+  ideas.push(`Run a root-cause (5-Whys) session on "${topName}" — it was the biggest single driver this period at ${fmtDur(topMin)} across ${rep.daysWithData} day(s) with data.`);
+
+  const t = rep.totals;
+  const totalDelay = t.upstream + t.internal;
+  if(totalDelay>0){
+    const upstreamShare = t.upstream/totalDelay;
+    if(upstreamShare >= 0.6){
+      ideas.push(`Upstream delays are driving most of this period's downtime (${Math.round(upstreamShare*100)}%) — consider a small in-process buffer or batch-sequencing with the upstream station so packaging isn't stalled directly by its switchovers.`);
+    } else if(upstreamShare <= 0.4){
+      ideas.push(topCategory && CATEGORY_ACTIONS[topCategory] ? CATEGORY_ACTIONS[topCategory] : 'Standardize the top recurring task with a visual checklist so deviations are caught immediately rather than after the fact.');
+    } else {
+      ideas.push('Delay is fairly evenly split between upstream and packaging this period — worth reviewing both sides together rather than assuming one is the sole cause.');
+    }
+  }
+
+  if(rep.bottlenecks.length>1){
+    const [name2,min2] = rep.bottlenecks[1];
+    ideas.push(`"${name2}" was the second-largest driver at ${fmtDur(min2)} — track whether it's a separate issue or connected to the top one before committing resources to just one fix.`);
+  } else if(rep.machineMostAffected.machine && rep.machineMostAffected.minutes>0){
+    ideas.push(`${rep.machineMostAffected.machine} carried the most downtime this period (${fmtDur(rep.machineMostAffected.minutes)}) — review its staffing and scheduling pattern for recurring gaps.`);
+  }
+  return ideas.slice(0,3);
+}
 let weeklyRange = null;
 /* Renders a simple SVG bar chart of daily Waiting minutes so a trend (e.g. a fix taking effect) is visible at a glance instead of scanning numbers */
 function renderTrendChart(dayTrend){
@@ -832,6 +863,10 @@ function renderWeeklyView(){
     <h3>Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
+  <div class="card">
+    <h3>Recommended Actions (Lean/CI)</h3>
+    ${craftWeeklySuggestions(rep).map(idea=>`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.4;margin-bottom:8px;">${escapeHtml(idea)}</div>`).join('')}
+  </div>
   <div class="btnrow" style="margin-bottom:10px;">
     <button class="btn btn-secondary" onclick="exportWeeklyPDF()">Export PDF</button>
     <button class="btn btn-secondary" onclick="shareWeekly()">Share</button>
@@ -876,7 +911,10 @@ Machine with Most Downtime:
 ${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}
 
 Observation:
-${rep.observation}`;
+${rep.observation}
+
+Recommended Actions:
+${craftWeeklySuggestions(rep).map((idea,i)=>`${i+1}. ${idea}`).join('\n')}`;
 }
 async function copyWeeklySummary(){
   try{ await navigator.clipboard.writeText(weeklySummaryText()); toast('Summary copied'); }
@@ -959,6 +997,13 @@ function exportWeeklyPDF(){
   ensure(90); section('OBSERVATION');
   const obsLines = doc.splitTextToSize(rep.observation, 520);
   doc.text(obsLines, 46, y); y += obsLines.length*14+10;
+
+  ensure(100); y+=6; section('RECOMMENDED ACTIONS (LEAN/CI)');
+  craftWeeklySuggestions(rep).forEach((idea,i)=>{
+    ensure(30);
+    const lines = doc.splitTextToSize(`${i+1}. ${idea}`, 520);
+    doc.text(lines, 46, y); y += lines.length*14+6;
+  });
 
   try{
     doc.save(`Packaging_CI_Weekly_${rep.startDate}_to_${rep.endDate}.pdf`);
