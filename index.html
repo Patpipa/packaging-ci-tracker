@@ -134,7 +134,12 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v19 - 2026-08-19 (Weekly Summary: Lean/CI recommended actions)';
+const APP_VERSION = 'v20 - 2026-08-19 (colorized PDF reports)';
+/* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
+const PDF_COLOR = {
+  amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
+  brk:[74,144,217], nowork:[124,132,138], upstream:[178,110,190], internal:[70,158,172]
+};
 const MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
 const STATUSES = [
@@ -933,54 +938,74 @@ function exportWeeklyPDF(){
   const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'letter'});
+  doc.setFillColor(...PDF_COLOR.amber); doc.rect(0,0,612,6,'F');
   let y = 50;
-  doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text('PACKAGING CONTINUOUS IMPROVEMENT', 40, y); y+=20;
-  doc.text('WEEKLY BOTTLENECK SUMMARY', 40, y); y+=26;
+  doc.setTextColor(...PDF_COLOR.amber); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('PACKAGING CONTINUOUS IMPROVEMENT', 40, y); y+=18;
+  doc.setTextColor(0); doc.setFontSize(16);
+  doc.text('WEEKLY BOTTLENECK SUMMARY', 40, y); y+=24;
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
   doc.text(`Range: ${fmtDate(rep.startDate)} - ${fmtDate(rep.endDate)}    Days with data: ${rep.daysWithData}`, 40, y); y+=26;
 
-  function section(title){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, 40, y); y+=6; doc.setDrawColor(200); doc.line(40,y,570,y); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
-  function row(label, val){ doc.text(label, 46, y); doc.text(String(val), 400, y); y+=15; }
+  function section(title){ doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, 40, y); y+=6; doc.setDrawColor(...PDF_COLOR.amber); doc.setLineWidth(1.3); doc.line(40,y,570,y); doc.setLineWidth(0.5); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
+  function row(label, val){ doc.setTextColor(0); doc.text(label, 46, y); doc.text(String(val), 400, y); y+=15; }
+  function rowC(label, val, rgb){ doc.setTextColor(0); doc.text(label, 46, y); doc.setTextColor(...rgb); doc.text(String(val), 400, y); doc.setTextColor(0); y+=15; }
   function ensure(space){ if(y+space>760){ doc.addPage(); y=50; } }
 
   section('MACHINE SUMMARY');
   MACHINES.forEach(m=>{
     ensure(90);
-    doc.setFont('helvetica','bold'); doc.text(m,46,y); y+=15; doc.setFont('helvetica','normal');
+    doc.setFont('helvetica','bold'); doc.setTextColor(0); doc.text(m,46,y); y+=15; doc.setFont('helvetica','normal');
     const mt = rep.perMachine[m]||{};
-    row('Running Time', fmtDur(mt.RUNNING||0));
-    row('Waiting/Downtime', fmtDur(mt.WAITING||0));
-    row('Changeover Time', fmtDur(mt.CHANGEOVER||0));
-    row('Break Time', fmtDur(mt.BREAK||0));
-    row('No Work Scheduled', fmtDur(mt.NO_WORK||0));
+    rowC('Running Time', fmtDur(mt.RUNNING||0), PDF_COLOR.run);
+    rowC('Waiting/Downtime', fmtDur(mt.WAITING||0), PDF_COLOR.wait);
+    rowC('Changeover Time', fmtDur(mt.CHANGEOVER||0), PDF_COLOR.change);
+    rowC('Break Time', fmtDur(mt.BREAK||0), PDF_COLOR.brk);
+    rowC('No Work Scheduled', fmtDur(mt.NO_WORK||0), PDF_COLOR.nowork);
     y+=6;
   });
 
   ensure(120); section('ACCUMULATED TOTALS');
   const t = rep.totals;
-  row('Total Running Time', fmtDur(t.RUNNING));
-  row('Total Waiting/Downtime', fmtDur(t.WAITING));
-  row('Total Changeover', fmtDur(t.CHANGEOVER));
-  row('Total Break Time', fmtDur(t.BREAK));
-  row('Total No Work Scheduled', fmtDur(t.NO_WORK));
+  rowC('Total Running Time', fmtDur(t.RUNNING), PDF_COLOR.run);
+  rowC('Total Waiting/Downtime', fmtDur(t.WAITING), PDF_COLOR.wait);
+  rowC('Total Changeover', fmtDur(t.CHANGEOVER), PDF_COLOR.change);
+  rowC('Total Break Time', fmtDur(t.BREAK), PDF_COLOR.brk);
+  rowC('Total No Work Scheduled', fmtDur(t.NO_WORK), PDF_COLOR.nowork);
 
-  ensure(110); y+=6; section('DOWNTIME ANALYSIS');
+  ensure(120); y+=6; section('DOWNTIME ANALYSIS');
   const tot = t.upstream+t.internal;
-  row('Total Upstream Delay', fmtDur(t.upstream));
-  row('Total Packaging/Internal Delay', fmtDur(t.internal));
-  row('% Upstream', tot? Math.round(t.upstream/tot*100)+'%':'0%');
-  row('% Packaging/Internal', tot? Math.round(t.internal/tot*100)+'%':'0%');
+  const upPct = tot? t.upstream/tot*100 : 0, intPct = 100-upPct;
+  rowC('Total Upstream Delay', fmtDur(t.upstream), PDF_COLOR.upstream);
+  rowC('Total Packaging/Internal Delay', fmtDur(t.internal), PDF_COLOR.internal);
+  if(tot>0){
+    const barW=300;
+    doc.setFillColor(...PDF_COLOR.upstream); doc.rect(46,y,barW*upPct/100,10,'F');
+    doc.setFillColor(...PDF_COLOR.internal); doc.rect(46+barW*upPct/100,y,barW*intPct/100,10,'F');
+    y+=14;
+    doc.setFontSize(9); doc.setTextColor(...PDF_COLOR.upstream); doc.text(`Upstream ${Math.round(upPct)}%`,46,y);
+    doc.setTextColor(...PDF_COLOR.internal); doc.text(`Internal ${Math.round(intPct)}%`,46+barW-80,y);
+    doc.setTextColor(0); doc.setFontSize(10.5); y+=16;
+  }
 
   ensure(30+rep.dayTrend.length*15); y+=6; section('DAILY DOWNTIME TREND');
-  if(rep.dayTrend.length){ rep.dayTrend.forEach(d=>row(fmtDate(d.date), fmtDur(d.waiting))); }
+  if(rep.dayTrend.length){
+    const maxW = Math.max(1, ...rep.dayTrend.map(d=>d.waiting));
+    rep.dayTrend.forEach(d=>{
+      ensure(18);
+      row(fmtDate(d.date), fmtDur(d.waiting));
+      doc.setFillColor(...PDF_COLOR.wait); doc.rect(46, y-11, 200*(d.waiting/maxW), 3, 'F'); y+=4;
+    });
+  }
   else { doc.text('No data in this range.',46,y); y+=15; }
 
   ensure(140); y+=6; section('TOP BOTTLENECKS');
   if(rep.bottlenecks.length){
+    const maxMin = rep.bottlenecks[0][1]||1;
     rep.bottlenecks.forEach(([name,min],i)=>{
-      ensure(40);
+      ensure(46);
       row(`${i+1}. ${name}`, fmtDur(min));
+      doc.setFillColor(...PDF_COLOR.amber); doc.rect(46, y-11, 300*(min/maxMin), 3, 'F'); y+=4;
       const notes = (rep.bottleneckNotes && rep.bottleneckNotes[name]) || [];
       if(notes.length){
         doc.setFontSize(9); doc.setTextColor(120);
@@ -992,7 +1017,7 @@ function exportWeeklyPDF(){
   else { doc.text('No bottlenecks recorded.',46,y); y+=15; }
 
   ensure(60); y+=6; section('MACHINE WITH MOST DOWNTIME');
-  doc.text(`${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}`, 46, y); y+=20;
+  doc.setTextColor(0); doc.text(`${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}`, 46, y); y+=20;
 
   ensure(90); section('OBSERVATION');
   const obsLines = doc.splitTextToSize(rep.observation, 520);
@@ -1209,50 +1234,63 @@ function exportReportPDF(date){
   const rep = getReportForView(date);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'letter'});
+  doc.setFillColor(...PDF_COLOR.amber); doc.rect(0,0,612,6,'F');
   let y = 50;
-  doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text('PACKAGING CONTINUOUS IMPROVEMENT', 40, y); y+=20;
-  doc.text('DAILY PRODUCTION & BOTTLENECK REPORT', 40, y); y+=26;
+  doc.setTextColor(...PDF_COLOR.amber); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('PACKAGING CONTINUOUS IMPROVEMENT', 40, y); y+=18;
+  doc.setTextColor(0); doc.setFontSize(16);
+  doc.text('DAILY PRODUCTION & BOTTLENECK REPORT', 40, y); y+=24;
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
   doc.text(`Date: ${fmtDate(rep.date)}    Shift Start: ${fmtTime12(rep.shiftStart)}    Shift End: ${fmtTime12(rep.shiftEnd)}`, 40, y); y+=26;
 
-  function section(title){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, 40, y); y+=6; doc.setDrawColor(200); doc.line(40,y,570,y); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
-  function row(label, val){ doc.text(label, 46, y); doc.text(String(val), 400, y); y+=15; }
+  function section(title){ doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, 40, y); y+=6; doc.setDrawColor(...PDF_COLOR.amber); doc.setLineWidth(1.3); doc.line(40,y,570,y); doc.setLineWidth(0.5); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
+  function row(label, val){ doc.setTextColor(0); doc.text(label, 46, y); doc.text(String(val), 400, y); y+=15; }
+  function rowC(label, val, rgb){ doc.setTextColor(0); doc.text(label, 46, y); doc.setTextColor(...rgb); doc.text(String(val), 400, y); doc.setTextColor(0); y+=15; }
   function ensure(space){ if(y+space>760){ doc.addPage(); y=50; } }
 
   section('MACHINE SUMMARY');
   MACHINES.forEach(m=>{
     ensure(90);
-    doc.setFont('helvetica','bold'); doc.text(m,46,y); y+=15; doc.setFont('helvetica','normal');
+    doc.setFont('helvetica','bold'); doc.setTextColor(0); doc.text(m,46,y); y+=15; doc.setFont('helvetica','normal');
     const mt = rep.perMachine[m]||{};
-    row('Running Time', fmtDur(mt.RUNNING||0));
-    row('Waiting/Downtime', fmtDur(mt.WAITING||0));
-    row('Changeover Time', fmtDur(mt.CHANGEOVER||0));
-    row('Break Time', fmtDur(mt.BREAK||0));
-    row('No Work Scheduled', fmtDur(mt.NO_WORK||0));
+    rowC('Running Time', fmtDur(mt.RUNNING||0), PDF_COLOR.run);
+    rowC('Waiting/Downtime', fmtDur(mt.WAITING||0), PDF_COLOR.wait);
+    rowC('Changeover Time', fmtDur(mt.CHANGEOVER||0), PDF_COLOR.change);
+    rowC('Break Time', fmtDur(mt.BREAK||0), PDF_COLOR.brk);
+    rowC('No Work Scheduled', fmtDur(mt.NO_WORK||0), PDF_COLOR.nowork);
     y+=6;
   });
 
   ensure(120); section('TOTAL SHIFT SUMMARY');
   const t = rep.totals;
-  row('Total Running Time', fmtDur(t.RUNNING));
-  row('Total Waiting/Downtime', fmtDur(t.WAITING));
-  row('Total Changeover', fmtDur(t.CHANGEOVER));
-  row('Total Break Time', fmtDur(t.BREAK));
-  row('Total No Work Scheduled', fmtDur(t.NO_WORK));
+  rowC('Total Running Time', fmtDur(t.RUNNING), PDF_COLOR.run);
+  rowC('Total Waiting/Downtime', fmtDur(t.WAITING), PDF_COLOR.wait);
+  rowC('Total Changeover', fmtDur(t.CHANGEOVER), PDF_COLOR.change);
+  rowC('Total Break Time', fmtDur(t.BREAK), PDF_COLOR.brk);
+  rowC('Total No Work Scheduled', fmtDur(t.NO_WORK), PDF_COLOR.nowork);
 
-  ensure(110); y+=6; section('DOWNTIME ANALYSIS');
+  ensure(120); y+=6; section('DOWNTIME ANALYSIS');
   const tot = t.upstream+t.internal;
-  row('Total Upstream Delay', fmtDur(t.upstream));
-  row('Total Packaging/Internal Delay', fmtDur(t.internal));
-  row('% Upstream', tot? Math.round(t.upstream/tot*100)+'%':'0%');
-  row('% Packaging/Internal', tot? Math.round(t.internal/tot*100)+'%':'0%');
+  const upPct = tot? t.upstream/tot*100 : 0, intPct = 100-upPct;
+  rowC('Total Upstream Delay', fmtDur(t.upstream), PDF_COLOR.upstream);
+  rowC('Total Packaging/Internal Delay', fmtDur(t.internal), PDF_COLOR.internal);
+  if(tot>0){
+    const barW=300;
+    doc.setFillColor(...PDF_COLOR.upstream); doc.rect(46,y,barW*upPct/100,10,'F');
+    doc.setFillColor(...PDF_COLOR.internal); doc.rect(46+barW*upPct/100,y,barW*intPct/100,10,'F');
+    y+=14;
+    doc.setFontSize(9); doc.setTextColor(...PDF_COLOR.upstream); doc.text(`Upstream ${Math.round(upPct)}%`,46,y);
+    doc.setTextColor(...PDF_COLOR.internal); doc.text(`Internal ${Math.round(intPct)}%`,46+barW-80,y);
+    doc.setTextColor(0); doc.setFontSize(10.5); y+=16;
+  }
 
   ensure(140); y+=6; section('TOP BOTTLENECKS');
   if(rep.bottlenecks.length){
+    const maxMin = rep.bottlenecks[0][1]||1;
     rep.bottlenecks.forEach(([name,min],i)=>{
-      ensure(40);
+      ensure(46);
       row(`${i+1}. ${name}`, fmtDur(min));
+      doc.setFillColor(...PDF_COLOR.amber); doc.rect(46, y-11, 300*(min/maxMin), 3, 'F'); y+=4;
       const notes = (rep.bottleneckNotes && rep.bottleneckNotes[name]) || [];
       if(notes.length){
         doc.setFontSize(9); doc.setTextColor(120);
