@@ -10,6 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root{
   --bg:#181B1E; --panel:#22262A; --panel2:#2B3034; --line:#383E43;
@@ -134,7 +136,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v20 - 2026-08-19 (colorized PDF reports)';
+const APP_VERSION = 'v21 - 2026-08-19 (migrated to Firebase — real-time cloud sync)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -166,47 +168,57 @@ function effectiveReasonLabel(r){
   return r.reason;
 }
 
-/* ============ STORAGE LAYER ============ */
+/* ============ STORAGE LAYER — Firebase Firestore (real-time, cloud-synced across every device) ============ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDRttvEVYAKjZIUTtjtmVOBXbveH2kbiKY",
+  authDomain: "packaging-ci-tracker.firebaseapp.com",
+  projectId: "packaging-ci-tracker",
+  storageBucket: "packaging-ci-tracker.firebasestorage.app",
+  messagingSenderId: "929311010987",
+  appId: "1:929311010987:web:e66eacb5ab03d85f2987ee"
+};
 const Store = {
-  ready:false, records:[], dailyReports:[], persisted:false,
+  ready:false, records:[], dailyReports:[], persisted:true, db:null, _initialLoadDone:false,
   async init(){
     try{
-      await IDB.open();
-      let r = await IDB.get('records');
-      let d = await IDB.get('dailyReports');
-      this.records = r ? JSON.parse(r) : [];
-      this.dailyReports = d ? JSON.parse(d) : [];
-      // Recovery: if IndexedDB looks empty but a localStorage mirror has data, iOS likely evicted IndexedDB — restore from the mirror and re-save it back into IndexedDB
+      firebase.initializeApp(FIREBASE_CONFIG);
+      this.db = firebase.firestore();
+      try{ await this.db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* fine — offline cache just won't work in a second open tab */ }
+
+      const recRef = this.db.collection('tracker').doc('records');
+      const repRef = this.db.collection('tracker').doc('dailyReports');
+
+      const recSnap = await recRef.get();
+      this.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
+      const repSnap = await repRef.get();
+      this.dailyReports = (repSnap.exists && repSnap.data().data) ? JSON.parse(repSnap.data().data) : [];
+
+      // One-time local recovery net: if the cloud looks empty but an old local mirror has data (e.g. mid-migration), restore it up to the cloud
       if(this.records.length===0){
         const backupR = safeLocalGet('pct_records_backup');
         if(backupR){
-          try{
-            const parsed = JSON.parse(backupR);
-            if(Array.isArray(parsed) && parsed.length>0){
-              this.records = parsed;
-              await IDB.set('records', JSON.stringify(this.records));
-              toast('Recovered records from backup storage');
-            }
-          }catch(e){}
+          try{ const parsed = JSON.parse(backupR); if(Array.isArray(parsed) && parsed.length>0){ this.records = parsed; await recRef.set({data: JSON.stringify(this.records), updatedAt: Date.now()}); toast('Recovered records from local backup'); } }catch(e){}
         }
       }
-      if(this.dailyReports.length===0){
-        const backupD = safeLocalGet('pct_reports_backup');
-        if(backupD){
-          try{
-            const parsed = JSON.parse(backupD);
-            if(Array.isArray(parsed) && parsed.length>0){
-              this.dailyReports = parsed;
-              await IDB.set('dailyReports', JSON.stringify(this.dailyReports));
-            }
-          }catch(e){}
-        }
-      }
+      this._initialLoadDone = true;
       this.ready = true;
-      // Ask the browser to treat this site's storage as persistent (reduces — doesn't fully guarantee — risk of iOS clearing it under storage pressure)
-      if(navigator.storage && navigator.storage.persist){
-        try{ this.persisted = await navigator.storage.persist(); }catch(e){ this.persisted = false; }
-      }
+
+      // Real-time sync: any device that saves updates every other open device automatically
+      recRef.onSnapshot(snap=>{
+        if(!this._initialLoadDone) return;
+        if(snap.exists && snap.data().data){
+          this.records = JSON.parse(snap.data().data);
+          safeLocalSet('pct_records_backup', snap.data().data);
+          if(typeof Router!=='undefined' && Router.current!=='new') render();
+        }
+      }, err=>{ console.error('records listener error', err); });
+      repRef.onSnapshot(snap=>{
+        if(!this._initialLoadDone) return;
+        if(snap.exists && snap.data().data){
+          this.dailyReports = JSON.parse(snap.data().data);
+          if(typeof Router!=='undefined' && Router.current!=='new') render();
+        }
+      }, err=>{ console.error('reports listener error', err); });
     }catch(e){
       console.error('Storage init failed', e);
       window._lastStorageError = String(e && e.message || e);
@@ -216,16 +228,16 @@ const Store = {
   },
   async saveRecords(){
     try{
-      await IDB.set('records', JSON.stringify(this.records));
-      safeLocalSet('pct_records_backup', JSON.stringify(this.records));
+      const json = JSON.stringify(this.records);
+      await this.db.collection('tracker').doc('records').set({data: json, updatedAt: Date.now()});
+      safeLocalSet('pct_records_backup', json);
       hideStorageWarning();
       return true;
     }catch(e){ console.error('save records failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
   },
   async saveDailyReports(){
     try{
-      await IDB.set('dailyReports', JSON.stringify(this.dailyReports));
-      safeLocalSet('pct_reports_backup', JSON.stringify(this.dailyReports));
+      await this.db.collection('tracker').doc('dailyReports').set({data: JSON.stringify(this.dailyReports), updatedAt: Date.now()});
       hideStorageWarning();
       return true;
     }catch(e){ console.error('save reports failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
@@ -233,38 +245,6 @@ const Store = {
 };
 function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
 function safeLocalSet(key, val){ try{ localStorage.setItem(key, val); return true; }catch(e){ return false; } }
-/* IndexedDB key-value wrapper — real persistent browser storage for the hosted version */
-const IDB = {
-  _db:null,
-  open(){
-    return new Promise((resolve,reject)=>{
-      if(this._db) return resolve(this._db);
-      if(!('indexedDB' in window)) return reject(new Error('IndexedDB not supported in this browser'));
-      const req = indexedDB.open('packaging-ci-tracker', 1);
-      req.onupgradeneeded = ()=>{ req.result.createObjectStore('kv'); };
-      req.onsuccess = ()=>{ this._db = req.result; resolve(this._db); };
-      req.onerror = ()=> reject(req.error || new Error('IndexedDB open failed'));
-    });
-  },
-  async set(key, value){
-    const db = await this.open();
-    return new Promise((resolve,reject)=>{
-      const tx = db.transaction('kv','readwrite');
-      tx.objectStore('kv').put(value, key);
-      tx.oncomplete = ()=>resolve(true);
-      tx.onerror = ()=>reject(tx.error || new Error('IndexedDB write failed'));
-    });
-  },
-  async get(key){
-    const db = await this.open();
-    return new Promise((resolve,reject)=>{
-      const tx = db.transaction('kv','readonly');
-      const req = tx.objectStore('kv').get(key);
-      req.onsuccess = ()=>resolve(req.result===undefined?null:req.result);
-      req.onerror = ()=>reject(req.error || new Error('IndexedDB read failed'));
-    });
-  }
-};
 function showStorageWarning(){
   const banner = '<div class="warnbanner">DATA STORAGE IS NOT AVAILABLE. DO NOT ENTER PRODUCTION DATA UNTIL STORAGE IS FIXED. Use Export/Backup in Settings to save your work manually, then reopen the app to retry.</div>';
   const m = document.getElementById('main');
@@ -1353,17 +1333,20 @@ function renderSettings(){
   </div>
   <div class="card">
     <h3>Storage Status</h3>
-    <div class="statrow"><span class="lbl">Persistent storage</span><span class="val" style="color:${Store.ready?'var(--run)':'var(--wait)'}">${Store.ready?'Connected':'Unavailable'}</span></div>
+    <div class="statrow"><span class="lbl">Cloud sync</span><span class="val" style="color:${Store.ready?'var(--run)':'var(--wait)'}">${Store.ready?'Connected (Firebase)':'Unavailable'}</span></div>
     <div class="statrow"><span class="lbl">Total records</span><span class="val">${Store.records.length}</span></div>
     <div class="statrow"><span class="lbl">Daily reports saved</span><span class="val">${Store.dailyReports.length}</span></div>
     <div class="statrow"><span class="lbl">Last save error</span><span class="val" style="color:var(--wait);font-size:11px;text-align:right;max-width:220px;">${window._lastStorageError || 'none'}</span></div>
-    <div class="statrow"><span class="lbl">IndexedDB available</span><span class="val" style="color:${'indexedDB' in window?'var(--run)':'var(--wait)'}">${'indexedDB' in window ? 'yes' : 'NO'}</span></div>
-    <div class="statrow"><span class="lbl">Persistent storage granted</span><span class="val" style="color:${Store.persisted?'var(--run)':'var(--wait)'}">${Store.persisted ? 'yes' : 'no — device may clear data'}</span></div>
     <div class="statrow"><span class="lbl">Local backup mirror</span><span class="val" style="color:${safeLocalGet('pct_records_backup')?'var(--run)':'var(--muted)'}">${safeLocalGet('pct_records_backup') ? 'present' : 'none yet'}</span></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Data now lives in the cloud and syncs live across every device open on this tracker — no longer tied to a single phone's local storage.</div>
+  </div>
+  <div class="card">
+    <h3>About Data Sharing</h3>
+    <div style="font-size:12px;color:var(--wait);line-height:1.5;">Anyone with this website's link can now view and edit records in real time — there is currently no login required. Only share the link with people you trust to log or view production data.</div>
   </div>
   <div class="card">
     <h3>About</h3>
-    <p style="font-size:13px;color:var(--muted);line-height:1.5;">Find the bottleneck → measure it → identify the root cause → eliminate it → measure again. Data is stored on this device only.</p>
+    <p style="font-size:13px;color:var(--muted);line-height:1.5;">Find the bottleneck → measure it → identify the root cause → eliminate it → measure again. Data syncs live across every device using this link.</p>
   </div>
   `;
 }
