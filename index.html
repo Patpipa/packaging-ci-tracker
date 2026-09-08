@@ -136,7 +136,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v22 - 2026-08-19 (fixed duplicate saves; Firestore security note)';
+const APP_VERSION = 'v23 - 2026-08-19 (fixed desktop Safari time-field sync)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -536,8 +536,16 @@ function confirmNoOverlap(newRecords, excludeId){
   return confirm(`This overlaps with an existing entry:\n\n${conflicts.join('\n')}\n\nSave anyway?`);
 }
 let isSaving = false;
+/* Re-reads the actual on-screen time values right before saving — some desktop browsers don't reliably fire the input event per keystroke on segmented time fields, so trusting only the stored draft can miss a value that's visibly filled in */
+function syncTimeFieldsFromDOM(){
+  const startEl = document.getElementById('startTimeInput');
+  const endEl = document.getElementById('endTimeInput');
+  if(startEl && startEl.value) draft.startTime = startEl.value;
+  if(endEl && endEl.value) draft.endTime = endEl.value;
+}
 async function saveRecord(){
   if(isSaving) return;
+  syncTimeFieldsFromDOM();
   if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
   const dur = duration(draft.startTime, draft.endTime);
   if(dur<=0){ toast('End time must be after start'); return; }
@@ -641,6 +649,7 @@ function editRecord(id){
 const _origSave = saveRecord;
 saveRecord = async function(){
   if(isSaving) return;
+  syncTimeFieldsFromDOM();
   if(draft._editId){
     if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
     const dur = duration(draft.startTime, draft.endTime);
