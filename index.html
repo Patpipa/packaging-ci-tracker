@@ -136,7 +136,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v21 - 2026-08-19 (migrated to Firebase — real-time cloud sync)';
+const APP_VERSION = 'v22 - 2026-08-19 (fixed duplicate saves; Firestore security note)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -490,7 +490,7 @@ function renderNewRecord(){
       <textarea placeholder="e.g. Waiting 25 minutes for trim." oninput="draft.notes=this.value">${draft.notes}</textarea>
     </div>
   </div>
-  <button class="btn btn-primary" onclick="saveRecord()">Save Record</button>
+  <button class="btn btn-primary" id="saveRecordBtn" onclick="saveRecord()" ${isSaving?'disabled style="opacity:0.6;"':''}>${isSaving?'Saving…':'Save Record'}</button>
   `;
 }
 function toggleBreakMachine(m){
@@ -535,11 +535,24 @@ function confirmNoOverlap(newRecords, excludeId){
   if(!conflicts.length) return true;
   return confirm(`This overlaps with an existing entry:\n\n${conflicts.join('\n')}\n\nSave anyway?`);
 }
+let isSaving = false;
 async function saveRecord(){
+  if(isSaving) return;
   if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
   const dur = duration(draft.startTime, draft.endTime);
   if(dur<=0){ toast('End time must be after start'); return; }
   if(draft.status==='BREAK' && draft.breakMachines.length===0){ toast('Select which machine(s) this break applies to'); return; }
+  isSaving = true;
+  const btn = document.getElementById('saveRecordBtn');
+  if(btn){ btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Saving…'; }
+  try{
+    return await _saveRecordInner();
+  } finally {
+    isSaving = false;
+  }
+}
+async function _saveRecordInner(){
+  const dur = duration(draft.startTime, draft.endTime);
   const base = {
     date: draft.date || todayStr(), startTime: draft.startTime, endTime: draft.endTime, durationMin: dur,
     status: draft.status, notes: draft.notes||'', createdAt: Date.now()
@@ -627,24 +640,32 @@ function editRecord(id){
 // override saveRecord to handle edit mode
 const _origSave = saveRecord;
 saveRecord = async function(){
+  if(isSaving) return;
   if(draft._editId){
     if(!draft.startTime || !draft.endTime){ toast('Set start and end time'); return; }
     const dur = duration(draft.startTime, draft.endTime);
     if(dur<=0){ toast('End time must be after start'); return; }
-    const idx = Store.records.findIndex(r=>r.id===draft._editId);
-    if(idx>-1){
-      const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
-      let reasonCategory='', reason='', classification='';
-      if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
-      if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
-      const candidate = {date: draft.date||todayStr(), machine:draft.machine, startTime:draft.startTime, endTime:draft.endTime};
-      if(!confirmNoOverlap([candidate], draft._editId)) return;
-      Store.records[idx] = {...Store.records[idx], date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
-      await Store.saveRecords();
-      toast('Record Updated');
+    isSaving = true;
+    const btn = document.getElementById('saveRecordBtn');
+    if(btn){ btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Saving…'; }
+    try{
+      const idx = Store.records.findIndex(r=>r.id===draft._editId);
+      if(idx>-1){
+        const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
+        let reasonCategory='', reason='', classification='';
+        if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
+        if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
+        const candidate = {date: draft.date||todayStr(), machine:draft.machine, startTime:draft.startTime, endTime:draft.endTime};
+        if(!confirmNoOverlap([candidate], draft._editId)) return;
+        Store.records[idx] = {...Store.records[idx], date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
+        await Store.saveRecords();
+        toast('Record Updated');
+      }
+      draft = freshDraft();
+      Router.go('history');
+    } finally {
+      isSaving = false;
     }
-    draft = freshDraft();
-    Router.go('history');
     return;
   }
   return _origSave();
