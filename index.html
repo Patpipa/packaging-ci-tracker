@@ -136,7 +136,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v23 - 2026-08-19 (fixed desktop Safari time-field sync)';
+const APP_VERSION = 'v24 - 2026-08-19 (auto-reconnect after backgrounding)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -246,7 +246,10 @@ const Store = {
 function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
 function safeLocalSet(key, val){ try{ localStorage.setItem(key, val); return true; }catch(e){ return false; } }
 function showStorageWarning(){
-  const banner = '<div class="warnbanner">DATA STORAGE IS NOT AVAILABLE. DO NOT ENTER PRODUCTION DATA UNTIL STORAGE IS FIXED. Use Export/Backup in Settings to save your work manually, then reopen the app to retry.</div>';
+  const isTerminated = String(window._lastStorageError||'').toLowerCase().includes('terminated');
+  const banner = isTerminated
+    ? '<div class="warnbanner">CONNECTION NEEDS A REFRESH. Tap the ⟳ reload button in your browser (or pull down to refresh), then try saving again — your data is safe, this just needs a fresh connection.</div>'
+    : '<div class="warnbanner">DATA STORAGE IS NOT AVAILABLE. DO NOT ENTER PRODUCTION DATA UNTIL STORAGE IS FIXED. Use Export/Backup in Settings to save your work manually, then reopen the app to retry.</div>';
   const m = document.getElementById('main');
   if(m && !document.getElementById('storageWarning')){
     const d = document.createElement('div'); d.id='storageWarning'; d.innerHTML = banner;
@@ -1463,6 +1466,22 @@ Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ docume
   await Store.init();
   render();
   setInterval(updateClock, 30000);
+
+  /* Self-heal a stale Firestore connection: iOS can tear down the connection while the tab is backgrounded (phone locked, app switched away). Rather than wait for a save to fail with "client has already been terminated," proactively check the connection when the app becomes visible again, and reload automatically if it's actually broken. */
+  let wasHidden = false;
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='hidden'){ wasHidden = true; return; }
+    if(document.visibilityState==='visible' && wasHidden && Store.db){
+      wasHidden = false;
+      Store.db.collection('tracker').doc('records').get().catch(e=>{
+        const msg = String(e && e.message || e).toLowerCase();
+        if(msg.includes('terminated') || msg.includes('client is offline')){
+          toast('Reconnecting…');
+          setTimeout(()=>location.reload(), 600);
+        }
+      });
+    }
+  });
 })();
 </script>
 </body>
