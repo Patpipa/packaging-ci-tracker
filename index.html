@@ -102,6 +102,15 @@ nav.tabbar .tab .ic{font-size:18px;}
 .rank-min{font-family:'IBM Plex Mono';font-size:12px;color:var(--muted);width:52px;text-align:right;}
 .hidden{display:none !important;}
 .warnbanner{background:var(--wait-dim);border:1px solid var(--wait);color:var(--wait);padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:12px;font-weight:600;}
+.live-card{background:var(--panel);border:2px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.live-card.running{border-color:var(--run);}
+.live-card.downtime{border-color:var(--change);}
+.live-badge{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:700;letter-spacing:0.04em;display:inline-flex;align-items:center;gap:5px;}
+.live-badge.idle{background:var(--nowork-dim);color:var(--nowork);}
+.live-badge.running{background:var(--run-dim);color:var(--run);}
+.live-badge.downtime{background:var(--change-dim);color:var(--change);}
+.live-timer{font-family:'IBM Plex Mono';font-size:34px;font-weight:600;color:var(--brk);margin:8px 0 4px;}
+.live-segrow{font-size:12.5px;color:var(--muted);line-height:1.5;}
 .classtag{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;letter-spacing:0.04em;}
 .classtag.up{color:var(--up);background:rgba(199,125,214,0.12);}
 .classtag.int{color:var(--int);background:rgba(79,179,194,0.12);}
@@ -128,6 +137,7 @@ nav.tabbar .tab .ic{font-size:18px;}
   <div class="toast" id="toast"></div>
   <nav class="tabbar">
     <div class="tab" data-tab="dashboard" onclick="Router.go('dashboard')"><span class="ic">▦</span>Dashboard</div>
+    <div class="tab" data-tab="live" onclick="Router.go('live')"><span class="ic">●</span>Live</div>
     <div class="tab" data-tab="new" onclick="Router.go('new')"><span class="ic">＋</span>New</div>
     <div class="tab" data-tab="history" onclick="Router.go('history')"><span class="ic">☰</span>History</div>
     <div class="tab" data-tab="reports" onclick="Router.go('reports')"><span class="ic">▤</span>Reports</div>
@@ -136,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v25 - 2026-08-19 (CSV grouped by machine, sorted by time)';
+const APP_VERSION = 'v30 - 2026-08-19 (PLH reporting: Dashboard, Weekly, Daily Report + PDF/share)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -178,7 +188,7 @@ const FIREBASE_CONFIG = {
   appId: "1:929311010987:web:e66eacb5ab03d85f2987ee"
 };
 const Store = {
-  ready:false, records:[], dailyReports:[], persisted:true, db:null, _initialLoadDone:false,
+  ready:false, records:[], dailyReports:[], liveRuns:{}, productLibrary:[], persisted:true, db:null, _initialLoadDone:false,
   async init(){
     try{
       firebase.initializeApp(FIREBASE_CONFIG);
@@ -187,11 +197,17 @@ const Store = {
 
       const recRef = this.db.collection('tracker').doc('records');
       const repRef = this.db.collection('tracker').doc('dailyReports');
+      const liveRef = this.db.collection('tracker').doc('liveRuns');
+      const prodRef = this.db.collection('tracker').doc('productLibrary');
 
       const recSnap = await recRef.get();
       this.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
       const repSnap = await repRef.get();
       this.dailyReports = (repSnap.exists && repSnap.data().data) ? JSON.parse(repSnap.data().data) : [];
+      const liveSnap = await liveRef.get();
+      this.liveRuns = (liveSnap.exists && liveSnap.data().data) ? JSON.parse(liveSnap.data().data) : {};
+      const prodSnap = await prodRef.get();
+      this.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
 
       // One-time local recovery net: if the cloud looks empty but an old local mirror has data (e.g. mid-migration), restore it up to the cloud
       if(this.records.length===0){
@@ -219,6 +235,20 @@ const Store = {
           if(typeof Router!=='undefined' && Router.current!=='new') render();
         }
       }, err=>{ console.error('reports listener error', err); });
+      liveRef.onSnapshot(snap=>{
+        if(!this._initialLoadDone) return;
+        if(snap.exists && snap.data().data){
+          this.liveRuns = JSON.parse(snap.data().data);
+          if(typeof Router!=='undefined' && Router.current==='live') render();
+        }
+      }, err=>{ console.error('liveRuns listener error', err); });
+      prodRef.onSnapshot(snap=>{
+        if(!this._initialLoadDone) return;
+        if(snap.exists && snap.data().data){
+          this.productLibrary = JSON.parse(snap.data().data);
+          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='products')) render();
+        }
+      }, err=>{ console.error('productLibrary listener error', err); });
     }catch(e){
       console.error('Storage init failed', e);
       window._lastStorageError = String(e && e.message || e);
@@ -235,12 +265,24 @@ const Store = {
       return true;
     }catch(e){ console.error('save records failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
   },
+  async saveProductLibrary(){
+    try{
+      await this.db.collection('tracker').doc('productLibrary').set({data: JSON.stringify(this.productLibrary), updatedAt: Date.now()});
+      return true;
+    }catch(e){ console.error('save productLibrary failed', e); toast('Save failed — check connection'); return false; }
+  },
   async saveDailyReports(){
     try{
       await this.db.collection('tracker').doc('dailyReports').set({data: JSON.stringify(this.dailyReports), updatedAt: Date.now()});
       hideStorageWarning();
       return true;
     }catch(e){ console.error('save reports failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
+  },
+  async saveLiveRuns(){
+    try{
+      await this.db.collection('tracker').doc('liveRuns').set({data: JSON.stringify(this.liveRuns), updatedAt: Date.now()});
+      return true;
+    }catch(e){ console.error('save liveRuns failed', e); toast('Live sync failed — check connection'); return false; }
   }
 };
 function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
@@ -365,11 +407,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly') return 'reports'; if(v==='history') return 'history'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly') return 'reports'; if(v==='history') return 'history'; if(v==='live') return 'live'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor'};
   document.getElementById('pageTitle').textContent = titles[Router.current] || 'CI Tracker';
   updateClock();
   let html = '';
@@ -381,10 +423,12 @@ function render(){
     case 'reports': html += renderReportsList(); break;
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
+    case 'live': html += renderLive(); break;
     case 'settings': html += renderSettings(); break;
     default: html += renderDashboard();
   }
   m.innerHTML = html;
+  if(liveProductPicker){ m.insertAdjacentHTML('beforeend', renderProductPickerOverlay()); }
   afterRender();
 }
 function updateClock(){ const d=new Date(); document.getElementById('shiftClock').textContent = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' · ' + fmtDate(todayStr()).toUpperCase(); }
@@ -428,10 +472,459 @@ function renderDashboard(){
       ${bnList}
       ${mmw.minutes>0 ? `<div class="statrow" style="margin-top:8px;border-top:1px solid var(--line);padding-top:10px;"><span class="lbl">Machine Most Affected</span><span class="val">${mmw.machine}</span></div>` : ''}
     </div>
+    ${renderPLHCard(computePLHSummary(plhRecordsInRange(todayStr(),todayStr())), 'PLH Today')}
     <button class="btn btn-secondary" onclick="Router.go('endShift')">End Shift →</button>
   `;
 }
 
+/* ============ LIVE FLOOR TRACKING ============ */
+function nowHHMM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+/* ---- PLH Reporting (aggregates the structured plh data attached to finished Live Entry runs) ---- */
+function plhRecordsInRange(startDate, endDate){
+  return Store.records.filter(r=>r.plh && r.date>=startDate && r.date<=endDate);
+}
+function computePLHSummary(recs){
+  const totalWeight = recs.reduce((a,r)=>a+(r.plh.weightLbs||0),0);
+  const totalQty = recs.reduce((a,r)=>a+(r.plh.quantity||0),0);
+  const totalGrossHours = recs.reduce((a,r)=>a+(r.plh.grossLaborHours||0),0);
+  const totalNetHours = recs.reduce((a,r)=>a+(r.plh.netLaborHours||0),0);
+  const grossPLH = totalGrossHours>0 ? totalWeight/totalGrossHours : 0;
+  const netPLH = totalNetHours>0 ? totalWeight/totalNetHours : 0;
+  let best=null, worst=null;
+  recs.forEach(r=>{ if(!best || r.plh.grossPLH>best.plh.grossPLH) best=r; if(!worst || r.plh.grossPLH<worst.plh.grossPLH) worst=r; });
+  const withTarget = recs.filter(r=>r.plh.targetPLH);
+  const avgTarget = withTarget.length ? withTarget.reduce((a,r)=>a+r.plh.targetPLH,0)/withTarget.length : null;
+  return {totalWeight, totalQty, totalGrossHours, totalNetHours, grossPLH, netPLH, best, worst, avgTarget, runCount:recs.length};
+}
+function renderPLHCard(summary, title){
+  if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">No finished runs with weight recorded yet.</div></div>`;
+  const varianceLine = summary.avgTarget!=null ? (()=>{
+    const variance = summary.grossPLH - summary.avgTarget;
+    const pct = variance/summary.avgTarget*100;
+    const good = variance>=0;
+    return `<div style="color:${good?'var(--run)':'var(--wait)'};font-size:12.5px;font-weight:600;margin-top:6px;">${good?'+':''}${variance.toFixed(0)} PLH vs target (${summary.avgTarget.toFixed(0)}) · ${good?'+':''}${pct.toFixed(0)}%</div>`;
+  })() : '<div style="color:var(--muted);font-size:12px;margin-top:6px;">No target data for this period</div>';
+  return `<div class="card">
+    <h3>${title}</h3>
+    <div style="text-align:center;padding:6px 0 10px;">
+      <div style="display:flex;justify-content:center;gap:26px;">
+        <div><div class="mono" style="font-size:30px;font-weight:700;color:var(--brk);">${summary.grossPLH.toFixed(0)}</div><div style="font-size:10.5px;color:var(--muted);margin-top:2px;">GROSS lbs/hr</div></div>
+        <div style="width:1px;background:var(--line);"></div>
+        <div><div class="mono" style="font-size:30px;font-weight:700;">${summary.netPLH.toFixed(0)}</div><div style="font-size:10.5px;color:var(--muted);margin-top:2px;">NET lbs/hr</div></div>
+      </div>
+      ${varianceLine}
+    </div>
+    <div class="statrow"><span class="lbl">Total Pounds</span><span class="val">${Math.round(summary.totalWeight)}</span></div>
+    <div class="statrow"><span class="lbl">Total Quantity</span><span class="val">${Math.round(summary.totalQty)}</span></div>
+    <div class="statrow"><span class="lbl">Labour Hours (gross)</span><span class="val">${summary.totalGrossHours.toFixed(1)}</span></div>
+    <div class="statrow"><span class="lbl">Production Runs</span><span class="val">${summary.runCount}</span></div>
+    ${summary.best ? `<div class="statrow"><span class="lbl">Best Product</span><span class="val" style="color:var(--run);font-size:12px;">${escapeHtml(summary.best.plh.product||summary.best.product||'')} — ${summary.best.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
+    ${summary.worst && summary.worst!==summary.best ? `<div class="statrow"><span class="lbl">Lowest Product</span><span class="val" style="color:var(--wait);font-size:12px;">${escapeHtml(summary.worst.plh.product||summary.worst.product||'')} — ${summary.worst.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
+  </div>`;
+}
+function dailyPLHSeries(startDate, endDate){
+  const recs = plhRecordsInRange(startDate, endDate);
+  const byDate = {};
+  recs.forEach(r=>{ if(!byDate[r.date]) byDate[r.date]={weight:0,hours:0}; byDate[r.date].weight+=r.plh.weightLbs; byDate[r.date].hours+=r.plh.grossLaborHours; });
+  return Object.keys(byDate).sort().map(d=>({date:d, plh: byDate[d].hours>0 ? byDate[d].weight/byDate[d].hours : 0}));
+}
+function renderPLHTrendChart(series){
+  if(!series.length) return '<div class="empty">No PLH data in this range yet.</div>';
+  const W=340,H=110,padL=4,padR=4,padB=20,padT=8;
+  const chartW=W-padL-padR, chartH=H-padT-padB;
+  const maxVal = Math.max(1, ...series.map(d=>d.plh));
+  const n=series.length, barGap=4;
+  const barW = Math.max(3,(chartW-barGap*(n-1))/n);
+  let bars='', labels='';
+  const labelEvery = n>14?Math.ceil(n/7):(n>7?2:1);
+  series.forEach((d,i)=>{
+    const x=padL+i*(barW+barGap);
+    const h=(d.plh/maxVal)*chartH;
+    const y=padT+(chartH-h);
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" rx="2" fill="var(--brk)"><title>${fmtDate(d.date)}: ${d.plh.toFixed(0)} PLH</title></rect>`;
+    if(i%labelEvery===0||i===n-1){
+      const dl = new Date(d.date+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric'});
+      labels += `<text x="${(x+barW/2).toFixed(1)}" y="${H-4}" font-size="8" fill="var(--muted2)" text-anchor="middle" font-family="IBM Plex Mono">${dl}</text>`;
+    }
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+    <line x1="${padL}" y1="${padT+chartH}" x2="${W-padR}" y2="${padT+chartH}" stroke="var(--line)" stroke-width="1"/>
+    ${bars}${labels}
+  </svg><div style="font-size:11px;color:var(--muted);margin-top:6px;">Daily Gross PLH</div>`;
+}
+let liveSetup = null;        // {machine, product, productOther, employees} — choosing product/staff before Start Run
+let liveProductPicker = null; // {target:'setup'|'active', machine, query, addMode, newId, newName} — the searchable product picker overlay
+let liveDowntimeSetup = null; // {machine, status, waitCategory, waitReason, waitReasonOther, changeReason, changeReasonOther, notes} — choosing a reason before confirming Downtime
+let liveStaffSetup = null;   // {machine, employees} — Change Staff flow
+let liveFinishSetup = null;  // {machine, quantity, weight, notes} — confirm screen before actually finishing a run
+
+function elapsedMinutesSince(hhmm){
+  const d = duration(hhmm, nowHHMM());
+  return d;
+}
+function laborHoursSoFar(live){
+  let mins = 0;
+  (live.segments||[]).forEach(seg=>{
+    const end = seg.end || nowHHMM();
+    mins += duration(seg.start, end) * (seg.employees||1);
+  });
+  return (mins/60).toFixed(1);
+}
+function renderLive(){
+  const cards = MACHINES.map(m=>{
+    const live = Store.liveRuns[m];
+    if(!live){
+      if(liveSetup && liveSetup.machine===m) return renderLiveSetupCard(m);
+      return `<div class="live-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-family:'Oswald';font-size:16px;">${m}</h3><span class="live-badge idle">IDLE</span></div>
+        <button class="btn btn-primary" style="margin-top:12px;" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
+      </div>`;
+    }
+    if(liveDowntimeSetup && liveDowntimeSetup.machine===m) return renderLiveDowntimeSetupCard(live);
+    if(liveStaffSetup && liveStaffSetup.machine===m) return renderLiveStaffSetupCard(live);
+    if(liveFinishSetup && liveFinishSetup.machine===m) return renderLiveFinishCard(live);
+    return renderLiveActiveCard(m, live);
+  }).join('');
+  return `
+  <div class="card" style="margin-bottom:16px;">
+    <div style="color:var(--muted);font-size:13px;">Tap a machine to start tracking a run live — set the product now or later. Finishing a product writes it straight into History, same as manual entries.</div>
+  </div>
+  ${cards}`;
+}
+/* ---- Searchable Product Picker (grows as you add products) ---- */
+let productPickerResultsCache = [];
+function openProductPicker(target, machine){
+  liveProductPicker = {target, machine, query:'', addMode:false, newId:'', newName:'', newTargetPLH:''};
+  render();
+}
+function closeProductPicker(){ liveProductPicker=null; render(); }
+function renderProductPickerOverlay(){
+  const p = liveProductPicker;
+  const q = (p.query||'').toLowerCase();
+  const results = Store.productLibrary.filter(item=>{
+    if(!q) return true;
+    return (item.id && item.id.toLowerCase().includes(q)) || (item.name && item.name.toLowerCase().includes(q));
+  }).slice(0,30);
+  return `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:flex-end;" onclick="if(event.target===this) closeProductPicker()">
+    <div style="background:var(--panel);width:100%;max-height:85vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));">
+      <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:14px;">${p.addMode ? 'Add New Product' : 'Select Product'}</h3>
+      ${p.addMode ? renderAddProductForm() : `<input type="text" placeholder="Search product ID or name..." value="${escapeHtml(p.query)}" oninput="liveProductPicker.query=this.value; render()" style="margin-bottom:14px;">${renderProductResults(results)}`}
+    </div>
+  </div>`;
+}
+function renderProductResults(results){
+  productPickerResultsCache = results;
+  const list = results.length ? results.map((item,i)=>`
+    <button class="btn btn-secondary" style="justify-content:flex-start;text-align:left;flex-direction:column;align-items:flex-start;padding:14px;margin-bottom:8px;" onclick="pickProductByIndex(${i})">
+      <div style="font-weight:600;">${escapeHtml(item.name)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">${item.id?`ID ${escapeHtml(item.id)} · `:''}${escapeHtml(item.category||'Product')}${item.targetPLH?` · Target ${item.targetPLH} PLH`:''}</div>
+    </button>`).join('') : `<div class="empty">No products found${Store.productLibrary.length?' matching that search':' yet — add your first one below'}.</div>`;
+  return `${list}
+    <button class="btn btn-ghost" style="margin-top:6px;" onclick="liveProductPicker.addMode=true; render()">Can't find it? Add New Product</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeProductPicker()">Cancel</button>`;
+}
+function pickProductByIndex(i){
+  const item = productPickerResultsCache[i];
+  if(!item) return;
+  applyPickedProduct(item.id ? `${item.id} ${item.name}` : item.name, item.id||'');
+}
+function renderAddProductForm(){
+  const p = liveProductPicker;
+  return `
+    <div class="field"><label>Product ID (optional)</label><input type="text" value="${escapeHtml(p.newId||'')}" oninput="liveProductPicker.newId=this.value" placeholder="e.g. 651630"></div>
+    <div class="field"><label>Product Description</label><input type="text" value="${escapeHtml(p.newName||'')}" oninput="liveProductPicker.newName=this.value" placeholder="e.g. Striploin Steak 18oz"></div>
+    <div class="field"><label>Target PLH (optional, lbs/labour-hour)</label><input type="number" min="0" value="${escapeHtml(p.newTargetPLH||'')}" oninput="liveProductPicker.newTargetPLH=this.value" placeholder="e.g. 225"></div>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="liveProductPicker.addMode=false; render()">Back to Search</button>
+      <button class="btn btn-primary" onclick="confirmAddProduct()">Add &amp; Select</button>
+    </div>`;
+}
+async function confirmAddProduct(){
+  const p = liveProductPicker;
+  const name = (p.newName||'').trim();
+  if(!name){ toast('Enter a product description'); return; }
+  const id = (p.newId||'').trim();
+  const targetPLH = parseFloat(p.newTargetPLH)||null;
+  const exists = Store.productLibrary.find(item=> item.name.toLowerCase()===name.toLowerCase() && (item.id||'')===(id||''));
+  if(!exists){
+    Store.productLibrary.push({id, name, category:'', targetPLH});
+    await Store.saveProductLibrary();
+  }
+  applyPickedProduct(id ? `${id} ${name}` : name, id);
+}
+async function applyPickedProduct(display, id){
+  const p = liveProductPicker;
+  if(p.target==='setup'){
+    liveSetup.product = display;
+    liveSetup.productId = id||'';
+  } else if(p.target==='active'){
+    Store.liveRuns[p.machine].product = display;
+    Store.liveRuns[p.machine].productId = id||'';
+    await Store.saveLiveRuns();
+  }
+  liveProductPicker = null;
+  render();
+}
+function employeeGrid(current, onPick){
+  const nums = [1,2,3,4,5,6,7];
+  return `<div class="grid3" style="grid-template-columns:repeat(4,1fr);gap:8px;">
+    ${nums.map(n=>`<div class="statusopt ${current===n?'sel':''}" style="--sc:var(--brk);--scdim:var(--brk-dim);padding:14px 4px;" onclick="${onPick}(${n})">${n}</div>`).join('')}
+    <div class="statusopt ${current>7?'sel':''}" style="--sc:var(--brk);--scdim:var(--brk-dim);padding:14px 4px;" onclick="${onPick}(8)">8+</div>
+  </div>`;
+}
+function renderLiveSetupCard(m){
+  const s = liveSetup;
+  return `<div class="live-card">
+    <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">Start Run — ${m}</h3>
+    <div class="field"><label>Product (optional — set now or when you finish)</label>
+      <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('setup')">📋 ${s.product ? escapeHtml(s.product) : 'Tap to select, or skip for now'}</button>
+    </div>
+    <div class="field"><label>Employees Starting on This Station</label>${employeeGrid(s.employees, 'setEmployeesSetup')}</div>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="liveSetup=null; render()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmStartRun()">▶ Start Run</button>
+    </div>
+  </div>`;
+}
+function setEmployeesSetup(n){ liveSetup.employees = n; render(); }
+function startLiveRunSetup(m){ liveSetup = {machine:m, product:'', productId:'', employees:1}; render(); }
+async function confirmStartRun(){
+  const s = liveSetup;
+  Store.liveRuns[s.machine] = {
+    machine: s.machine, status:'RUNNING', product: s.product||'', productId: s.productId||'', date: todayStr(),
+    startedAt: nowHHMM(), employees: s.employees,
+    segments: [{start: nowHHMM(), end:null, employees: s.employees}],
+    downtimeSegments: []
+  };
+  liveSetup = null;
+  const ok = await Store.saveLiveRuns();
+  if(!ok) return;
+  toast(`${s.machine} — run started`);
+  render();
+}
+function renderLiveActiveCard(m, live){
+  const isRunning = live.status==='RUNNING';
+  const elapsed = elapsedMinutesSince(live.startedAt);
+  const lastSeg = live.segments[live.segments.length-1];
+  const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${seg.start}–${seg.end||'now'} · ${seg.employees} emp</div>`).join('');
+  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">Downtime (${d.reason||d.status}): ${d.start}–${d.end||'now'}</div>`).join('');
+  return `<div class="live-card ${isRunning?'running':'downtime'}">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="font-family:'Oswald';font-size:16px;">${m}</h3>
+      <span class="live-badge ${isRunning?'running':'downtime'}">${isRunning?'● RUNNING':'⏸ DOWNTIME'}</span>
+    </div>
+    <div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>
+    <div class="live-timer">${fmtDur(elapsed)}</div>
+    <div style="font-size:12.5px;color:var(--muted);">Started ${live.startedAt} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Labour so far: ${laborHoursSoFar(live)} hr gross</div>
+    <div style="border-top:1px dashed var(--line);margin:8px 0;"></div>
+    ${segRows}${dtRows}
+    <div class="btnrow" style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="openStaffSetup('${m}')">👥 Change Staff</button>
+      ${isRunning
+        ? `<button class="btn btn-secondary" onclick="openDowntimeSetup('${m}')">⏸ Downtime</button>`
+        : `<button class="btn btn-primary" style="background:var(--run);" onclick="resumeRun('${m}')">▶ Resume</button>`}
+    </div>
+    <button class="btn btn-primary" style="margin-top:8px;" onclick="openFinishSetup('${m}')">✅ Finish Product</button>
+    <div style="text-align:center;margin-top:10px;"><span style="color:var(--wait);font-size:12px;cursor:pointer;text-decoration:underline;" onclick="cancelLiveRun('${m}')">Cancel run</span></div>
+  </div>`;
+}
+function openStaffSetup(m){ liveStaffSetup = {machine:m, employees: Store.liveRuns[m].segments[Store.liveRuns[m].segments.length-1].employees}; render(); }
+function renderLiveStaffSetupCard(live){
+  const s = liveStaffSetup;
+  return `<div class="live-card running">
+    <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Change Staff</h3>
+    <div class="field"><label>Employees on Station Now</label>${employeeGrid(s.employees, 'setEmployeesStaff')}</div>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="liveStaffSetup=null; render()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmStaffChange()">Confirm</button>
+    </div>
+  </div>`;
+}
+function setEmployeesStaff(n){ liveStaffSetup.employees = n; render(); }
+async function confirmStaffChange(){
+  const s = liveStaffSetup;
+  const live = Store.liveRuns[s.machine];
+  const now = nowHHMM();
+  const lastSeg = live.segments[live.segments.length-1];
+  if(live.status==='RUNNING'){
+    lastSeg.end = now;
+    live.segments.push({start: now, end:null, employees: s.employees});
+  }
+  liveStaffSetup = null;
+  const ok = await Store.saveLiveRuns();
+  if(!ok) return;
+  toast('Staff count updated');
+  render();
+}
+function openDowntimeSetup(m){
+  liveDowntimeSetup = {machine:m, status:'WAITING', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', notes:''};
+  render();
+}
+function renderLiveDowntimeSetupCard(live){
+  const s = liveDowntimeSetup;
+  return `<div class="live-card downtime">
+    <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Log Downtime</h3>
+    <div class="statusgrid">
+      ${['WAITING','CHANGEOVER','BREAK'].map(key=>{ const info=statusInfo(key); return `<div class="statusopt ${s.status===key?'sel':''}" style="--sc:${info.color};--scdim:${info.dim}" onclick="liveDowntimeSetup.status='${key}'; render()"><div class="dot" style="background:${info.color}"></div>${info.label}</div>`; }).join('')}
+    </div>
+    ${s.status==='CHANGEOVER' ? `
+      <div class="field"><label>Changeover Reason</label>
+        <select onchange="liveDowntimeSetup.changeReason=this.value; render()">${CHANGEOVER_REASONS.map(r=>`<option ${s.changeReason===r?'selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      ${s.changeReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.changeReasonOther}" oninput="liveDowntimeSetup.changeReasonOther=this.value"></div>` : ''}
+    ` : ''}
+    ${s.status==='WAITING' ? `
+      <div class="field"><label>Reason Category</label>
+        <select onchange="liveDowntimeSetup.waitCategory=this.value; liveDowntimeSetup.waitReason=''; render()">${Object.keys(WAITING_CATEGORIES).map(c=>`<option ${s.waitCategory===c?'selected':''}>${c}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Specific Reason</label>
+        <select onchange="liveDowntimeSetup.waitReason=this.value; render()">${WAITING_CATEGORIES[s.waitCategory].reasons.map(r=>`<option value="${r}" ${s.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${s.waitReason==='Other'?'selected':''}>Other</option></select>
+      </div>
+      ${s.waitReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.waitReasonOther}" oninput="liveDowntimeSetup.waitReasonOther=this.value"></div>` : ''}
+    ` : ''}
+    <div class="field"><label>Notes (optional)</label><textarea oninput="liveDowntimeSetup.notes=this.value" placeholder="e.g. Waiting for trim">${s.notes}</textarea></div>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="liveDowntimeSetup=null; render()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmDowntime()">Confirm</button>
+    </div>
+  </div>`;
+}
+async function confirmDowntime(){
+  const s = liveDowntimeSetup;
+  const live = Store.liveRuns[s.machine];
+  const now = nowHHMM();
+  const lastSeg = live.segments[live.segments.length-1];
+  lastSeg.end = now;
+  let reasonCategory='', reason='', classification='';
+  if(s.status==='CHANGEOVER'){ reason = s.changeReason==='Other' ? (s.changeReasonOther||'Other') : s.changeReason; }
+  if(s.status==='WAITING'){ reasonCategory = s.waitCategory; reason = s.waitReason==='Other' ? (s.waitReasonOther||'Other') : (s.waitReason||WAITING_CATEGORIES[s.waitCategory].reasons[0]); classification = reasonClassification(s.waitCategory); }
+  live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:s.notes});
+  live.status = 'DOWNTIME';
+  liveDowntimeSetup = null;
+  const ok = await Store.saveLiveRuns();
+  if(!ok) return;
+  toast('Downtime logged');
+  render();
+}
+async function resumeRun(m){
+  const live = Store.liveRuns[m];
+  const now = nowHHMM();
+  const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+  if(lastDt) lastDt.end = now;
+  const lastSeg = live.segments[live.segments.length-1];
+  live.segments.push({start: now, end:null, employees: lastSeg.employees});
+  live.status = 'RUNNING';
+  const ok = await Store.saveLiveRuns();
+  if(!ok) return;
+  toast(`${m} — resumed`);
+  render();
+}
+function openFinishSetup(m){ liveFinishSetup = {machine:m, quantity:'', weight:'', notes:''}; render(); }
+function overlapMinutes(aStart,aEnd,bStart,bEnd){
+  let s1=toMin(aStart), e1=toMin(aEnd||nowHHMM()); if(e1<s1) e1+=1440;
+  let s2=toMin(bStart), e2=toMin(bEnd||nowHHMM()); if(e2<s2) e2+=1440;
+  const ovS=Math.max(s1,s2), ovE=Math.min(e1,e2);
+  return Math.max(0, ovE-ovS);
+}
+function renderLiveFinishCard(live){
+  const s = liveFinishSetup;
+  const target = live.productId ? Store.productLibrary.find(p=>p.id===live.productId) : null;
+  return `<div class="live-card running">
+    <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:14px;">Finish Run — ${s.machine}</h3>
+    <div class="field"><label>Product</label>
+      <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('active','${s.machine}')">${live.product ? escapeHtml(live.product) : 'No product selected yet'}</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin:-6px 0 12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
+    <div class="timerow">
+      <div class="field"><label>Quantity Produced (optional)</label><input type="number" min="0" placeholder="e.g. 120" value="${s.quantity}" oninput="liveFinishSetup.quantity=this.value"></div>
+      <div class="field"><label>Total Weight, lbs (optional)</label><input type="number" min="0" placeholder="e.g. 3600" value="${s.weight}" oninput="liveFinishSetup.weight=this.value"></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin:-6px 0 14px;">Leave these blank if you don't have the numbers yet — you can fill them in later by editing the record in History.</div>
+    <div class="field"><label>Notes (optional)</label><textarea oninput="liveFinishSetup.notes=this.value" placeholder="Anything worth noting about this run">${s.notes}</textarea></div>
+    <button class="btn btn-primary" onclick="confirmFinishProduct()">✅ Save &amp; Finish</button>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="liveFinishSetup=null; render()">Keep Running</button>
+  </div>`;
+}
+async function confirmFinishProduct(){
+  const s = liveFinishSetup;
+  const m = s.machine;
+  const live = Store.liveRuns[m];
+  const now = nowHHMM();
+  const lastSeg = live.segments[live.segments.length-1];
+  if(!lastSeg.end) lastSeg.end = now;
+  const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+  if(lastDt && !lastDt.end) lastDt.end = now;
+
+  // PLH calc — gross labour hours use total segment time × headcount; net labour hours subtract any downtime that overlapped that segment. Same methodology as the PLH tracker.
+  let grossLaborMin = 0, netLaborMin = 0;
+  live.segments.forEach(seg=>{
+    const durMin = duration(seg.start, seg.end);
+    grossLaborMin += durMin * seg.employees;
+    let overlap = 0;
+    (live.downtimeSegments||[]).forEach(d=>{ overlap += overlapMinutes(seg.start, seg.end, d.start, d.end); });
+    netLaborMin += Math.max(0, durMin-overlap) * seg.employees;
+  });
+  const grossLaborHours = grossLaborMin/60, netLaborHours = netLaborMin/60;
+  const weightNum = parseFloat(s.weight)||0;
+  const grossPLH = weightNum>0 && grossLaborHours>0 ? weightNum/grossLaborHours : null;
+  const netPLH = weightNum>0 && netLaborHours>0 ? weightNum/netLaborHours : null;
+  const target = live.productId ? Store.productLibrary.find(p=>p.id===live.productId) : null;
+
+  const extras = [];
+  if(s.quantity) extras.push(`Qty: ${s.quantity}`);
+  if(s.weight) extras.push(`Weight: ${s.weight} lbs`);
+  if(grossPLH!=null){
+    extras.push(`Labour: ${grossLaborHours.toFixed(1)}h gross / ${netLaborHours.toFixed(1)}h net`);
+    extras.push(`PLH: ${grossPLH.toFixed(0)} gross${netPLH!=null?' / '+netPLH.toFixed(0)+' net':''}`);
+    if(target && target.targetPLH){
+      const variance = grossPLH - target.targetPLH;
+      const pct = variance/target.targetPLH*100;
+      extras.push(`vs Target ${target.targetPLH}: ${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`);
+    }
+  }
+  if(s.notes) extras.push(s.notes);
+  const extraNote = extras.join(' · ');
+  const plhData = grossPLH!=null ? {
+    weightLbs: weightNum, quantity: parseFloat(s.quantity)||0,
+    grossLaborHours, netLaborHours, grossPLH, netPLH,
+    targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
+    productId: live.productId||'', product: live.product||''
+  } : null;
+
+  const toSave = [];
+  live.segments.forEach((seg,i)=>{
+    const dur = duration(seg.start, seg.end);
+    if(dur<=0) return;
+    const isLast = i===live.segments.length-1;
+    const baseNote = `${seg.employees} employee${seg.employees===1?'':'s'} on station (Live Entry)`;
+    const rec = {id:uid(), date:live.date, machine:m, product:live.product, startTime:seg.start, endTime:seg.end, durationMin:dur, status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes: isLast && extraNote ? `${baseNote} · ${extraNote}` : baseNote, createdAt:Date.now()};
+    if(isLast && plhData) rec.plh = plhData;
+    toSave.push(rec);
+  });
+  (live.downtimeSegments||[]).forEach(d=>{
+    const dur = duration(d.start, d.end);
+    if(dur<=0) return;
+    toSave.push({id:uid(), date:live.date, machine:m, product:live.product, startTime:d.start, endTime:d.end, durationMin:dur, status:d.status, reasonCategory:d.reasonCategory, reason:d.reason, classification:d.classification, notes:d.notes||'', createdAt:Date.now()});
+  });
+
+  if(toSave.length===0){ toast('Nothing to save — run was too short'); delete Store.liveRuns[m]; await Store.saveLiveRuns(); liveFinishSetup=null; render(); return; }
+
+  Store.records = Store.records.concat(toSave);
+  const okR = await Store.saveRecords();
+  delete Store.liveRuns[m];
+  const okL = await Store.saveLiveRuns();
+  liveFinishSetup = null;
+  if(!okR || !okL){ toast('Save failed — check connection'); return; }
+  toast(grossPLH!=null ? `${m} — finished, ${grossPLH.toFixed(0)} PLH` : `${m} — product finished, ${toSave.length} record(s) saved`);
+  render();
+}
+async function cancelLiveRun(m){
+  if(!confirm(`Cancel this run for ${m}? Nothing will be saved to History.`)) return;
+  delete Store.liveRuns[m];
+  await Store.saveLiveRuns();
+  toast('Run cancelled');
+  render();
+}
 /* ============ NEW RECORD ============ */
 let draft = null;
 let lastEndTime = '';
@@ -881,6 +1374,11 @@ function renderWeeklyView(){
     <h3>Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
+  ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period')}
+  <div class="card">
+    <h3>Daily PLH Trend</h3>
+    ${renderPLHTrendChart(dailyPLHSeries(weeklyRange.start,weeklyRange.end))}
+  </div>
   <div class="card">
     <h3>Recommended Actions (Lean/CI)</h3>
     ${craftWeeklySuggestions(rep).map(idea=>`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.4;margin-bottom:8px;">${escapeHtml(idea)}</div>`).join('')}
@@ -915,6 +1413,12 @@ async function deleteRangeRecords(){
 function weeklySummaryText(){
   const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
   const t = rep.totals;
+  const plh = computePLHSummary(plhRecordsInRange(weeklyRange.start, weeklyRange.end));
+  const plhBlock = plh.runCount>0 ? `
+PLH This Period:
+Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
+Total Pounds: ${Math.round(plh.totalWeight)} · Runs: ${plh.runCount}
+${plh.best ? 'Best: '+(plh.best.plh.product||'')+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}` : '';
   return `PACKAGING CI WEEKLY SUMMARY
 ${fmtDate(rep.startDate)} – ${fmtDate(rep.endDate)}
 
@@ -927,7 +1431,7 @@ ${rep.bottlenecks.length ? rep.bottlenecks[0][0]+' — '+fmtDur(rep.bottlenecks[
 
 Machine with Most Downtime:
 ${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}
-
+${plhBlock}
 Observation:
 ${rep.observation}
 
@@ -1036,6 +1540,23 @@ function exportWeeklyPDF(){
   const obsLines = doc.splitTextToSize(rep.observation, 520);
   doc.text(obsLines, 46, y); y += obsLines.length*14+10;
 
+  {
+    const plhSummary = computePLHSummary(plhRecordsInRange(rep.startDate, rep.endDate));
+    ensure(120); y+=6; section('PLH SUMMARY (THIS PERIOD)');
+    if(plhSummary.runCount===0){ doc.text('No finished runs with weight recorded yet.',46,y); y+=15; }
+    else{
+      row('Gross PLH (lbs/labour-hr)', plhSummary.grossPLH.toFixed(0));
+      row('Net PLH (lbs/labour-hr)', plhSummary.netPLH.toFixed(0));
+      row('Total Pounds', Math.round(plhSummary.totalWeight));
+      row('Total Quantity', Math.round(plhSummary.totalQty));
+      row('Labour Hours (gross)', plhSummary.totalGrossHours.toFixed(1));
+      row('Production Runs', plhSummary.runCount);
+      if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
+      if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
+      if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
+    }
+  }
+
   ensure(100); y+=6; section('RECOMMENDED ACTIONS (LEAN/CI)');
   craftWeeklySuggestions(rep).forEach((idea,i)=>{
     ensure(30);
@@ -1126,6 +1647,7 @@ function renderReportView(date){
     <h3>Continuous Improvement Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
+  ${renderPLHCard(computePLHSummary(plhRecordsInRange(rep.date,rep.date)), 'PLH Today')}
   <div class="card">
     <h3>Action for Tomorrow</h3>
     <textarea id="ciActionBox" placeholder="e.g. Review trim availability and communication with packaging before the morning run." oninput="updateCiAction('${rep.date}', this.value)">${rep.ciAction||''}</textarea>
@@ -1213,6 +1735,12 @@ function renderEndShiftConfirm(){
 function summaryText(date){
   const rep = getReportForView(date);
   const t = rep.totals;
+  const plh = computePLHSummary(plhRecordsInRange(rep.date, rep.date));
+  const plhBlock = plh.runCount>0 ? `
+PLH Today:
+Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
+Total Pounds: ${Math.round(plh.totalWeight)} · Runs: ${plh.runCount}
+` : '';
   return `PACKAGING CI DAILY REPORT
 Date: ${fmtDate(rep.date)}
 
@@ -1225,7 +1753,7 @@ ${rep.bottlenecks.length ? rep.bottlenecks[0][0]+' — '+fmtDur(rep.bottlenecks[
 
 Machine with Most Downtime:
 ${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}
-
+${plhBlock}
 Main Observation:
 ${rep.observation}`;
 }
@@ -1320,6 +1848,23 @@ function exportReportPDF(date){
   ensure(90); section('CONTINUOUS IMPROVEMENT OBSERVATION');
   const obsLines = doc.splitTextToSize(rep.observation, 520);
   doc.text(obsLines, 46, y); y += obsLines.length*14+10;
+
+  {
+    const plhSummary = computePLHSummary(plhRecordsInRange(rep.date, rep.date));
+    ensure(120); y+=6; section('PLH SUMMARY (TODAY)');
+    if(plhSummary.runCount===0){ doc.text('No finished runs with weight recorded yet.',46,y); y+=15; }
+    else{
+      row('Gross PLH (lbs/labour-hr)', plhSummary.grossPLH.toFixed(0));
+      row('Net PLH (lbs/labour-hr)', plhSummary.netPLH.toFixed(0));
+      row('Total Pounds', Math.round(plhSummary.totalWeight));
+      row('Total Quantity', Math.round(plhSummary.totalQty));
+      row('Labour Hours (gross)', plhSummary.totalGrossHours.toFixed(1));
+      row('Production Runs', plhSummary.runCount);
+      if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
+      if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
+      if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
+    }
+  }
 
   ensure(90); section('CI ACTION / FOLLOW-UP');
   const actLines = doc.splitTextToSize(rep.ciAction || '(none entered)', 520);
@@ -1484,6 +2029,7 @@ Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ docume
   await Store.init();
   render();
   setInterval(updateClock, 30000);
+  setInterval(()=>{ if(Router.current==='live') render(); }, 30000);
 
   /* Self-heal a stale Firestore connection: iOS can tear down the connection while the tab is backgrounded (phone locked, app switched away). Rather than wait for a save to fail with "client has already been terminated," proactively check the connection when the app becomes visible again, and reload automatically if it's actually broken. */
   let wasHidden = false;
