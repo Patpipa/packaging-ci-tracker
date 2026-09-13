@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v32 - 2026-08-19 (standalone Product Library page: add/edit/delete anytime)';
+const APP_VERSION = 'v33 - 2026-08-19 (fixed: Change Staff during Downtime now registers correctly)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -858,6 +858,7 @@ function renderLiveActiveCard(m, live){
     <div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>
     <div class="live-timer">${fmtDur(elapsed)}</div>
     <div style="font-size:12.5px;color:var(--muted);">Started ${live.startedAt} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>
+    ${(!isRunning && live.pendingEmployees!=null) ? `<div style="font-size:12.5px;color:var(--change);font-weight:600;">Will resume with ${live.pendingEmployees} employee${live.pendingEmployees===1?'':'s'}</div>` : ''}
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Labour so far: ${laborHoursSoFar(live)} hr gross</div>
     <div style="border-top:1px dashed var(--line);margin:8px 0;"></div>
     ${segRows}${dtRows}
@@ -871,7 +872,12 @@ function renderLiveActiveCard(m, live){
     <div style="text-align:center;margin-top:10px;"><span style="color:var(--wait);font-size:12px;cursor:pointer;text-decoration:underline;" onclick="cancelLiveRun('${m}')">Cancel run</span></div>
   </div>`;
 }
-function openStaffSetup(m){ liveStaffSetup = {machine:m, employees: Store.liveRuns[m].segments[Store.liveRuns[m].segments.length-1].employees}; render(); }
+function openStaffSetup(m){
+  const live = Store.liveRuns[m];
+  const lastSeg = live.segments[live.segments.length-1];
+  liveStaffSetup = {machine:m, employees: (live.pendingEmployees!=null ? live.pendingEmployees : lastSeg.employees)};
+  render();
+}
 function renderLiveStaffSetupCard(live){
   const s = liveStaffSetup;
   return `<div class="live-card running">
@@ -892,11 +898,15 @@ async function confirmStaffChange(){
   if(live.status==='RUNNING'){
     lastSeg.end = now;
     live.segments.push({start: now, end:null, employees: s.employees});
+    delete live.pendingEmployees;
+  } else {
+    // Machine is on Downtime — there's no active running segment to split, so just record the new headcount to apply the moment it resumes
+    live.pendingEmployees = s.employees;
   }
   liveStaffSetup = null;
   const ok = await Store.saveLiveRuns();
   if(!ok) return;
-  toast('Staff count updated');
+  toast(live.status==='RUNNING' ? 'Staff count updated' : `Staff count will apply once resumed (${s.employees})`);
   render();
 }
 function openDowntimeSetup(m){
@@ -955,7 +965,9 @@ async function resumeRun(m){
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt) lastDt.end = now;
   const lastSeg = live.segments[live.segments.length-1];
-  live.segments.push({start: now, end:null, employees: lastSeg.employees});
+  const nextEmployees = (live.pendingEmployees!=null) ? live.pendingEmployees : lastSeg.employees;
+  live.segments.push({start: now, end:null, employees: nextEmployees});
+  delete live.pendingEmployees;
   live.status = 'RUNNING';
   const ok = await Store.saveLiveRuns();
   if(!ok) return;
