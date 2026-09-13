@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v34 - 2026-08-19 (fixed: Gross/Net PLH now correctly reflect downtime)';
+const APP_VERSION = 'v37 - 2026-08-19 (PLH CSV grouped by machine, sorted by time)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -605,8 +605,8 @@ function renderPLHRunDetail(id){
   if(!r || !r.plh){ plhLogDetailId=null; return renderPLHLogView(); }
   const p = r.plh;
   const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
-  const segRows = (p.segments||[]).map((seg,i)=>`<div class="statrow"><span class="lbl">Segment ${i+1}: ${seg.start}–${seg.end}</span><span class="val">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
-  const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div class="statrow"><span class="lbl">${d.reason||d.status}</span><span class="val">${d.start}–${d.end}</span></div>`).join('') : '<div class="empty">No downtime recorded.</div>';
+  const segRows = (p.segments||[]).map((seg,i)=>`<div class="statrow"><span class="lbl">Segment ${i+1}: ${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span class="val">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
+  const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div class="statrow"><span class="lbl">${d.reason||d.status}</span><span class="val">${fmtTime12(d.start)}–${fmtTime12(d.end)}</span></div>`).join('') : '<div class="empty">No downtime recorded.</div>';
   return `
   <div class="card" style="text-align:center;">
     <div style="font-family:'Oswald';font-size:16px;">${escapeHtml(p.product||r.product)}</div>
@@ -646,13 +646,28 @@ function exportPLHLogCSV(){
   let recs = allRecs;
   if(plhLogFilters.machine) recs = recs.filter(r=>r.machine===plhLogFilters.machine);
   if(plhLogFilters.product) recs = recs.filter(r=>r.plh.product===plhLogFilters.product);
-  const headers = ['Date','Machine','Product','Quantity','Weight (lbs)','Gross PLH','Net PLH','Labour Hrs (Gross)','Labour Hrs (Net)','Downtime (min)','Target PLH'];
-  const rows = recs.map(r=>{
+  const headers = ['Date','Start Time','End Time','Product','Quantity','Weight (lbs)','Gross PLH','Net PLH','Labour Hrs (Gross)','Labour Hrs (Net)','Downtime (min)','Target PLH'];
+  const rowFor = r=>{
     const p = r.plh;
     const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
-    return [r.date, r.machine, p.product||r.product, p.quantity||0, p.weightLbs, p.grossPLH.toFixed(1), p.netPLH!=null?p.netPLH.toFixed(1):'', p.grossLaborHours.toFixed(2), p.netLaborHours.toFixed(2), downtimeMin, p.targetPLH||''];
+    const segs = p.segments||[];
+    const startTime = segs.length ? fmtTime12(segs[0].start) : '';
+    let lastEndRaw = segs.length ? segs[segs.length-1].end : '';
+    (p.downtimeSegments||[]).forEach(d=>{ if(d.end && (!lastEndRaw || toMin(d.end)>toMin(lastEndRaw))) lastEndRaw = d.end; });
+    const endTime = lastEndRaw ? fmtTime12(lastEndRaw) : '';
+    return [r.date, startTime, endTime, p.product||r.product, p.quantity||0, p.weightLbs, p.grossPLH.toFixed(1), p.netPLH!=null?p.netPLH.toFixed(1):'', p.grossLaborHours.toFixed(2), p.netLaborHours.toFixed(2), downtimeMin, p.targetPLH||''];
+  };
+  // Group by machine (Variovac 1, 2, 3 first, then any others), and within each machine sort chronologically — same organization as the main History CSV export
+  const machineOrder = [...MACHINES, ...[...new Set(recs.map(r=>r.machine))].filter(m=>!MACHINES.includes(m)).sort()];
+  const lines = [headers.join(',')];
+  machineOrder.forEach(m=>{
+    const machineRecs = recs.filter(r=>r.machine===m).sort((a,b)=> a.date===b.date ? toMin(a.startTime)-toMin(b.startTime) : a.date.localeCompare(b.date));
+    if(!machineRecs.length) return;
+    lines.push(`"== ${m} =="`);
+    machineRecs.forEach(r=>{ lines.push(rowFor(r).map(v=>`"${v}"`).join(',')); });
+    lines.push('');
   });
-  const csv = [headers.join(','), ...rows.map(r=>r.map(v=>`"${v}"`).join(','))].join('\n');
+  const csv = lines.join('\n');
   downloadBlob(csv, `PLH_Production_Log_${plhLogRange.start}_to_${plhLogRange.end}.csv`, 'text/csv');
   toast('CSV exported');
 }
@@ -848,8 +863,8 @@ function renderLiveActiveCard(m, live){
   const isRunning = live.status==='RUNNING';
   const elapsed = elapsedMinutesSince(live.startedAt);
   const lastSeg = live.segments[live.segments.length-1];
-  const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${seg.start}–${seg.end||'now'} · ${seg.employees} emp</div>`).join('');
-  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">Downtime (${d.reason||d.status}): ${d.start}–${d.end||'now'}</div>`).join('');
+  const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
+  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">Downtime (${d.reason||d.status}): ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
   return `<div class="live-card ${isRunning?'running':'downtime'}">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3 style="font-family:'Oswald';font-size:16px;">${m}</h3>
@@ -857,7 +872,7 @@ function renderLiveActiveCard(m, live){
     </div>
     <div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>
     <div class="live-timer">${fmtDur(elapsed)}</div>
-    <div style="font-size:12.5px;color:var(--muted);">Started ${live.startedAt} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>
+    <div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>
     ${(!isRunning && live.pendingEmployees!=null) ? `<div style="font-size:12.5px;color:var(--change);font-weight:600;">Will resume with ${live.pendingEmployees} employee${live.pendingEmployees===1?'':'s'}</div>` : ''}
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Labour so far: ${laborHoursSoFar(live)} hr gross</div>
     <div style="border-top:1px dashed var(--line);margin:8px 0;"></div>
