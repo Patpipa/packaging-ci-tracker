@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v31 - 2026-08-19 (PLH Production Log: browse, filter, detail view, CSV export)';
+const APP_VERSION = 'v32 - 2026-08-19 (standalone Product Library page: add/edit/delete anytime)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -407,11 +407,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog') return 'reports'; if(v==='history') return 'history'; if(v==='live') return 'live'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog') return 'reports'; if(v==='history') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library'};
   document.getElementById('pageTitle').textContent = titles[Router.current] || 'CI Tracker';
   updateClock();
   let html = '';
@@ -425,6 +425,7 @@ function render(){
     case 'weekly': html += renderWeeklyView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
     case 'live': html += renderLive(); break;
+    case 'products': html += renderProductsView(); break;
     case 'settings': html += renderSettings(); break;
     default: html += renderDashboard();
   }
@@ -696,7 +697,20 @@ function renderLive(){
 /* ---- Searchable Product Picker (grows as you add products) ---- */
 let productPickerResultsCache = [];
 function openProductPicker(target, machine){
-  liveProductPicker = {target, machine, query:'', addMode:false, newId:'', newName:'', newTargetPLH:''};
+  liveProductPicker = {target, machine, query:'', addMode: target==='library', newId:'', newName:'', newTargetPLH:'', editIndex:null};
+  render();
+}
+function editLibraryProduct(i){
+  const item = Store.productLibrary[i];
+  liveProductPicker = {target:'library', machine:null, query:'', addMode:true, newId:item.id||'', newName:item.name||'', newTargetPLH:item.targetPLH||'', editIndex:i};
+  render();
+}
+async function deleteLibraryProduct(i){
+  const item = Store.productLibrary[i];
+  if(!confirm(`Delete "${item.name}" from the product library? This won't affect past records that already used it.`)) return;
+  Store.productLibrary.splice(i,1);
+  await Store.saveProductLibrary();
+  toast('Product deleted');
   render();
 }
 function closeProductPicker(){ liveProductPicker=null; render(); }
@@ -707,9 +721,10 @@ function renderProductPickerOverlay(){
     if(!q) return true;
     return (item.id && item.id.toLowerCase().includes(q)) || (item.name && item.name.toLowerCase().includes(q));
   }).slice(0,30);
+  const title = p.addMode ? (p.editIndex!=null ? 'Edit Product' : 'Add New Product') : 'Select Product';
   return `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:flex-end;" onclick="if(event.target===this) closeProductPicker()">
     <div style="background:var(--panel);width:100%;max-height:85vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));">
-      <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:14px;">${p.addMode ? 'Add New Product' : 'Select Product'}</h3>
+      <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:14px;">${title}</h3>
       ${p.addMode ? renderAddProductForm() : `<input type="text" placeholder="Search product ID or name..." value="${escapeHtml(p.query)}" oninput="liveProductPicker.query=this.value; render()" style="margin-bottom:14px;">${renderProductResults(results)}`}
     </div>
   </div>`;
@@ -737,8 +752,8 @@ function renderAddProductForm(){
     <div class="field"><label>Product Description</label><input type="text" value="${escapeHtml(p.newName||'')}" oninput="liveProductPicker.newName=this.value" placeholder="e.g. Striploin Steak 18oz"></div>
     <div class="field"><label>Target PLH (optional, lbs/labour-hour)</label><input type="number" min="0" value="${escapeHtml(p.newTargetPLH||'')}" oninput="liveProductPicker.newTargetPLH=this.value" placeholder="e.g. 225"></div>
     <div class="btnrow">
-      <button class="btn btn-ghost" onclick="liveProductPicker.addMode=false; render()">Back to Search</button>
-      <button class="btn btn-primary" onclick="confirmAddProduct()">Add &amp; Select</button>
+      ${p.editIndex==null ? `<button class="btn btn-ghost" onclick="liveProductPicker.addMode=false; render()">Back to Search</button>` : `<button class="btn btn-ghost" onclick="liveProductPicker=null; render()">Cancel</button>`}
+      <button class="btn btn-primary" onclick="confirmAddProduct()">${p.editIndex!=null ? 'Save Changes' : (p.target==='library' ? 'Add Product' : 'Add & Select')}</button>
     </div>`;
 }
 async function confirmAddProduct(){
@@ -747,11 +762,20 @@ async function confirmAddProduct(){
   if(!name){ toast('Enter a product description'); return; }
   const id = (p.newId||'').trim();
   const targetPLH = parseFloat(p.newTargetPLH)||null;
+  if(p.editIndex!=null){
+    Store.productLibrary[p.editIndex] = {id, name, category:'', targetPLH};
+    await Store.saveProductLibrary();
+    liveProductPicker = null;
+    toast('Product updated');
+    render();
+    return;
+  }
   const exists = Store.productLibrary.find(item=> item.name.toLowerCase()===name.toLowerCase() && (item.id||'')===(id||''));
   if(!exists){
     Store.productLibrary.push({id, name, category:'', targetPLH});
     await Store.saveProductLibrary();
   }
+  if(p.target==='library'){ liveProductPicker=null; toast('Product added'); render(); return; }
   applyPickedProduct(id ? `${id} ${name}` : name, id);
 }
 async function applyPickedProduct(display, id){
@@ -766,6 +790,22 @@ async function applyPickedProduct(display, id){
   }
   liveProductPicker = null;
   render();
+}
+function renderProductsView(){
+  const items = Store.productLibrary.map((item,i)=>({...item,_idx:i})).sort((a,b)=> a.name.localeCompare(b.name));
+  return `
+  <button class="btn btn-primary" style="margin-bottom:14px;" onclick="openProductPicker('library')">+ Add Product</button>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:12px;">${items.length} product${items.length===1?'':'s'} in your library</div>
+  ${items.length ? items.map(item=>`
+    <div class="hist-item">
+      <div class="hist-top"><span class="mach">${escapeHtml(item.name)}</span>${item.targetPLH?`<span class="pill run">${item.targetPLH} PLH</span>`:''}</div>
+      <div class="hist-mid">${item.id?`ID ${escapeHtml(item.id)}`:'No ID set'}</div>
+      <div class="hist-bot"><span></span><div class="hist-actions">
+        <div class="iconsmall" onclick="editLibraryProduct(${item._idx})">✎</div>
+        <div class="iconsmall" onclick="deleteLibraryProduct(${item._idx})">🗑</div>
+      </div></div>
+    </div>`).join('') : '<div class="empty">No products yet — tap + Add Product to start building your library, anytime you have a spare moment.</div>'}
+  `;
 }
 function employeeGrid(current, onPick){
   const nums = [1,2,3,4,5,6,7];
@@ -1999,6 +2039,11 @@ function renderSettings(){
     <h3>App Version</h3>
     <div class="mono" style="font-size:12px;color:var(--amber);">${APP_VERSION}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">If this doesn't match what Claude just gave you, the update hasn't been uploaded to GitHub yet.</div>
+  </div>
+  <div class="card">
+    <h3>Product Library</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:10px;">${Store.productLibrary.length} product${Store.productLibrary.length===1?'':'s'} saved — add or edit anytime, no need to wait for a live run.</div>
+    <button class="btn btn-secondary" onclick="Router.go('products')">📦 Manage Product Library →</button>
   </div>
   <div class="card">
     <h3>Data Backup &amp; Restore</h3>
