@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v30 - 2026-08-19 (PLH reporting: Dashboard, Weekly, Daily Report + PDF/share)';
+const APP_VERSION = 'v31 - 2026-08-19 (PLH Production Log: browse, filter, detail view, CSV export)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -407,11 +407,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly') return 'reports'; if(v==='history') return 'history'; if(v==='live') return 'live'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog') return 'reports'; if(v==='history') return 'history'; if(v==='live') return 'live'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log'};
   document.getElementById('pageTitle').textContent = titles[Router.current] || 'CI Tracker';
   updateClock();
   let html = '';
@@ -423,6 +423,7 @@ function render(){
     case 'reports': html += renderReportsList(); break;
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
+    case 'plhLog': html += renderPLHLogView(); break;
     case 'live': html += renderLive(); break;
     case 'settings': html += renderSettings(); break;
     default: html += renderDashboard();
@@ -551,6 +552,108 @@ function renderPLHTrendChart(series){
     <line x1="${padL}" y1="${padT+chartH}" x2="${W-padR}" y2="${padT+chartH}" stroke="var(--line)" stroke-width="1"/>
     ${bars}${labels}
   </svg><div style="font-size:11px;color:var(--muted);margin-top:6px;">Daily Gross PLH</div>`;
+}
+/* ---- PLH Production Log (browse every finished run, filter, drill into detail, export) ---- */
+let plhLogRange = null;   // {preset, start, end}
+let plhLogFilters = {machine:'', product:''};
+let plhLogDetailId = null;
+function plhPresetRange(preset){
+  const now = new Date(); const today = localDateStr(now);
+  if(preset==='yesterday'){ const d=new Date(now); d.setDate(d.getDate()-1); const s=localDateStr(d); return {start:s,end:s}; }
+  if(preset==='7days'){ const d=new Date(now); d.setDate(d.getDate()-6); return {start:localDateStr(d), end:today}; }
+  if(preset==='30days'){ const d=new Date(now); d.setDate(d.getDate()-29); return {start:localDateStr(d), end:today}; }
+  if(preset==='thisWeek'){ const d=new Date(now); const day=d.getDay(); const diffToMon=(day===0?6:day-1); const mon=new Date(d); mon.setDate(d.getDate()-diffToMon); return {start:localDateStr(mon), end:today}; }
+  return {start:today, end:today}; // 'today' / default
+}
+function setPLHLogPreset(preset){
+  plhLogRange = {preset, ...plhPresetRange(preset)};
+  render();
+}
+function renderPLHLogView(){
+  if(!plhLogRange) plhLogRange = {preset:'today', ...plhPresetRange('today')};
+  if(plhLogDetailId) return renderPLHRunDetail(plhLogDetailId);
+  const allRecs = plhRecordsInRange(plhLogRange.start, plhLogRange.end);
+  let recs = allRecs;
+  if(plhLogFilters.machine) recs = recs.filter(r=>r.machine===plhLogFilters.machine);
+  if(plhLogFilters.product) recs = recs.filter(r=>r.plh.product===plhLogFilters.product);
+  recs = recs.slice().sort((a,b)=> b.date.localeCompare(a.date) || toMin(b.startTime)-toMin(a.startTime));
+  const uniqueProducts = [...new Set(allRecs.map(r=>r.plh.product).filter(Boolean))];
+  const presets = [['today','Today'],['yesterday','Yesterday'],['7days','7 days'],['30days','30 days'],['thisWeek','This week']];
+
+  const rows = recs.length ? recs.map(r=>`
+    <div class="hist-item" style="cursor:pointer;" onclick="plhLogDetailId='${r.id}'; render()">
+      <div class="hist-top"><span class="mach">${fmtDate(r.date)}</span><span class="pill run">${r.plh.grossPLH.toFixed(0)} PLH</span></div>
+      <div class="hist-mid" style="color:var(--brk);text-decoration:underline;">${escapeHtml(r.plh.product||r.product)}</div>
+      <div class="hist-mid">${r.machine} · ${r.plh.weightLbs} lbs</div>
+    </div>`).join('') : '<div class="empty">No finished runs in this range.</div>';
+
+  return `
+  <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${plhLogRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setPLHLogPreset('${v}')">${l}</div>`).join('')}</div>
+  <div class="filterbar">
+    <select onchange="plhLogFilters.machine=this.value; render()"><option value="">All Machines</option>${MACHINES.map(m=>`<option ${plhLogFilters.machine===m?'selected':''}>${m}</option>`).join('')}</select>
+    <select onchange="plhLogFilters.product=this.value; render()"><option value="">All Products</option>${uniqueProducts.map(p=>`<option value="${escapeHtml(p)}" ${plhLogFilters.product===p?'selected':''}>${escapeHtml(p)}</option>`).join('')}</select>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <div style="color:var(--muted);font-size:13px;">${recs.length} run${recs.length===1?'':'s'}</div>
+    <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:12px;" onclick="exportPLHLogCSV()">Export CSV</button>
+  </div>
+  ${rows}`;
+}
+function renderPLHRunDetail(id){
+  const r = Store.records.find(x=>x.id===id);
+  if(!r || !r.plh){ plhLogDetailId=null; return renderPLHLogView(); }
+  const p = r.plh;
+  const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
+  const segRows = (p.segments||[]).map((seg,i)=>`<div class="statrow"><span class="lbl">Segment ${i+1}: ${seg.start}–${seg.end}</span><span class="val">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
+  const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div class="statrow"><span class="lbl">${d.reason||d.status}</span><span class="val">${d.start}–${d.end}</span></div>`).join('') : '<div class="empty">No downtime recorded.</div>';
+  return `
+  <div class="card" style="text-align:center;">
+    <div style="font-family:'Oswald';font-size:16px;">${escapeHtml(p.product||r.product)}</div>
+    <div style="color:var(--muted);font-size:12.5px;margin-top:2px;">${fmtDate(r.date)} · ${r.machine}</div>
+    <div class="mono" style="font-size:11px;color:var(--muted);letter-spacing:0.08em;margin-top:16px;">GROSS PLH</div>
+    <div class="mono" style="font-size:44px;font-weight:700;color:var(--brk);">${p.grossPLH.toFixed(1)}<span style="font-size:16px;color:var(--muted);"> lbs/hr</span></div>
+    <div style="color:var(--muted);font-size:12.5px;">${p.targetPLH?`Target ${p.targetPLH} PLH`:'No target set'}</div>
+  </div>
+  <div class="grid3" style="grid-template-columns:1fr 1fr;gap:10px;">
+    <div class="card"><h3>Quantity</h3><div class="bignum">${p.quantity||0}</div></div>
+    <div class="card"><h3>Weight</h3><div class="bignum">${p.weightLbs} <span style="font-size:14px;">lbs</span></div></div>
+    <div class="card"><h3>Gross PLH</h3><div class="bignum" style="color:var(--brk);">${p.grossPLH.toFixed(1)}</div></div>
+    <div class="card"><h3>Net PLH</h3><div class="bignum">${p.netPLH!=null?p.netPLH.toFixed(1):'—'}</div></div>
+    <div class="card"><h3>Labour Hrs (Gross)</h3><div class="bignum">${p.grossLaborHours.toFixed(1)}</div></div>
+    <div class="card"><h3>Labour Hrs (Net)</h3><div class="bignum">${p.netLaborHours.toFixed(1)}</div></div>
+    <div class="card"><h3>Downtime</h3><div class="bignum">${fmtDur(downtimeMin)}</div></div>
+    <div class="card"><h3>Target PLH</h3><div class="bignum">${p.targetPLH||'—'}</div></div>
+  </div>
+  <div class="card"><h3>Staffing Timeline</h3>${segRows||'<div class="empty">No staffing data.</div>'}</div>
+  <div class="card"><h3>Downtime</h3>${dtRows}</div>
+  <div class="btnrow">
+    <button class="btn btn-secondary" onclick="plhLogDetailId=null; editRecord('${r.id}')">Edit</button>
+    <button class="btn btn-danger" onclick="deletePLHRun('${r.id}')">Delete</button>
+  </div>
+  <button class="btn btn-ghost" style="margin-top:8px;" onclick="plhLogDetailId=null; render()">Close</button>`;
+}
+async function deletePLHRun(id){
+  if(!confirm('Delete this production run? This cannot be undone.')) return;
+  Store.records = Store.records.filter(r=>r.id!==id);
+  await Store.saveRecords();
+  plhLogDetailId = null;
+  toast('Run deleted');
+  render();
+}
+function exportPLHLogCSV(){
+  const allRecs = plhRecordsInRange(plhLogRange.start, plhLogRange.end);
+  let recs = allRecs;
+  if(plhLogFilters.machine) recs = recs.filter(r=>r.machine===plhLogFilters.machine);
+  if(plhLogFilters.product) recs = recs.filter(r=>r.plh.product===plhLogFilters.product);
+  const headers = ['Date','Machine','Product','Quantity','Weight (lbs)','Gross PLH','Net PLH','Labour Hrs (Gross)','Labour Hrs (Net)','Downtime (min)','Target PLH'];
+  const rows = recs.map(r=>{
+    const p = r.plh;
+    const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
+    return [r.date, r.machine, p.product||r.product, p.quantity||0, p.weightLbs, p.grossPLH.toFixed(1), p.netPLH!=null?p.netPLH.toFixed(1):'', p.grossLaborHours.toFixed(2), p.netLaborHours.toFixed(2), downtimeMin, p.targetPLH||''];
+  });
+  const csv = [headers.join(','), ...rows.map(r=>r.map(v=>`"${v}"`).join(','))].join('\n');
+  downloadBlob(csv, `PLH_Production_Log_${plhLogRange.start}_to_${plhLogRange.end}.csv`, 'text/csv');
+  toast('CSV exported');
 }
 let liveSetup = null;        // {machine, product, productOther, employees} — choosing product/staff before Start Run
 let liveProductPicker = null; // {target:'setup'|'active', machine, query, addMode, newId, newName} — the searchable product picker overlay
@@ -888,7 +991,9 @@ async function confirmFinishProduct(){
     weightLbs: weightNum, quantity: parseFloat(s.quantity)||0,
     grossLaborHours, netLaborHours, grossPLH, netPLH,
     targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
-    productId: live.productId||'', product: live.product||''
+    productId: live.productId||'', product: live.product||'',
+    machine: m, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees})),
+    downtimeSegments: (live.downtimeSegments||[]).map(d=>({start:d.start, end:d.end, status:d.status, reason:d.reason}))
   } : null;
 
   const toSave = [];
@@ -1584,7 +1689,8 @@ async function confirmEndShift(){
 }
 function renderReportsList(){
   const list = Store.dailyReports.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  let html = `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
+  let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
   if(!list.length){ html += '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>'; return html; }
   html += list.map(r=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
