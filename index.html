@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v33 - 2026-08-19 (fixed: Change Staff during Downtime now registers correctly)';
+const APP_VERSION = 'v34 - 2026-08-19 (fixed: Gross/Net PLH now correctly reflect downtime)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1010,15 +1010,20 @@ async function confirmFinishProduct(){
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt && !lastDt.end) lastDt.end = now;
 
-  // PLH calc — gross labour hours use total segment time × headcount; net labour hours subtract any downtime that overlapped that segment. Same methodology as the PLH tracker.
-  let grossLaborMin = 0, netLaborMin = 0;
+  // PLH calc — Net Labour Hours = time actually spent producing (running segments only). Gross Labour Hours = Net + downtime, since staff are typically still paid during a pause even though nothing was produced. This makes Net PLH read higher than Gross PLH whenever real downtime occurred — matching standard PLH convention.
+  let netLaborMin = 0;
   live.segments.forEach(seg=>{
-    const durMin = duration(seg.start, seg.end);
-    grossLaborMin += durMin * seg.employees;
-    let overlap = 0;
-    (live.downtimeSegments||[]).forEach(d=>{ overlap += overlapMinutes(seg.start, seg.end, d.start, d.end); });
-    netLaborMin += Math.max(0, durMin-overlap) * seg.employees;
+    netLaborMin += duration(seg.start, seg.end) * seg.employees;
   });
+  let downtimeLaborMin = 0;
+  (live.downtimeSegments||[]).forEach(d=>{
+    const durMin = duration(d.start, d.end);
+    // Use the headcount from whichever running segment ended right when this downtime began (staff presumed still on station during the pause)
+    const precedingSeg = live.segments.find(seg=>seg.end===d.start) || live.segments[live.segments.length-1];
+    const emp = precedingSeg ? precedingSeg.employees : 1;
+    downtimeLaborMin += durMin * emp;
+  });
+  const grossLaborMin = netLaborMin + downtimeLaborMin;
   const grossLaborHours = grossLaborMin/60, netLaborHours = netLaborMin/60;
   const weightNum = parseFloat(s.weight)||0;
   const grossPLH = weightNum>0 && grossLaborHours>0 ? weightNum/grossLaborHours : null;
