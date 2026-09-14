@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v41 - 2026-08-19 (added Crew Talk, Town Hall Meeting, QA Crew Talk, Beef Slice, Band Saw reasons)';
+const APP_VERSION = 'v44 - 2026-08-19 (History: View Timeline shows segment/downtime breakdown)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -163,7 +163,7 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','MAREL Cutting Meat for Variovac 1','MAREL Cutting Meat for Variovac 2','MAREL Cutting Chicken Muscle','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
@@ -1107,15 +1107,16 @@ async function _confirmFinishProductInner(){
   };
 
   const toSave = [];
-  live.segments.forEach((seg,i)=>{
-    const dur = duration(seg.start, seg.end);
-    if(dur<=0) return;
-    const isLast = i===live.segments.length-1;
-    const baseNote = `${seg.employees} employee${seg.employees===1?'':'s'} on station (Live Entry)`;
-    const rec = {id:uid(), date:live.date, machine:m, product:live.product, startTime:seg.start, endTime:seg.end, durationMin:dur, status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes: isLast && extraNote ? `${baseNote} · ${extraNote}` : baseNote, createdAt:Date.now()};
-    if(isLast) rec.plh = plhData;
+  // Combine all Running segments of this run into one History entry — they're all the same product/run, just with possibly different staffing along the way. Downtime segments stay separate since those are genuinely different events. Full per-segment detail is still preserved in plh.segments for the Production Log drill-down.
+  const validSegments = live.segments.filter(seg=>duration(seg.start, seg.end)>0);
+  if(validSegments.length){
+    const totalSegMin = validSegments.reduce((a,seg)=>a+duration(seg.start,seg.end),0);
+    const empCounts = [...new Set(validSegments.map(s=>s.employees))];
+    const empNote = empCounts.length===1 ? `${empCounts[0]} employee${empCounts[0]===1?'':'s'} on station` : `${Math.min(...empCounts)}–${Math.max(...empCounts)} employees on station (staff changed)`;
+    const baseNote = `${empNote} (Live Entry)`;
+    const rec = {id:uid(), date:live.date, machine:m, product:live.product, startTime:validSegments[0].start, endTime:validSegments[validSegments.length-1].end, durationMin:totalSegMin, status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes: extraNote ? `${baseNote} · ${extraNote}` : baseNote, createdAt:Date.now(), plh: plhData};
     toSave.push(rec);
-  });
+  }
   (live.downtimeSegments||[]).forEach(d=>{
     const dur = duration(d.start, d.end);
     if(dur<=0) return;
@@ -1308,6 +1309,17 @@ async function _saveRecordInner(){
 
 /* ============ HISTORY ============ */
 let histFilters = {date:'', machine:'', product:'', status:'', category:''};
+let expandedTimelineIds = new Set();
+function toggleTimeline(id){
+  if(expandedTimelineIds.has(id)) expandedTimelineIds.delete(id); else expandedTimelineIds.add(id);
+  render();
+}
+function renderTimelineRows(r){
+  const p = r.plh;
+  const segRows = (p.segments||[]).map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
+  const dtRows = (p.downtimeSegments||[]).map(d=>`<div class="live-segrow">Downtime (${d.reason||d.status}): ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
+  return `<div style="background:var(--panel2);border-radius:8px;padding:10px 12px;margin-top:8px;">${segRows}${dtRows}</div>`;
+}
 function renderHistory(){
   let recs = Store.records.slice().sort((a,b)=>b.createdAt-a.createdAt);
   if(histFilters.date) recs = recs.filter(r=>r.date===histFilters.date);
@@ -1319,11 +1331,15 @@ function renderHistory(){
   const items = recs.length ? recs.map(r=>{
     const si = statusInfo(r.status);
     const needsPLHData = r.plh && r.plh.grossPLH==null;
+    const hasTimeline = r.plh && r.plh.segments && r.plh.segments.length;
+    const isExpanded = expandedTimelineIds.has(r.id);
     return `<div class="hist-item">
       <div class="hist-top"><span class="mach">${r.machine}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${si.label}</span></div>
       <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${fmtDur(r.durationMin)} ${r.product?('· '+r.product):''}</div>
       ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
+      ${hasTimeline ? `<div style="cursor:pointer;color:var(--brk);font-size:12px;margin-top:6px;text-decoration:underline;" onclick="toggleTimeline('${r.id}')">${isExpanded?'▾':'▸'} View Timeline</div>` : ''}
+      ${hasTimeline && isExpanded ? renderTimelineRows(r) : ''}
       ${needsPLHData ? `<button class="btn btn-ghost" style="margin-top:6px;padding:8px;font-size:12px;" onclick="openAddPLHData('${r.id}')">📦 Add Qty/Weight (PLH)</button>` : ''}
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editRecord('${r.id}')">✎</div>
