@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v47 - 2026-08-19 (Dashboard: live status badges, removed redundant +NEW labels)';
+const APP_VERSION = 'v48 - 2026-08-19 (Dashboard tap now jumps straight to that machine on Live Floor)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -464,7 +464,7 @@ function renderDashboard(){
     const isDowntime = live && live.status==='DOWNTIME';
     const liveBadge = isRunning ? `<div class="live-badge running" style="margin-top:8px;font-size:9px;padding:3px 8px;">● LIVE</div>` : (isDowntime ? `<div class="live-badge downtime" style="margin-top:8px;font-size:9px;padding:3px 8px;">⏸ LIVE</div>` : '');
     const borderStyle = isRunning ? 'border-color:var(--run);' : (isDowntime ? 'border-color:var(--change);' : '');
-    const clickAction = live ? `Router.go('live')` : `quickNewRecord('${m}')`;
+    const clickAction = live ? `goToLiveMachine('${m}')` : `quickNewRecord('${m}')`;
     return `<div class="machine-card" style="cursor:pointer;position:relative;${borderStyle}" onclick="${clickAction}"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}</div>`;
   }).join('');
 
@@ -715,19 +715,23 @@ function laborHoursSoFar(live){
   });
   return (mins/60).toFixed(1);
 }
+function machineIdSafe(m){ return m.replace(/\s+/g,'-'); }
 function renderLive(){
   const cards = MACHINES.map(m=>{
+    let cardHtml;
     const live = Store.liveRuns[m];
     if(!live){
-      if(liveSetup && liveSetup.machine===m) return renderLiveSetupCard(m);
-      return `<div class="live-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-family:'Oswald';font-size:16px;">${m}</h3><span class="live-badge idle">IDLE</span></div>
+      if(liveSetup && liveSetup.machine===m){ cardHtml = renderLiveSetupCard(m); }
+      else {
+        cardHtml = `<div class="live-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-family:'Oswald';font-size:16px;">${m}</h3><span class="live-badge idle">IDLE</span></div>
         <button class="btn btn-primary" style="margin-top:12px;" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
       </div>`;
-    }
-    if(liveDowntimeSetup && liveDowntimeSetup.machine===m) return renderLiveDowntimeSetupCard(live);
-    if(liveStaffSetup && liveStaffSetup.machine===m) return renderLiveStaffSetupCard(live);
-    if(liveFinishSetup && liveFinishSetup.machine===m) return renderLiveFinishCard(live);
-    return renderLiveActiveCard(m, live);
+      }
+    } else if(liveDowntimeSetup && liveDowntimeSetup.machine===m){ cardHtml = renderLiveDowntimeSetupCard(live); }
+    else if(liveStaffSetup && liveStaffSetup.machine===m){ cardHtml = renderLiveStaffSetupCard(live); }
+    else if(liveFinishSetup && liveFinishSetup.machine===m){ cardHtml = renderLiveFinishCard(live); }
+    else { cardHtml = renderLiveActiveCard(m, live); }
+    return `<div id="live-card-${machineIdSafe(m)}">${cardHtml}</div>`;
   }).join('');
   return `
   <div class="card" style="margin-bottom:16px;">
@@ -2332,8 +2336,18 @@ async function clearAllData(){
 }
 
 /* ============ ROUTING GLUE ============ */
+let liveScrollTarget = null;
+function goToLiveMachine(m){
+  liveScrollTarget = m;
+  Router.go('live');
+}
 function afterRender(){
   if(Router.current==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); }
+  if(Router.current==='live' && liveScrollTarget){
+    const el = document.getElementById('live-card-'+machineIdSafe(liveScrollTarget));
+    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+    liveScrollTarget = null;
+  }
 }
 const _origGo = Router.go.bind(Router);
 Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); } if(view==='new'){ if(!draft) draft=freshDraft(); } };
