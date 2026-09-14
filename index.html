@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v49 - 2026-08-19 (Dashboard: removed redundant New Record button, bigger machine cards)';
+const APP_VERSION = 'v50 - 2026-08-19 (Add PLH Data now works on any Running record, not just Live Floor ones)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -836,7 +836,7 @@ async function applyPickedProduct(display, id){
     const idx = Store.records.findIndex(rec=>rec.id===p.machine);
     if(idx>-1){
       const rec = {...Store.records[idx], product: display};
-      if(rec.plh) rec.plh = {...rec.plh, product: display, productId: id||''};
+      rec.plh = {...(rec.plh||{}), product: display, productId: id||''};
       Store.records[idx] = rec;
       await Store.saveRecords();
     }
@@ -1348,7 +1348,7 @@ function renderHistory(){
 
   const items = recs.length ? recs.map(r=>{
     const si = statusInfo(r.status);
-    const needsPLHData = r.plh && r.plh.grossPLH==null;
+    const needsPLHData = r.status==='RUNNING' && (!r.plh || r.plh.grossPLH==null);
     const hasTimeline = r.plh && r.plh.segments && r.plh.segments.length;
     const isExpanded = expandedTimelineIds.has(r.id);
     return `<div class="hist-item">
@@ -1379,25 +1379,34 @@ function renderHistory(){
 function uniqueDates(){ return [...new Set(Store.records.map(r=>r.date))].sort().reverse(); }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 let plhDataFormId = null; // record id currently showing the Add Qty/Weight form
+let plhFormEmployees = 1;
 function openAddPLHData(id){
   plhDataFormId = id;
+  plhFormEmployees = 1;
   Router.go('addPLHData');
 }
+function setPLHFormEmployees(n){ plhFormEmployees = n; render(); }
 function renderAddPLHDataForm(){
   const r = Store.records.find(x=>x.id===plhDataFormId);
-  if(!r || !r.plh){ plhDataFormId=null; return renderHistory(); }
-  const target = r.plh.productId ? Store.productLibrary.find(p=>p.id===r.plh.productId) : null;
+  if(!r){ plhDataFormId=null; return renderHistory(); }
+  const hasSegments = r.plh && r.plh.grossLaborHours!=null;
+  const productId = r.plh ? r.plh.productId : '';
+  const target = productId ? Store.productLibrary.find(p=>p.id===productId) : null;
+  const laborLine = hasSegments
+    ? `Labour: ${r.plh.grossLaborHours.toFixed(1)}h gross / ${r.plh.netLaborHours.toFixed(1)}h net`
+    : `Duration: ${fmtDur(r.durationMin)} — no staffing captured for this record yet, set it below`;
   return `
   <div class="card">
     <h3>${r.product ? escapeHtml(r.product) : 'No product set'}</h3>
-    <div style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${fmtDate(r.date)} · ${r.machine} · Labour: ${r.plh.grossLaborHours.toFixed(1)}h gross / ${r.plh.netLaborHours.toFixed(1)}h net</div>
+    <div style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${fmtDate(r.date)} · ${r.machine} · ${laborLine}</div>
     <div class="field"><label>Product</label>
       <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('addPLHData','${r.id}')">📋 ${r.product ? escapeHtml(r.product) : 'Tap to select, or skip'}</button>
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
+    ${!hasSegments ? `<div class="field"><label>Employees on Station (for this whole window)</label>${employeeGrid(plhFormEmployees, 'setPLHFormEmployees')}</div>` : ''}
     <div class="timerow">
-      <div class="field"><label>Quantity Produced</label><input type="number" min="0" id="plhQtyInput" placeholder="e.g. 120" value="${r.plh.quantity||''}"></div>
-      <div class="field"><label>Total Weight, lbs</label><input type="number" min="0" id="plhWeightInput" placeholder="e.g. 3600" value="${r.plh.weightLbs||''}"></div>
+      <div class="field"><label>Quantity Produced</label><input type="number" min="0" id="plhQtyInput" placeholder="e.g. 120" value="${r.plh?r.plh.quantity||'':''}"></div>
+      <div class="field"><label>Total Weight, lbs</label><input type="number" min="0" id="plhWeightInput" placeholder="e.g. 3600" value="${r.plh?r.plh.weightLbs||'':''}"></div>
     </div>
     <button class="btn btn-primary" onclick="confirmAddPLHData()">Save PLH Data</button>
     <button class="btn btn-ghost" style="margin-top:8px;" onclick="plhDataFormId=null; Router.go('history')">Cancel</button>
@@ -1411,11 +1420,21 @@ async function confirmAddPLHData(){
   const idx = Store.records.findIndex(r=>r.id===plhDataFormId);
   if(idx===-1){ toast('Record not found — it may have been deleted'); Router.go('history'); return; }
   const r = Store.records[idx];
-  const p = r.plh;
+  let p = r.plh;
+  if(!p || p.grossLaborHours==null){
+    // No staffing/segment data exists yet (a manual/backdated entry, not from Live Floor) — build it from this record's own duration and the employee count just entered
+    const laborHours = (r.durationMin/60) * plhFormEmployees;
+    p = {
+      weightLbs: 0, quantity: 0, grossLaborHours: laborHours, netLaborHours: laborHours,
+      grossPLH: null, netPLH: null, targetPLH: (p && p.targetPLH) || null,
+      productId: (p && p.productId) || '', product: r.product || '',
+      machine: r.machine, segments: [{start:r.startTime, end:r.endTime, employees:plhFormEmployees}], downtimeSegments: []
+    };
+  }
   const grossPLH = p.grossLaborHours>0 ? weightNum/p.grossLaborHours : null;
   const netPLH = p.netLaborHours>0 ? weightNum/p.netLaborHours : null;
   const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH};
-  let notes = r.notes.replace('Qty/Weight not entered yet — add later from History', '').replace(/ · $/,'').replace(/^ · /,'');
+  let notes = (r.notes||'').replace('Qty/Weight not entered yet — add later from History', '').replace(/ · $/,'').replace(/^ · /,'');
   const extras = [`Qty: ${qtyNum}`, `Weight: ${weightNum} lbs`, `Labour: ${p.grossLaborHours.toFixed(1)}h gross / ${p.netLaborHours.toFixed(1)}h net`, `PLH: ${grossPLH.toFixed(0)} gross${netPLH!=null?' / '+netPLH.toFixed(0)+' net':''}`];
   if(updatedPLH.targetPLH){
     const variance = grossPLH - updatedPLH.targetPLH;
