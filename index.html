@@ -40,8 +40,8 @@ main{flex:1;padding:0 16px 100px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
 .card h3{font-size:12px;color:var(--muted);letter-spacing:0.1em;margin-bottom:10px;}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.machine-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;}
-.machine-card .mname{font-family:'Oswald';font-size:13px;color:var(--text);letter-spacing:0.05em;}
+.machine-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:18px 10px;text-align:center;}
+.machine-card .mname{font-family:'Oswald';font-size:15px;color:var(--text);letter-spacing:0.05em;}
 .machine-card .mstat{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:8px;}
 .pill{font-size:10px;padding:3px 7px;border-radius:20px;font-weight:600;letter-spacing:0.02em;display:inline-flex;align-items:center;gap:4px;}
 .dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v48 - 2026-08-19 (Dashboard tap now jumps straight to that machine on Live Floor)';
+const APP_VERSION = 'v49 - 2026-08-19 (Dashboard: removed redundant New Record button, bigger machine cards)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -478,7 +478,6 @@ function renderDashboard(){
       <h3>Today · ${fmtDate(todayStr())}</h3>
       <div class="grid3">${mcards}</div>
     </div>
-    <button class="btn btn-primary" style="margin-bottom:12px" onclick="Router.go('new')">＋ New Record</button>
     <div class="card">
       <h3>Shift Totals So Far</h3>
       <div class="statrow"><span class="lbl">Running</span><span class="val" style="color:var(--run)">${fmtDur(dt.RUNNING)}</span></div>
