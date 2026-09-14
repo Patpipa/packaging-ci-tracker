@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v39 - 2026-08-19 (Live Floor: added No Work Scheduled state)';
+const APP_VERSION = 'v41 - 2026-08-19 (added Crew Talk, Town Hall Meeting, QA Crew Talk, Beef Slice, Band Saw reasons)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -163,12 +163,12 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
-  'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
+  'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
   'Cleaning / Sanitation': {cls:'internal', reasons:['Required Cleaning','Sanitation Delay','Cleanup After Product','Waiting for Sanitation']},
-  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','QA Inspection','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Waiting for QA','Other QA Issue']},
+  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','QA Inspection','QA Crew Talk','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Waiting for QA','Other QA Issue']},
 };
 function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
 function reasonClassification(category){ return WAITING_CATEGORIES[category] ? WAITING_CATEGORIES[category].cls : 'internal'; }
@@ -420,11 +420,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog') return 'reports'; if(v==='history') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data'};
   document.getElementById('pageTitle').textContent = titles[Router.current] || 'CI Tracker';
   updateClock();
   let html = '';
@@ -437,6 +437,7 @@ function render(){
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
+    case 'addPLHData': html += renderAddPLHDataForm(); break;
     case 'live': html += renderLive(); break;
     case 'products': html += renderProductsView(); break;
     case 'settings': html += renderSettings(); break;
@@ -496,7 +497,11 @@ function renderDashboard(){
 function nowHHMM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 /* ---- PLH Reporting (aggregates the structured plh data attached to finished Live Entry runs) ---- */
 function plhRecordsInRange(startDate, endDate){
-  return Store.records.filter(r=>r.plh && r.date>=startDate && r.date<=endDate);
+  return Store.records.filter(r=>r.plh && r.plh.grossPLH!=null && r.date>=startDate && r.date<=endDate);
+}
+/* Live Entry runs that finished without Quantity/Weight entered — still have full staffing/timing detail preserved, just missing the numbers needed to compute PLH */
+function incompletePLHRecordsInRange(startDate, endDate){
+  return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.date>=startDate && r.date<=endDate);
 }
 function computePLHSummary(recs){
   const totalWeight = recs.reduce((a,r)=>a+(r.plh.weightLbs||0),0);
@@ -690,6 +695,7 @@ let liveProductPicker = null; // {target:'setup'|'active', machine, query, addMo
 let liveDowntimeSetup = null; // {machine, status, waitCategory, waitReason, waitReasonOther, changeReason, changeReasonOther, notes} — choosing a reason before confirming Downtime
 let liveStaffSetup = null;   // {machine, employees} — Change Staff flow
 let liveFinishSetup = null;  // {machine, quantity, weight, notes} — confirm screen before actually finishing a run
+let isFinishing = false;     // guards against double-tapping Save & Finish and creating duplicate records
 
 function elapsedMinutesSince(hhmm){
   const d = duration(hhmm, nowHHMM());
@@ -1028,11 +1034,22 @@ function renderLiveFinishCard(live){
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin:-6px 0 14px;">Leave these blank if you don't have the numbers yet — you can fill them in later by editing the record in History.</div>
     <div class="field"><label>Notes (optional)</label><textarea oninput="liveFinishSetup.notes=this.value" placeholder="Anything worth noting about this run">${s.notes}</textarea></div>
-    <button class="btn btn-primary" onclick="confirmFinishProduct()">✅ Save &amp; Finish</button>
+    <button class="btn btn-primary" id="finishBtn" onclick="confirmFinishProduct()">✅ Save &amp; Finish</button>
     <button class="btn btn-secondary" style="margin-top:8px;" onclick="liveFinishSetup=null; render()">Keep Running</button>
   </div>`;
 }
 async function confirmFinishProduct(){
+  if(isFinishing) return;
+  isFinishing = true;
+  const btn = document.getElementById('finishBtn');
+  if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='Saving…'; }
+  try{
+    return await _confirmFinishProductInner();
+  } finally {
+    isFinishing = false;
+  }
+}
+async function _confirmFinishProductInner(){
   const s = liveFinishSetup;
   const m = s.machine;
   const live = Store.liveRuns[m];
@@ -1074,17 +1091,20 @@ async function confirmFinishProduct(){
       const pct = variance/target.targetPLH*100;
       extras.push(`vs Target ${target.targetPLH}: ${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`);
     }
+  } else {
+    extras.push('Qty/Weight not entered yet — add later from History');
   }
   if(s.notes) extras.push(s.notes);
   const extraNote = extras.join(' · ');
-  const plhData = grossPLH!=null ? {
+  // Always preserve the full run detail (segments, staffing, downtime) even if weight wasn't entered yet — this is what lets you come back later and add Quantity/Weight without losing the timing data needed to compute PLH correctly.
+  const plhData = {
     weightLbs: weightNum, quantity: parseFloat(s.quantity)||0,
     grossLaborHours, netLaborHours, grossPLH, netPLH,
     targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
     productId: live.productId||'', product: live.product||'',
     machine: m, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees})),
     downtimeSegments: (live.downtimeSegments||[]).filter(d=>d.status!=='NO_WORK').map(d=>({start:d.start, end:d.end, status:d.status, reason:d.reason}))
-  } : null;
+  };
 
   const toSave = [];
   live.segments.forEach((seg,i)=>{
@@ -1093,7 +1113,7 @@ async function confirmFinishProduct(){
     const isLast = i===live.segments.length-1;
     const baseNote = `${seg.employees} employee${seg.employees===1?'':'s'} on station (Live Entry)`;
     const rec = {id:uid(), date:live.date, machine:m, product:live.product, startTime:seg.start, endTime:seg.end, durationMin:dur, status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes: isLast && extraNote ? `${baseNote} · ${extraNote}` : baseNote, createdAt:Date.now()};
-    if(isLast && plhData) rec.plh = plhData;
+    if(isLast) rec.plh = plhData;
     toSave.push(rec);
   });
   (live.downtimeSegments||[]).forEach(d=>{
@@ -1298,11 +1318,13 @@ function renderHistory(){
 
   const items = recs.length ? recs.map(r=>{
     const si = statusInfo(r.status);
+    const needsPLHData = r.plh && r.plh.grossPLH==null;
     return `<div class="hist-item">
       <div class="hist-top"><span class="mach">${r.machine}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${si.label}</span></div>
       <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${fmtDur(r.durationMin)} ${r.product?('· '+r.product):''}</div>
       ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
+      ${needsPLHData ? `<button class="btn btn-ghost" style="margin-top:6px;padding:8px;font-size:12px;" onclick="openAddPLHData('${r.id}')">📦 Add Qty/Weight (PLH)</button>` : ''}
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editRecord('${r.id}')">✎</div>
         <div class="iconsmall" onclick="deleteRecord('${r.id}')">🗑</div>
@@ -1322,6 +1344,55 @@ function renderHistory(){
 }
 function uniqueDates(){ return [...new Set(Store.records.map(r=>r.date))].sort().reverse(); }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+let plhDataFormId = null; // record id currently showing the Add Qty/Weight form
+function openAddPLHData(id){
+  plhDataFormId = id;
+  Router.go('addPLHData');
+}
+function renderAddPLHDataForm(){
+  const r = Store.records.find(x=>x.id===plhDataFormId);
+  if(!r || !r.plh){ plhDataFormId=null; return renderHistory(); }
+  const target = r.plh.productId ? Store.productLibrary.find(p=>p.id===r.plh.productId) : null;
+  return `
+  <div class="card">
+    <h3>${escapeHtml(r.plh.product||r.product)}</h3>
+    <div style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${fmtDate(r.date)} · ${r.machine} · Labour: ${r.plh.grossLaborHours.toFixed(1)}h gross / ${r.plh.netLaborHours.toFixed(1)}h net</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
+    <div class="timerow">
+      <div class="field"><label>Quantity Produced</label><input type="number" min="0" id="plhQtyInput" placeholder="e.g. 120" value="${r.plh.quantity||''}"></div>
+      <div class="field"><label>Total Weight, lbs</label><input type="number" min="0" id="plhWeightInput" placeholder="e.g. 3600" value="${r.plh.weightLbs||''}"></div>
+    </div>
+    <button class="btn btn-primary" onclick="confirmAddPLHData()">Save PLH Data</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="plhDataFormId=null; Router.go('history')">Cancel</button>
+  </div>`;
+}
+async function confirmAddPLHData(){
+  const weightNum = parseFloat(document.getElementById('plhWeightInput').value)||0;
+  const qtyNum = parseFloat(document.getElementById('plhQtyInput').value)||0;
+  if(weightNum<=0){ toast('Enter a weight to compute PLH'); return; }
+  await Store.refreshRecords();
+  const idx = Store.records.findIndex(r=>r.id===plhDataFormId);
+  if(idx===-1){ toast('Record not found — it may have been deleted'); Router.go('history'); return; }
+  const r = Store.records[idx];
+  const p = r.plh;
+  const grossPLH = p.grossLaborHours>0 ? weightNum/p.grossLaborHours : null;
+  const netPLH = p.netLaborHours>0 ? weightNum/p.netLaborHours : null;
+  const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH};
+  let notes = r.notes.replace('Qty/Weight not entered yet — add later from History', '').replace(/ · $/,'').replace(/^ · /,'');
+  const extras = [`Qty: ${qtyNum}`, `Weight: ${weightNum} lbs`, `Labour: ${p.grossLaborHours.toFixed(1)}h gross / ${p.netLaborHours.toFixed(1)}h net`, `PLH: ${grossPLH.toFixed(0)} gross${netPLH!=null?' / '+netPLH.toFixed(0)+' net':''}`];
+  if(updatedPLH.targetPLH){
+    const variance = grossPLH - updatedPLH.targetPLH;
+    const pct = variance/updatedPLH.targetPLH*100;
+    extras.push(`vs Target ${updatedPLH.targetPLH}: ${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`);
+  }
+  notes = notes ? `${notes} · ${extras.join(' · ')}` : extras.join(' · ');
+  Store.records[idx] = {...r, plh: updatedPLH, notes};
+  const ok = await Store.saveRecords();
+  if(!ok) return;
+  plhDataFormId = null;
+  toast(`PLH saved — ${grossPLH.toFixed(0)} PLH`);
+  Router.go('history');
+}
 async function deleteRecord(id){
   if(!confirm('Delete this record?')) return;
   await Store.refreshRecords();
