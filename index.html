@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v45 - 2026-08-19 (fixed: Edit screen now says "Edit Record", not "New Record")';
+const APP_VERSION = 'v46 - 2026-08-19 (Add PLH Data screen: can now set/change Product too)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -822,6 +822,15 @@ async function applyPickedProduct(display, id){
     Store.liveRuns[p.machine].product = display;
     Store.liveRuns[p.machine].productId = id||'';
     await Store.saveLiveRuns();
+  } else if(p.target==='addPLHData'){
+    await Store.refreshRecords();
+    const idx = Store.records.findIndex(rec=>rec.id===p.machine);
+    if(idx>-1){
+      const rec = {...Store.records[idx], product: display};
+      if(rec.plh) rec.plh = {...rec.plh, product: display, productId: id||''};
+      Store.records[idx] = rec;
+      await Store.saveRecords();
+    }
   }
   liveProductPicker = null;
   render();
@@ -1371,8 +1380,11 @@ function renderAddPLHDataForm(){
   const target = r.plh.productId ? Store.productLibrary.find(p=>p.id===r.plh.productId) : null;
   return `
   <div class="card">
-    <h3>${escapeHtml(r.plh.product||r.product)}</h3>
+    <h3>${r.product ? escapeHtml(r.product) : 'No product set'}</h3>
     <div style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${fmtDate(r.date)} · ${r.machine} · Labour: ${r.plh.grossLaborHours.toFixed(1)}h gross / ${r.plh.netLaborHours.toFixed(1)}h net</div>
+    <div class="field"><label>Product</label>
+      <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('addPLHData','${r.id}')">📋 ${r.product ? escapeHtml(r.product) : 'Tap to select, or skip'}</button>
+    </div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
     <div class="timerow">
       <div class="field"><label>Quantity Produced</label><input type="number" min="0" id="plhQtyInput" placeholder="e.g. 120" value="${r.plh.quantity||''}"></div>
