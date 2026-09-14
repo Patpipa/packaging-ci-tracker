@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v44 - 2026-08-19 (History: View Timeline shows segment/downtime breakdown)';
+const APP_VERSION = 'v45 - 2026-08-19 (fixed: Edit screen now says "Edit Record", not "New Record")';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -425,7 +425,7 @@ function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='r
 function render(){
   const m = document.getElementById('main');
   const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data'};
-  document.getElementById('pageTitle').textContent = titles[Router.current] || 'CI Tracker';
+  document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (titles[Router.current] || 'CI Tracker');
   updateClock();
   let html = '';
   if(!Store.ready){ html += '<div class="warnbanner">DATA STORAGE IS NOT AVAILABLE. DO NOT ENTER PRODUCTION DATA UNTIL STORAGE IS FIXED.</div>'; }
