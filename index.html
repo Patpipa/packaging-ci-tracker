@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v46 - 2026-08-19 (Add PLH Data screen: can now set/change Product too)';
+const APP_VERSION = 'v47 - 2026-08-19 (Dashboard: live status badges, removed redundant +NEW labels)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -239,7 +239,7 @@ const Store = {
         if(!this._initialLoadDone) return;
         if(snap.exists && snap.data().data){
           this.liveRuns = JSON.parse(snap.data().data);
-          if(typeof Router!=='undefined' && Router.current==='live') render();
+          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='dashboard')) render();
         }
       }, err=>{ console.error('liveRuns listener error', err); });
       prodRef.onSnapshot(snap=>{
@@ -459,7 +459,13 @@ function renderDashboard(){
     const t = machineTotals(recs,m);
     const eff = efficiencyPct(t);
     const chips = STATUSES.filter(s=>t[s.key]>0).map(s=>`<span class="pill ${s.pillClass}"><span class="dot" style="background:${s.color}"></span>${fmtDur(t[s.key])}</span>`).join('');
-    return `<div class="machine-card" style="cursor:pointer;position:relative;" onclick="quickNewRecord('${m}')"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div><div style="margin-top:8px;color:var(--amber);font-size:10px;font-family:'Oswald';letter-spacing:0.05em;">＋ NEW</div></div>`;
+    const live = Store.liveRuns[m];
+    const isRunning = live && live.status==='RUNNING';
+    const isDowntime = live && live.status==='DOWNTIME';
+    const liveBadge = isRunning ? `<div class="live-badge running" style="margin-top:8px;font-size:9px;padding:3px 8px;">● LIVE</div>` : (isDowntime ? `<div class="live-badge downtime" style="margin-top:8px;font-size:9px;padding:3px 8px;">⏸ LIVE</div>` : '');
+    const borderStyle = isRunning ? 'border-color:var(--run);' : (isDowntime ? 'border-color:var(--change);' : '');
+    const clickAction = live ? `Router.go('live')` : `quickNewRecord('${m}')`;
+    return `<div class="machine-card" style="cursor:pointer;position:relative;${borderStyle}" onclick="${clickAction}"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}</div>`;
   }).join('');
 
   let bnList = bn.length ? bn.map(([name,min],i)=>{
