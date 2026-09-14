@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v37 - 2026-08-19 (PLH CSV grouped by machine, sorted by time)';
+const APP_VERSION = 'v39 - 2026-08-19 (Live Floor: added No Work Scheduled state)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -254,6 +254,19 @@ const Store = {
       window._lastStorageError = String(e && e.message || e);
       this.ready = false;
       showStorageWarning();
+    }
+  },
+  async refreshRecords(){
+    try{
+      const snap = await this.db.collection('tracker').doc('records').get({source:'server'});
+      if(snap.exists && snap.data().data) this.records = JSON.parse(snap.data().data);
+      return true;
+    }catch(e){
+      try{
+        const snap = await this.db.collection('tracker').doc('records').get();
+        if(snap.exists && snap.data().data) this.records = JSON.parse(snap.data().data);
+        return true;
+      }catch(e2){ console.error('refreshRecords failed', e2); return false; }
     }
   },
   async saveRecords(){
@@ -635,6 +648,7 @@ function renderPLHRunDetail(id){
 }
 async function deletePLHRun(id){
   if(!confirm('Delete this production run? This cannot be undone.')) return;
+  await Store.refreshRecords();
   Store.records = Store.records.filter(r=>r.id!==id);
   await Store.saveRecords();
   plhLogDetailId = null;
@@ -861,14 +875,16 @@ async function confirmStartRun(){
 }
 function renderLiveActiveCard(m, live){
   const isRunning = live.status==='RUNNING';
+  const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+  const isNoWork = !isRunning && lastDt && lastDt.status==='NO_WORK' && !lastDt.end;
   const elapsed = elapsedMinutesSince(live.startedAt);
   const lastSeg = live.segments[live.segments.length-1];
   const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
-  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">Downtime (${d.reason||d.status}): ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
-  return `<div class="live-card ${isRunning?'running':'downtime'}">
+  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">${d.status==='NO_WORK'?'No Work Scheduled':'Downtime ('+(d.reason||d.status)+')'}: ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
+  return `<div class="live-card ${isRunning?'running':(isNoWork?'':'downtime')}" ${isNoWork?'style="border-color:var(--nowork);"':''}>
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3 style="font-family:'Oswald';font-size:16px;">${m}</h3>
-      <span class="live-badge ${isRunning?'running':'downtime'}">${isRunning?'● RUNNING':'⏸ DOWNTIME'}</span>
+      <span class="live-badge ${isRunning?'running':(isNoWork?'idle':'downtime')}">${isRunning?'● RUNNING':(isNoWork?'⏹ NO WORK SCHEDULED':'⏸ DOWNTIME')}</span>
     </div>
     <div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>
     <div class="live-timer">${fmtDur(elapsed)}</div>
@@ -933,7 +949,7 @@ function renderLiveDowntimeSetupCard(live){
   return `<div class="live-card downtime">
     <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Log Downtime</h3>
     <div class="statusgrid">
-      ${['WAITING','CHANGEOVER','BREAK'].map(key=>{ const info=statusInfo(key); return `<div class="statusopt ${s.status===key?'sel':''}" style="--sc:${info.color};--scdim:${info.dim}" onclick="liveDowntimeSetup.status='${key}'; render()"><div class="dot" style="background:${info.color}"></div>${info.label}</div>`; }).join('')}
+      ${['WAITING','CHANGEOVER','NO_WORK','BREAK'].map(key=>{ const info=statusInfo(key); return `<div class="statusopt ${s.status===key?'sel':''}" style="--sc:${info.color};--scdim:${info.dim}" onclick="liveDowntimeSetup.status='${key}'; render()"><div class="dot" style="background:${info.color}"></div>${info.label}</div>`; }).join('')}
     </div>
     ${s.status==='CHANGEOVER' ? `
       <div class="field"><label>Changeover Reason</label>
@@ -950,6 +966,7 @@ function renderLiveDowntimeSetupCard(live){
       </div>
       ${s.waitReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.waitReasonOther}" oninput="liveDowntimeSetup.waitReasonOther=this.value"></div>` : ''}
     ` : ''}
+    ${s.status==='NO_WORK' ? `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime or against Efficiency %.</div>` : ''}
     <div class="field"><label>Notes (optional)</label><textarea oninput="liveDowntimeSetup.notes=this.value" placeholder="e.g. Waiting for trim">${s.notes}</textarea></div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="liveDowntimeSetup=null; render()">Cancel</button>
@@ -971,7 +988,7 @@ async function confirmDowntime(){
   liveDowntimeSetup = null;
   const ok = await Store.saveLiveRuns();
   if(!ok) return;
-  toast('Downtime logged');
+  toast(s.status==='NO_WORK' ? 'No Work Scheduled logged' : 'Downtime logged');
   render();
 }
 async function resumeRun(m){
@@ -1032,6 +1049,7 @@ async function confirmFinishProduct(){
   });
   let downtimeLaborMin = 0;
   (live.downtimeSegments||[]).forEach(d=>{
+    if(d.status==='NO_WORK') return; // No Work Scheduled is never counted as downtime or against labour efficiency, same rule as everywhere else in the app
     const durMin = duration(d.start, d.end);
     // Use the headcount from whichever running segment ended right when this downtime began (staff presumed still on station during the pause)
     const precedingSeg = live.segments.find(seg=>seg.end===d.start) || live.segments[live.segments.length-1];
@@ -1065,7 +1083,7 @@ async function confirmFinishProduct(){
     targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
     productId: live.productId||'', product: live.product||'',
     machine: m, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees})),
-    downtimeSegments: (live.downtimeSegments||[]).map(d=>({start:d.start, end:d.end, status:d.status, reason:d.reason}))
+    downtimeSegments: (live.downtimeSegments||[]).filter(d=>d.status!=='NO_WORK').map(d=>({start:d.start, end:d.end, status:d.status, reason:d.reason}))
   } : null;
 
   const toSave = [];
@@ -1086,6 +1104,7 @@ async function confirmFinishProduct(){
 
   if(toSave.length===0){ toast('Nothing to save — run was too short'); delete Store.liveRuns[m]; await Store.saveLiveRuns(); liveFinishSetup=null; render(); return; }
 
+  await Store.refreshRecords();
   Store.records = Store.records.concat(toSave);
   const okR = await Store.saveRecords();
   delete Store.liveRuns[m];
@@ -1250,6 +1269,7 @@ async function _saveRecordInner(){
     toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification});
   }
   if(!confirmNoOverlap(toSave)) return;
+  await Store.refreshRecords();
   Store.records = Store.records.concat(toSave);
   const ok = await Store.saveRecords();
   if(!ok){ toast('Save failed — storage unavailable'); return; }
@@ -1304,6 +1324,7 @@ function uniqueDates(){ return [...new Set(Store.records.map(r=>r.date))].sort()
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 async function deleteRecord(id){
   if(!confirm('Delete this record?')) return;
+  await Store.refreshRecords();
   Store.records = Store.records.filter(r=>r.id!==id);
   await Store.saveRecords();
   toast('Record deleted');
@@ -1331,6 +1352,7 @@ saveRecord = async function(){
     const btn = document.getElementById('saveRecordBtn');
     if(btn){ btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Saving…'; }
     try{
+      await Store.refreshRecords();
       const idx = Store.records.findIndex(r=>r.id===draft._editId);
       if(idx>-1){
         const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
@@ -1580,6 +1602,7 @@ async function deleteRangeRecords(){
   const label = weeklyRange.start===weeklyRange.end ? fmtDate(weeklyRange.start) : `${fmtDate(weeklyRange.start)} – ${fmtDate(weeklyRange.end)}`;
   if(!confirm(`Delete all ${count} record(s) from ${label}? This also removes any saved Daily Reports in that range. This cannot be undone.`)) return;
   if(!confirm('Are you sure? This is permanent.')) return;
+  await Store.refreshRecords();
   Store.records = Store.records.filter(r=> !(r.date>=weeklyRange.start && r.date<=weeklyRange.end));
   Store.dailyReports = Store.dailyReports.filter(r=> !(r.date>=weeklyRange.start && r.date<=weeklyRange.end));
   await Store.saveRecords();
@@ -2183,7 +2206,10 @@ async function importData(evt){
     const existingIds = new Set(Store.records.map(r=>r.id));
     const newOnes = incoming.filter(r=>!existingIds.has(r.id));
     if(!confirm(`${incoming.length} records found (${newOnes.length} new). Merge with existing data?`)) return;
-    Store.records = Store.records.concat(newOnes);
+    await Store.refreshRecords();
+    const freshIds = new Set(Store.records.map(r=>r.id));
+    const trulyNew = incoming.filter(r=>!freshIds.has(r.id));
+    Store.records = Store.records.concat(trulyNew);
     if(data.dailyReports){
       data.dailyReports.forEach(rep=>{ if(!Store.dailyReports.find(r=>r.date===rep.date)) Store.dailyReports.push(rep); });
     }
