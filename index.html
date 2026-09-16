@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v51 - 2026-08-19 (NEW: Switch Product on Live Floor — no stop needed between products)';
+const APP_VERSION = 'v53 - 2026-08-19 (added Metal Detector Test under QA/Pre-Op)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -168,7 +168,7 @@ const WAITING_CATEGORIES = {
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
   'Cleaning / Sanitation': {cls:'internal', reasons:['Required Cleaning','Sanitation Delay','Cleanup After Product','Waiting for Sanitation']},
-  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','QA Inspection','QA Crew Talk','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Waiting for QA','Other QA Issue']},
+  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','QA Inspection','QA Crew Talk','Metal Detector Test','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Waiting for QA','Other QA Issue']},
 };
 function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
 function reasonClassification(category){ return WAITING_CATEGORIES[category] ? WAITING_CATEGORIES[category].cls : 'internal'; }
@@ -719,15 +719,16 @@ function renderLive(){
   const cards = MACHINES.map(m=>{
     let cardHtml;
     const live = Store.liveRuns[m];
-    if(!live){
+    if(liveDowntimeSetup && liveDowntimeSetup.machine===m){ cardHtml = renderLiveDowntimeSetupCard(live); }
+    else if(!live){
       if(liveSetup && liveSetup.machine===m){ cardHtml = renderLiveSetupCard(m); }
       else {
         cardHtml = `<div class="live-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-family:'Oswald';font-size:16px;">${m}</h3><span class="live-badge idle">IDLE</span></div>
         <button class="btn btn-primary" style="margin-top:12px;" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
+        <button class="btn btn-secondary" style="margin-top:8px;" onclick="openDowntimeSetup('${m}')">⏸ Log Downtime</button>
       </div>`;
       }
-    } else if(liveDowntimeSetup && liveDowntimeSetup.machine===m){ cardHtml = renderLiveDowntimeSetupCard(live); }
-    else if(liveStaffSetup && liveStaffSetup.machine===m){ cardHtml = renderLiveStaffSetupCard(live); }
+    } else if(liveStaffSetup && liveStaffSetup.machine===m){ cardHtml = renderLiveStaffSetupCard(live); }
     else if(liveFinishSetup && liveFinishSetup.machine===m){ cardHtml = renderLiveFinishCard(live); }
     else { cardHtml = renderLiveActiveCard(m, live); }
     return `<div id="live-card-${machineIdSafe(m)}">${cardHtml}</div>`;
@@ -885,12 +886,26 @@ function setEmployeesSetup(n){ liveSetup.employees = n; render(); }
 function startLiveRunSetup(m){ liveSetup = {machine:m, product:'', productId:'', employees:1}; render(); }
 async function confirmStartRun(){
   const s = liveSetup;
-  Store.liveRuns[s.machine] = {
-    machine: s.machine, status:'RUNNING', product: s.product||'', productId: s.productId||'', date: todayStr(),
-    startedAt: nowHHMM(), employees: s.employees,
-    segments: [{start: nowHHMM(), end:null, employees: s.employees}],
-    downtimeSegments: []
-  };
+  const now = nowHHMM();
+  const existing = Store.liveRuns[s.machine];
+  if(existing && existing.segments.length===0){
+    // Machine was logging a standalone downtime (started idle, no production yet) — close that downtime out right as production begins, keep it on record, and start the first running segment without losing anything already logged
+    const lastDt = existing.downtimeSegments[existing.downtimeSegments.length-1];
+    if(lastDt && !lastDt.end) lastDt.end = now;
+    existing.status = 'RUNNING';
+    existing.product = s.product||'';
+    existing.productId = s.productId||'';
+    existing.employees = s.employees;
+    existing.segments.push({start: now, end:null, employees: s.employees});
+    Store.liveRuns[s.machine] = existing;
+  } else {
+    Store.liveRuns[s.machine] = {
+      machine: s.machine, status:'RUNNING', product: s.product||'', productId: s.productId||'', date: todayStr(),
+      startedAt: now, employees: s.employees,
+      segments: [{start: now, end:null, employees: s.employees}],
+      downtimeSegments: []
+    };
+  }
   liveSetup = null;
   const ok = await Store.saveLiveRuns();
   if(!ok) return;
@@ -899,10 +914,11 @@ async function confirmStartRun(){
 }
 function renderLiveActiveCard(m, live){
   const isRunning = live.status==='RUNNING';
+  const hasNoSegmentsYet = live.segments.length===0;
   const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
   const isNoWork = !isRunning && lastDt && lastDt.status==='NO_WORK' && !lastDt.end;
   const elapsed = elapsedMinutesSince(live.startedAt);
-  const lastSeg = live.segments[live.segments.length-1];
+  const lastSeg = hasNoSegmentsYet ? null : live.segments[live.segments.length-1];
   const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
   const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">${d.status==='NO_WORK'?'No Work Scheduled':'Downtime ('+(d.reason||d.status)+')'}: ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
   return `<div class="live-card ${isRunning?'running':(isNoWork?'':'downtime')}" ${isNoWork?'style="border-color:var(--nowork);"':''}>
@@ -910,13 +926,19 @@ function renderLiveActiveCard(m, live){
       <h3 style="font-family:'Oswald';font-size:16px;">${m}</h3>
       <span class="live-badge ${isRunning?'running':(isNoWork?'idle':'downtime')}">${isRunning?'● RUNNING':(isNoWork?'⏹ NO WORK SCHEDULED':'⏸ DOWNTIME')}</span>
     </div>
-    <div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>
+    ${!hasNoSegmentsYet ? `<div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>` : `<div style="color:var(--muted);font-size:13px;margin-top:4px;">No production started yet — logging downtime only</div>`}
     <div class="live-timer">${fmtDur(elapsed)}</div>
-    <div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>
+    ${!hasNoSegmentsYet ? `<div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>` : `<div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)}</div>`}
     ${(!isRunning && live.pendingEmployees!=null) ? `<div style="font-size:12.5px;color:var(--change);font-weight:600;">Will resume with ${live.pendingEmployees} employee${live.pendingEmployees===1?'':'s'}</div>` : ''}
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Labour so far: ${laborHoursSoFar(live)} hr gross</div>
+    ${!hasNoSegmentsYet ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Labour so far: ${laborHoursSoFar(live)} hr gross</div>` : ''}
     <div style="border-top:1px dashed var(--line);margin:8px 0;"></div>
     ${segRows}${dtRows}
+    ${hasNoSegmentsYet ? `
+      <div class="btnrow" style="margin-top:12px;">
+        <button class="btn btn-primary" style="background:var(--run);" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
+        <button class="btn btn-secondary" onclick="endStandaloneDowntime('${m}')">✅ End Downtime</button>
+      </div>
+    ` : `
     <div class="btnrow" style="margin-top:12px;">
       <button class="btn btn-secondary" onclick="openStaffSetup('${m}')">👥 Change Staff</button>
       ${isRunning
@@ -925,6 +947,7 @@ function renderLiveActiveCard(m, live){
     </div>
     <button class="btn btn-primary" style="margin-top:8px;" onclick="openFinishSetup('${m}')">✅ Finish Product</button>
     ${isRunning ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="switchProduct('${m}')">🔄 Switch Product (no stop)</button>` : ''}
+    `}
     <div style="text-align:center;margin-top:10px;"><span style="color:var(--wait);font-size:12px;cursor:pointer;text-decoration:underline;" onclick="cancelLiveRun('${m}')">Cancel run</span></div>
   </div>`;
 }
@@ -1001,13 +1024,21 @@ function renderLiveDowntimeSetupCard(live){
 }
 async function confirmDowntime(){
   const s = liveDowntimeSetup;
-  const live = Store.liveRuns[s.machine];
   const now = nowHHMM();
-  const lastSeg = live.segments[live.segments.length-1];
-  lastSeg.end = now;
+  let live = Store.liveRuns[s.machine];
   let reasonCategory='', reason='', classification='';
   if(s.status==='CHANGEOVER'){ reason = s.changeReason==='Other' ? (s.changeReasonOther||'Other') : s.changeReason; }
   if(s.status==='WAITING'){ reasonCategory = s.waitCategory; reason = s.waitReason==='Other' ? (s.waitReasonOther||'Other') : (s.waitReason||WAITING_CATEGORIES[s.waitCategory].reasons[0]); classification = reasonClassification(s.waitCategory); }
+  if(!live){
+    // Machine was IDLE — start a standalone downtime session, no production running yet
+    live = Store.liveRuns[s.machine] = {
+      machine: s.machine, status:'DOWNTIME', product:'', productId:'', date: todayStr(),
+      startedAt: now, employees: 0, segments: [], downtimeSegments: []
+    };
+  } else {
+    const lastSeg = live.segments[live.segments.length-1];
+    if(lastSeg) lastSeg.end = now;
+  }
   live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:s.notes});
   live.status = 'DOWNTIME';
   liveDowntimeSetup = null;
@@ -1178,6 +1209,15 @@ async function switchProduct(m){
   } finally {
     isSwitching = false;
   }
+}
+async function endStandaloneDowntime(m){
+  const result = await closeOutLiveRun(m, {});
+  if(!result){ toast('Save failed — check connection'); return; }
+  delete Store.liveRuns[m];
+  const okL = await Store.saveLiveRuns();
+  if(!okL){ toast('Save failed — check connection'); return; }
+  toast(`${m} — downtime logged, ${result.count} record(s) saved`);
+  render();
 }
 async function cancelLiveRun(m){
   if(!confirm(`Cancel this run for ${m}? Nothing will be saved to History.`)) return;
