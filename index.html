@@ -146,7 +146,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v53 - 2026-08-19 (added Metal Detector Test under QA/Pre-Op)';
+const APP_VERSION = 'v54 - 2026-08-19 (fixed: Start Run and End Downtime buttons not working from standalone downtime)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -720,14 +720,12 @@ function renderLive(){
     let cardHtml;
     const live = Store.liveRuns[m];
     if(liveDowntimeSetup && liveDowntimeSetup.machine===m){ cardHtml = renderLiveDowntimeSetupCard(live); }
+    else if(liveSetup && liveSetup.machine===m){ cardHtml = renderLiveSetupCard(m); }
     else if(!live){
-      if(liveSetup && liveSetup.machine===m){ cardHtml = renderLiveSetupCard(m); }
-      else {
-        cardHtml = `<div class="live-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-family:'Oswald';font-size:16px;">${m}</h3><span class="live-badge idle">IDLE</span></div>
+      cardHtml = `<div class="live-card"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-family:'Oswald';font-size:16px;">${m}</h3><span class="live-badge idle">IDLE</span></div>
         <button class="btn btn-primary" style="margin-top:12px;" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
         <button class="btn btn-secondary" style="margin-top:8px;" onclick="openDowntimeSetup('${m}')">⏸ Log Downtime</button>
       </div>`;
-      }
     } else if(liveStaffSetup && liveStaffSetup.machine===m){ cardHtml = renderLiveStaffSetupCard(live); }
     else if(liveFinishSetup && liveFinishSetup.machine===m){ cardHtml = renderLiveFinishCard(live); }
     else { cardHtml = renderLiveActiveCard(m, live); }
@@ -1113,8 +1111,8 @@ async function closeOutLiveRun(m, opts){
   const live = Store.liveRuns[m];
   if(!live) return null;
   const now = nowHHMM();
-  const lastSeg = live.segments[live.segments.length-1];
-  if(!lastSeg.end) lastSeg.end = now;
+  const lastSeg = live.segments.length ? live.segments[live.segments.length-1] : null;
+  if(lastSeg && !lastSeg.end) lastSeg.end = now;
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt && !lastDt.end) lastDt.end = now;
 
