@@ -147,7 +147,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v56 - 2026-08-19 (fixed: End Downtime could create duplicate records on double-tap)';
+const APP_VERSION = 'v57 - 2026-08-19 (Dashboard cards now show current product + elapsed time when live)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -466,7 +466,18 @@ function renderDashboard(){
     const liveBadge = isRunning ? `<div class="live-badge running" style="margin-top:8px;font-size:9px;padding:3px 8px;">● LIVE</div>` : (isDowntime ? `<div class="live-badge downtime" style="margin-top:8px;font-size:9px;padding:3px 8px;">⏸ LIVE</div>` : '');
     const borderStyle = isRunning ? 'border-color:var(--run);' : (isDowntime ? 'border-color:var(--change);' : '');
     const clickAction = live ? `goToLiveMachine('${m}')` : `quickNewRecord('${m}')`;
-    return `<div class="machine-card" style="cursor:pointer;position:relative;${borderStyle}" onclick="${clickAction}"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}</div>`;
+    let liveDetail = '';
+    if(live && live.segments && live.segments.length){
+      const elapsed = elapsedMinutesSince(live.startedAt);
+      const productLine = live.product ? escapeHtml(live.product) : '<span style="color:var(--muted2);">Product not set</span>';
+      liveDetail = `<div style="margin-top:6px;font-size:10.5px;line-height:1.4;">
+        <div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${productLine}</div>
+        <div style="color:var(--muted);">${fmtDur(elapsed)}</div>
+      </div>`;
+    } else if(live){
+      liveDetail = `<div style="margin-top:6px;font-size:10.5px;color:var(--muted2);">No production started yet</div>`;
+    }
+    return `<div class="machine-card" style="cursor:pointer;position:relative;${borderStyle}" onclick="${clickAction}"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}${liveDetail}</div>`;
   }).join('');
 
   let bnList = bn.length ? bn.map(([name,min],i)=>{
@@ -2449,7 +2460,7 @@ Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ docume
   await Store.init();
   render();
   setInterval(updateClock, 30000);
-  setInterval(()=>{ if(Router.current==='live') render(); }, 30000);
+  setInterval(()=>{ if(Router.current==='live'||Router.current==='dashboard') render(); }, 30000);
 
   /* Self-heal a stale Firestore connection: iOS can tear down the connection while the tab is backgrounded (phone locked, app switched away). Rather than wait for a save to fail with "client has already been terminated," proactively check the connection when the app becomes visible again, and reload automatically if it's actually broken. */
   let wasHidden = false;
