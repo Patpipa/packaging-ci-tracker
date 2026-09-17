@@ -42,20 +42,8 @@ main{flex:1;padding:0 16px 100px;}
 .card h3{font-size:12px;color:var(--muted);letter-spacing:0.1em;margin-bottom:10px;}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .machine-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:18px 10px;text-align:center;min-width:0;position:relative;}
-@keyframes borderChase{ to { transform:rotate(1turn); } }
-.machine-card.live-glow::before{
-  content:'';
-  position:absolute;
-  inset:-2px;
-  border-radius:14px;
-  padding:2px;
-  background:conic-gradient(from 0deg, transparent 0deg, var(--glow-color) 50deg, transparent 120deg, transparent 360deg);
-  -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite:xor;
-  mask-composite:exclude;
-  animation:borderChase 2.2s linear infinite;
-  pointer-events:none;
-}
+@keyframes borderChase{ from { stroke-dashoffset:0; } to { stroke-dashoffset:-100; } }
+.machine-card .chase-rect{ animation:borderChase 2.5s linear infinite; }
 .machine-card .mname{font-family:'Oswald';font-size:15px;color:var(--text);letter-spacing:0.05em;}
 .machine-card .mstat{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:8px;}
 .pill{font-size:10px;padding:3px 7px;border-radius:20px;font-weight:600;letter-spacing:0.02em;display:inline-flex;align-items:center;gap:4px;}
@@ -161,7 +149,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v61 - 2026-08-19 (Dashboard: bold specific status labels, animated running-light border)';
+const APP_VERSION = 'v62 - 2026-08-19 (Dashboard: border light now traces the actual card frame, not a radial spin)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -489,7 +477,7 @@ function renderDashboard(){
       const label = info ? info.label.toUpperCase() : 'DOWNTIME';
       liveBadge = `<div class="live-badge" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;background:${info?info.dim:'var(--change-dim)'};color:${glowColor};">⏸ ${label}</div>`;
     }
-    const glowClass = live ? 'live-glow' : '';
+    const chaseSvg = live ? `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"><rect class="chase-rect" x="1" y="1" width="98%" height="98%" rx="12" ry="12" pathLength="100" fill="none" stroke="${glowColor}" stroke-width="2.5" stroke-dasharray="14 86"/></svg>` : '';
     const clickAction = live ? `goToLiveMachine('${m}')` : `quickNewRecord('${m}')`;
     let liveDetail = '';
     if(live && live.segments && live.segments.length){
@@ -502,7 +490,7 @@ function renderDashboard(){
     } else if(live){
       liveDetail = `<div style="margin-top:6px;font-size:10.5px;color:var(--muted2);">No production started yet</div>`;
     }
-    return `<div class="machine-card ${glowClass}" style="cursor:pointer;--glow-color:${glowColor};" onclick="${clickAction}"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}${liveDetail}</div>`;
+    return `<div class="machine-card" style="cursor:pointer;" onclick="${clickAction}">${chaseSvg}<div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}${liveDetail}</div>`;
   }).join('');
 
   let bnList = bn.length ? bn.map(([name,min],i)=>{
