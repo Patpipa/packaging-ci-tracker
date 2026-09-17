@@ -41,7 +41,7 @@ main{flex:1;padding:0 16px 100px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
 .card h3{font-size:12px;color:var(--muted);letter-spacing:0.1em;margin-bottom:10px;}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.machine-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:18px 10px;text-align:center;}
+.machine-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:18px 10px;text-align:center;min-width:0;overflow:hidden;}
 .machine-card .mname{font-family:'Oswald';font-size:15px;color:var(--text);letter-spacing:0.05em;}
 .machine-card .mstat{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:8px;}
 .pill{font-size:10px;padding:3px 7px;border-radius:20px;font-weight:600;letter-spacing:0.02em;display:inline-flex;align-items:center;gap:4px;}
@@ -147,7 +147,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v59 - 2026-08-19 (fixed: product search box lost focus after every keystroke)';
+const APP_VERSION = 'v60 - 2026-08-19 (fixed: Dashboard machine cards overflowing frame with long product names)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
