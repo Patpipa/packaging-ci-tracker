@@ -1,3 +1,4 @@
+<!-- © 2026 apo_ni_julian. All rights reserved. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -146,7 +147,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v54 - 2026-08-19 (fixed: Start Run and End Downtime buttons not working from standalone downtime)';
+const APP_VERSION = 'v56 - 2026-08-19 (fixed: End Downtime could create duplicate records on double-tap)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -934,7 +935,7 @@ function renderLiveActiveCard(m, live){
     ${hasNoSegmentsYet ? `
       <div class="btnrow" style="margin-top:12px;">
         <button class="btn btn-primary" style="background:var(--run);" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
-        <button class="btn btn-secondary" onclick="endStandaloneDowntime('${m}')">✅ End Downtime</button>
+        <button class="btn btn-secondary" id="endDowntimeBtn-${machineIdSafe(m)}" onclick="endStandaloneDowntime('${m}')">✅ End Downtime</button>
       </div>
     ` : `
     <div class="btnrow" style="margin-top:12px;">
@@ -1208,14 +1209,23 @@ async function switchProduct(m){
     isSwitching = false;
   }
 }
+let isEndingDowntime = false;
 async function endStandaloneDowntime(m){
-  const result = await closeOutLiveRun(m, {});
-  if(!result){ toast('Save failed — check connection'); return; }
-  delete Store.liveRuns[m];
-  const okL = await Store.saveLiveRuns();
-  if(!okL){ toast('Save failed — check connection'); return; }
-  toast(`${m} — downtime logged, ${result.count} record(s) saved`);
-  render();
+  if(isEndingDowntime) return;
+  isEndingDowntime = true;
+  const btn = document.getElementById('endDowntimeBtn-'+machineIdSafe(m));
+  if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='Saving…'; }
+  try{
+    const result = await closeOutLiveRun(m, {});
+    if(!result){ toast('Save failed — check connection'); return; }
+    delete Store.liveRuns[m];
+    const okL = await Store.saveLiveRuns();
+    if(!okL){ toast('Save failed — check connection'); return; }
+    toast(`${m} — downtime logged, ${result.count} record(s) saved`);
+    render();
+  } finally {
+    isEndingDowntime = false;
+  }
 }
 async function cancelLiveRun(m){
   if(!confirm(`Cancel this run for ${m}? Nothing will be saved to History.`)) return;
