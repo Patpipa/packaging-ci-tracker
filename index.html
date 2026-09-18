@@ -149,13 +149,13 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v62 - 2026-08-19 (Dashboard: border light now traces the actual card frame, not a radial spin)';
+const APP_VERSION = 'v64 - 2026-08-19 (added Manual Pack as a 4th tracked station, full CI/PLH support)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
   brk:[74,144,217], nowork:[124,132,138], upstream:[178,110,190], internal:[70,158,172]
 };
-const MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
+const MACHINES = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
 const STATUSES = [
   {key:'RUNNING', label:'Running', color:'var(--run)', dim:'var(--run-dim)', pillClass:'run'},
@@ -207,8 +207,19 @@ const Store = {
       this.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
       const repSnap = await repRef.get();
       this.dailyReports = (repSnap.exists && repSnap.data().data) ? JSON.parse(repSnap.data().data) : [];
-      const liveSnap = await liveRef.get();
-      this.liveRuns = (liveSnap.exists && liveSnap.data().data) ? JSON.parse(liveSnap.data().data) : {};
+
+      // Live Floor state gets its own local safety net: an in-progress run (segments, staffing, downtime not yet Finished) exists only in memory until it saves. If the network is down right when the app loads or reloads, recover the last known state from this device instead of losing it.
+      try{
+        const liveSnap = await liveRef.get();
+        this.liveRuns = (liveSnap.exists && liveSnap.data().data) ? JSON.parse(liveSnap.data().data) : {};
+        safeLocalSet('pct_live_runs_backup', JSON.stringify(this.liveRuns));
+      }catch(e){
+        console.error('liveRuns fetch failed, falling back to local mirror', e);
+        const backupL = safeLocalGet('pct_live_runs_backup');
+        try{ this.liveRuns = backupL ? (JSON.parse(backupL)||{}) : {}; }catch(e2){ this.liveRuns = {}; }
+        if(backupL && Object.keys(this.liveRuns).length) toast('Offline — recovered your live run from this device');
+      }
+
       const prodSnap = await prodRef.get();
       this.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
 
@@ -242,6 +253,7 @@ const Store = {
         if(!this._initialLoadDone) return;
         if(snap.exists && snap.data().data){
           this.liveRuns = JSON.parse(snap.data().data);
+          safeLocalSet('pct_live_runs_backup', snap.data().data);
           if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='dashboard')) render();
         }
       }, err=>{ console.error('liveRuns listener error', err); });
@@ -295,10 +307,12 @@ const Store = {
     }catch(e){ console.error('save reports failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
   },
   async saveLiveRuns(){
+    const json = JSON.stringify(this.liveRuns);
+    safeLocalSet('pct_live_runs_backup', json); // mirror locally first — this is what keeps an in-progress run safe even if the network write below fails
     try{
-      await this.db.collection('tracker').doc('liveRuns').set({data: JSON.stringify(this.liveRuns), updatedAt: Date.now()});
+      await this.db.collection('tracker').doc('liveRuns').set({data: json, updatedAt: Date.now()});
       return true;
-    }catch(e){ console.error('save liveRuns failed', e); toast('Live sync failed — check connection'); return false; }
+    }catch(e){ console.error('save liveRuns failed', e); toast('Live sync failed — kept safe on this device, will sync next time you update this run'); return false; }
   }
 };
 function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
@@ -501,7 +515,7 @@ function renderDashboard(){
   return `
     <div class="card">
       <h3>Today · ${fmtDate(todayStr())}</h3>
-      <div class="grid3">${mcards}</div>
+      <div class="grid3" style="grid-template-columns:repeat(2,1fr);">${mcards}</div>
     </div>
     <div class="card">
       <h3>Shift Totals So Far</h3>
@@ -2354,6 +2368,7 @@ function renderSettings(){
     <div class="statrow"><span class="lbl">Daily reports saved</span><span class="val">${Store.dailyReports.length}</span></div>
     <div class="statrow"><span class="lbl">Last save error</span><span class="val" style="color:var(--wait);font-size:11px;text-align:right;max-width:220px;">${window._lastStorageError || 'none'}</span></div>
     <div class="statrow"><span class="lbl">Local backup mirror</span><span class="val" style="color:${safeLocalGet('pct_records_backup')?'var(--run)':'var(--muted)'}">${safeLocalGet('pct_records_backup') ? 'present' : 'none yet'}</span></div>
+    <div class="statrow"><span class="lbl">Live run local mirror</span><span class="val" style="color:${safeLocalGet('pct_live_runs_backup')?'var(--run)':'var(--muted)'}">${safeLocalGet('pct_live_runs_backup') ? 'present' : 'none yet'}</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Data now lives in the cloud and syncs live across every device open on this tracker — no longer tied to a single phone's local storage.</div>
   </div>
   <div class="card">
