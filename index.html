@@ -149,7 +149,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v66 - 2026-08-19 (renamed "Waiting for Rework/Rebox Product" to "Waiting for Rework")';
+const APP_VERSION = 'v67 - 2026-08-19 (NEW: Downtime Analysis report — flags recurring/high-impact downtime by reason)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -399,6 +399,28 @@ function dayTotals(recs){
   t.BREAK = totalBreakMinutes(recs);
   return t;
 }
+/* Groups all Waiting/Changeover time across a date range by specific reason (not per-machine, unless a machine filter is applied) — this is what lets a plant-wide recurring pattern like "MAREL Switching Product" show its true combined impact instead of being hidden across 3 separate machine totals. Tracks which machines it actually hit so an isolated-machine issue is still distinguishable from a systemic one. */
+function computeDowntimeAnalysis(start, end, machineFilter){
+  let recs = Store.records.filter(r=>r.date>=start && r.date<=end && (r.status==='WAITING'||r.status==='CHANGEOVER'));
+  if(machineFilter) recs = recs.filter(r=>r.machine===machineFilter);
+  const groups = {};
+  recs.forEach(r=>{
+    const label = effectiveReasonLabel(r) || r.status;
+    if(!groups[label]) groups[label] = {reason:label, classification:r.classification, status:r.status, totalMin:0, count:0, machines:new Set()};
+    groups[label].totalMin += r.durationMin;
+    groups[label].count++;
+    groups[label].machines.add(r.machine);
+  });
+  const totalDowntimeMin = recs.reduce((a,r)=>a+r.durationMin,0);
+  const list = Object.values(groups).map(g=>({...g, machines:[...g.machines].sort(), avgMin: g.totalMin/g.count})).sort((a,b)=>b.totalMin-a.totalMin);
+  return {list, totalDowntimeMin};
+}
+/* Flags a downtime reason as needing priority attention based on two independent signals: it keeps recurring (count) or it's quietly eating large total time (totalMin) — either alone is worth flagging, since a short-but-frequent issue and a rare-but-long one are both real problems, just different shapes. Top-3 by total time always counts as highest priority regardless of count, since that's the biggest lever regardless of pattern. */
+function downtimeSeverityFlag(item, rankIndex){
+  if(rankIndex<3 || item.count>=5 || item.totalMin>=120) return {level:'critical', label:'🔴 HIGHEST PRIORITY', color:'var(--wait)'};
+  if(item.count>=3 || item.totalMin>=60) return {level:'watch', label:'🟡 WATCH', color:'var(--change)'};
+  return {level:'normal', label:'', color:'var(--amber)'};
+}
 function bottlenecks(recs, limit){
   const map = {};
   recs.filter(r=>r.status==='WAITING' || r.status==='CHANGEOVER').forEach(r=>{
@@ -437,11 +459,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis'};
   document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (titles[Router.current] || 'CI Tracker');
   updateClock();
   let html = '';
@@ -454,6 +476,7 @@ function render(){
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
+    case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
     case 'addPLHData': html += renderAddPLHDataForm(); break;
     case 'live': html += renderLive(); break;
     case 'products': html += renderProductsView(); break;
@@ -618,6 +641,48 @@ function renderPLHTrendChart(series){
 }
 /* ---- PLH Production Log (browse every finished run, filter, drill into detail, export) ---- */
 let plhLogRange = null;   // {preset, start, end}
+let downtimeAnalysisRange = null;
+let downtimeAnalysisMachine = '';
+function setDowntimeAnalysisPreset(preset){
+  downtimeAnalysisRange = {preset, ...plhPresetRange(preset)};
+  render();
+}
+function renderDowntimeAnalysisView(){
+  if(!downtimeAnalysisRange) downtimeAnalysisRange = {preset:'7days', ...plhPresetRange('7days')};
+  const {list, totalDowntimeMin} = computeDowntimeAnalysis(downtimeAnalysisRange.start, downtimeAnalysisRange.end, downtimeAnalysisMachine);
+  const presets = [['today','Today'],['yesterday','Yesterday'],['7days','7 days'],['30days','30 days'],['thisWeek','This week']];
+  const maxMin = list.length ? list[0].totalMin : 1;
+  const critical = list.filter((item,i)=>downtimeSeverityFlag(item,i).level==='critical');
+
+  const alertBanner = critical.length ? `
+    <div class="card" style="border-color:var(--wait);background:rgba(224,90,80,0.08);margin-bottom:14px;">
+      <div style="font-family:'Oswald';font-size:14px;color:var(--wait);margin-bottom:8px;">🔴 ${critical.length} recurring issue${critical.length===1?'':'s'} need${critical.length===1?'s':''} priority attention</div>
+      ${critical.map(c=>`<div style="font-size:12.5px;color:var(--text);margin-bottom:4px;">• <strong>${escapeHtml(c.reason)}</strong> — ${fmtDur(c.totalMin)} across ${c.count} occurrence${c.count===1?'':'s'}${c.machines.length>1?` (${c.machines.join(', ')})`:''}</div>`).join('')}
+    </div>` : `<div class="card" style="margin-bottom:14px;"><div style="color:var(--run);font-size:13px;">✅ No recurring high-priority downtime patterns in this range.</div></div>`;
+
+  const rows = list.length ? list.map((item,i)=>{
+    const sev = downtimeSeverityFlag(item, i);
+    return `<div class="rank-item" style="align-items:flex-start;">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-name">${escapeHtml(item.reason)} ${sev.label?`<span style="font-size:10px;font-weight:700;color:${sev.color};margin-left:4px;">${sev.label}</span>`:''}</div>
+        <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.round(item.totalMin/maxMin*100)}%;background:${sev.color};"></div></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${item.count} occurrence${item.count===1?'':'s'} · avg ${fmtDur(Math.round(item.avgMin))} · ${item.machines.join(', ')} ${item.classification?`<span class="classtag ${item.classification==='upstream'?'up':'int'}" style="margin-left:4px;">${item.classification.toUpperCase()}</span>`:''}</div>
+      </div>
+      <div class="rank-min">${fmtDur(item.totalMin)}</div>
+    </div>`;
+  }).join('') : '<div class="empty">No downtime recorded in this range.</div>';
+
+  return `
+  <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${downtimeAnalysisRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setDowntimeAnalysisPreset('${v}')">${l}</div>`).join('')}</div>
+  <div class="filterbar"><select onchange="downtimeAnalysisMachine=this.value; render()"><option value="">All Machines</option>${MACHINES.map(m=>`<option ${downtimeAnalysisMachine===m?'selected':''}>${m}</option>`).join('')}</select></div>
+  ${alertBanner}
+  <div class="card">
+    <h3>Downtime by Reason — ${fmtDate(downtimeAnalysisRange.start)} to ${fmtDate(downtimeAnalysisRange.end)}</h3>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px;">Total downtime in range: ${fmtDur(totalDowntimeMin)}</div>
+    ${rows}
+  </div>`;
+}
 let plhLogFilters = {machine:'', product:''};
 let plhLogDetailId = null;
 function plhPresetRange(preset){
@@ -2032,6 +2097,7 @@ function renderReportsList(){
   const list = Store.dailyReports.slice().sort((a,b)=>b.date.localeCompare(a.date));
   let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
   if(!list.length){ html += '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>'; return html; }
   html += list.map(r=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
