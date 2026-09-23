@@ -149,14 +149,14 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v64 - 2026-08-19 (added Manual Pack as a 4th tracked station, full CI/PLH support)';
+const APP_VERSION = 'v65 - 2026-08-19 (added Meat Box/Rebox/Rework/Relabel products, 2 new Waiting reasons)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
   brk:[74,144,217], nowork:[124,132,138], upstream:[178,110,190], internal:[70,158,172]
 };
 const MACHINES = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack'];
-const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Other'];
+const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Meat Box','Rebox','Rework','Relabel','Other'];
 const STATUSES = [
   {key:'RUNNING', label:'Running', color:'var(--run)', dim:'var(--run-dim)', pillClass:'run'},
   {key:'CHANGEOVER', label:'Changeover', color:'var(--change)', dim:'var(--change-dim)', pillClass:'change'},
@@ -166,7 +166,7 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','MAREL Cutting Meat for Variovac 1','MAREL Cutting Meat for Variovac 2','MAREL Cutting Chicken Muscle','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','MAREL Cutting Meat for Variovac 1','MAREL Cutting Meat for Variovac 2','MAREL Cutting Chicken Muscle','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework/Rebox Product','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
