@@ -149,7 +149,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v67 - 2026-08-19 (NEW: Downtime Analysis report — flags recurring/high-impact downtime by reason)';
+const APP_VERSION = 'v68 - 2026-08-19 (NEW: Change Downtime Reason without ending the downtime window)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1047,6 +1047,7 @@ function renderLiveActiveCard(m, live){
         <button class="btn btn-primary" style="background:var(--run);" onclick="startLiveRunSetup('${m}')">▶ Start Run</button>
         <button class="btn btn-secondary" id="endDowntimeBtn-${machineIdSafe(m)}" onclick="endStandaloneDowntime('${m}')">✅ End Downtime</button>
       </div>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="openDowntimeSetup('${m}')">🔄 Change Reason (no stop)</button>
     ` : `
     <div class="btnrow" style="margin-top:12px;">
       <button class="btn btn-secondary" onclick="openStaffSetup('${m}')">👥 Change Staff</button>
@@ -1056,6 +1057,7 @@ function renderLiveActiveCard(m, live){
     </div>
     <button class="btn btn-primary" style="margin-top:8px;" onclick="openFinishSetup('${m}')">✅ Finish Product</button>
     ${isRunning ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="switchProduct('${m}')">🔄 Switch Product (no stop)</button>` : ''}
+    ${!isRunning && !hasNoSegmentsYet ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="openDowntimeSetup('${m}')">🔄 Change Reason (no stop)</button>` : ''}
     `}
     <div style="text-align:center;margin-top:10px;"><span style="color:var(--wait);font-size:12px;cursor:pointer;text-decoration:underline;" onclick="cancelLiveRun('${m}')">Cancel run</span></div>
   </div>`;
@@ -1144,9 +1146,14 @@ async function confirmDowntime(){
       machine: s.machine, status:'DOWNTIME', product:'', productId:'', date: todayStr(),
       startedAt: now, employees: 0, segments: [], downtimeSegments: []
     };
-  } else {
+  } else if(live.status==='RUNNING'){
+    // Was actively producing — close out the running segment, downtime begins now
     const lastSeg = live.segments[live.segments.length-1];
-    if(lastSeg) lastSeg.end = now;
+    if(lastSeg && !lastSeg.end) lastSeg.end = now;
+  } else {
+    // Already in downtime — this is a reason change, not a fresh pause: close out the CURRENT downtime segment first so it doesn't stay open forever, then start the new one. The run itself keeps going the whole time.
+    const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+    if(lastDt && !lastDt.end) lastDt.end = now;
   }
   live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:s.notes});
   live.status = 'DOWNTIME';
