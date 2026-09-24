@@ -149,7 +149,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v68 - 2026-08-19 (NEW: Change Downtime Reason without ending the downtime window)';
+const APP_VERSION = 'v69 - 2026-08-19 (NEW: Product Library flags existing duplicates, warns before adding near-duplicates)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -924,11 +924,25 @@ async function confirmAddProduct(){
     render();
     return;
   }
-  const exists = Store.productLibrary.find(item=> item.name.toLowerCase()===name.toLowerCase() && (item.id||'')===(id||''));
-  if(!exists){
-    Store.productLibrary.push({id, name, category:'', targetPLH});
-    await Store.saveProductLibrary();
+  const exactMatch = Store.productLibrary.find(item=> (item.name||'').trim().toLowerCase()===name.toLowerCase() && (item.id||'').trim().toLowerCase()===id.toLowerCase());
+  if(exactMatch){
+    // Already exists exactly as typed — just use it, no need to add a redundant copy
+    if(p.target==='library'){ liveProductPicker=null; toast('That product is already in your library'); render(); return; }
+    applyPickedProduct(exactMatch.id ? `${exactMatch.id} ${exactMatch.name}` : exactMatch.name, exactMatch.id);
+    return;
   }
+  const nearDupe = Store.productLibrary.find(item=>
+    (id && (item.id||'').trim().toLowerCase()===id.toLowerCase()) ||
+    (item.name||'').trim().toLowerCase()===name.toLowerCase()
+  );
+  if(nearDupe){
+    const matchedOn = (id && (nearDupe.id||'').trim().toLowerCase()===id.toLowerCase()) ? 'ID' : 'name';
+    if(!confirm(`A product with the same ${matchedOn} already exists in your library:\n\n"${nearDupe.name}"${nearDupe.id?` (ID ${nearDupe.id})`:''}\n\nAdd this as a separate entry anyway?`)){
+      return;
+    }
+  }
+  Store.productLibrary.push({id, name, category:'', targetPLH});
+  await Store.saveProductLibrary();
   if(p.target==='library'){ liveProductPicker=null; toast('Product added'); render(); return; }
   applyPickedProduct(id ? `${id} ${name}` : name, id);
 }
@@ -954,14 +968,37 @@ async function applyPickedProduct(display, id){
   liveProductPicker = null;
   render();
 }
+/* Scans the whole library for entries that share the same ID or the same name (trimmed, case-insensitive) — catches the common real-world case of a product saved twice with slightly different capitalization or spacing that an exact-match check would miss */
+function findDuplicateProductGroups(){
+  const byId = {}; const byName = {};
+  Store.productLibrary.forEach((item,i)=>{
+    const idKey = (item.id||'').trim().toLowerCase();
+    const nameKey = (item.name||'').trim().toLowerCase();
+    if(idKey){ (byId[idKey]=byId[idKey]||[]).push(i); }
+    if(nameKey){ (byName[nameKey]=byName[nameKey]||[]).push(i); }
+  });
+  const dupeIdxSet = new Set();
+  const groups = [];
+  Object.values(byId).forEach(idxs=>{ if(idxs.length>1){ groups.push({type:'Same ID', idxs}); idxs.forEach(i=>dupeIdxSet.add(i)); } });
+  Object.values(byName).forEach(idxs=>{ if(idxs.length>1){ groups.push({type:'Same Name', idxs}); idxs.forEach(i=>dupeIdxSet.add(i)); } });
+  return {groups, dupeIdxSet};
+}
 function renderProductsView(){
   const items = Store.productLibrary.map((item,i)=>({...item,_idx:i})).sort((a,b)=> a.name.localeCompare(b.name));
+  const {groups, dupeIdxSet} = findDuplicateProductGroups();
+  const dupeBanner = groups.length ? `
+    <div class="card" style="border-color:var(--wait);background:rgba(224,90,80,0.08);margin-bottom:14px;">
+      <div style="font-family:'Oswald';font-size:14px;color:var(--wait);margin-bottom:8px;">⚠️ ${groups.length} possible duplicate${groups.length===1?'':'s'} found</div>
+      ${groups.map(g=>`<div style="font-size:12px;color:var(--text);margin-bottom:6px;">• <strong>${g.type}:</strong> ${g.idxs.map(i=>escapeHtml(Store.productLibrary[i].name)+(Store.productLibrary[i].id?` (ID ${escapeHtml(Store.productLibrary[i].id)})`:'')).join('  ·  ')}</div>`).join('')}
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">Marked ⚠️ below too — review and delete whichever one you don't need.</div>
+    </div>` : '';
   return `
   <button class="btn btn-primary" style="margin-bottom:14px;" onclick="openProductPicker('library')">+ Add Product</button>
   <div style="color:var(--muted);font-size:13px;margin-bottom:12px;">${items.length} product${items.length===1?'':'s'} in your library</div>
+  ${dupeBanner}
   ${items.length ? items.map(item=>`
-    <div class="hist-item">
-      <div class="hist-top"><span class="mach">${escapeHtml(item.name)}</span>${item.targetPLH?`<span class="pill run">${item.targetPLH} PLH</span>`:''}</div>
+    <div class="hist-item" ${dupeIdxSet.has(item._idx)?'style="border-color:var(--wait);"':''}>
+      <div class="hist-top"><span class="mach">${escapeHtml(item.name)}</span>${dupeIdxSet.has(item._idx)?'<span class="pill wait">⚠️ DUPLICATE</span>':''}${item.targetPLH?`<span class="pill run">${item.targetPLH} PLH</span>`:''}</div>
       <div class="hist-mid">${item.id?`ID ${escapeHtml(item.id)}`:'No ID set'}</div>
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editLibraryProduct(${item._idx})">✎</div>
