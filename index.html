@@ -156,7 +156,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v73 - 2026-08-19 (Dashboard: replaced chasing-light border with subtle breathing status glow)';
+const APP_VERSION = 'v74 - 2026-08-19 (Dashboard: same status info, calmer plain-row layout instead of colored pills)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -386,8 +386,11 @@ function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).sl
 /* ============ AGGREGATION HELPERS ============ */
 function recordsForDate(date){ return Store.records.filter(r=>r.date===date); }
 function machineTotals(recs, machine){
-  const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0};
-  recs.filter(r=>r.machine===machine).forEach(r=>{ t[r.status]=(t[r.status]||0)+r.durationMin; });
+  const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0, upstream:0, internal:0};
+  recs.filter(r=>r.machine===machine).forEach(r=>{
+    t[r.status]=(t[r.status]||0)+r.durationMin;
+    if(r.status==='WAITING'){ if(r.classification==='upstream') t.upstream+=r.durationMin; else t.internal+=r.durationMin; }
+  });
   return t;
 }
 /* Efficiency = Running ÷ (Running + Waiting + Changeover) — excludes No Work Scheduled and Break, which aren't the machine's fault */
@@ -537,29 +540,27 @@ function renderDashboard(){
   let mcards = MACHINES.map(m=>{
     const t = machineTotals(recs,m);
     const eff = efficiencyPct(t);
-    const chips = STATUSES.filter(s=>t[s.key]>0).map(s=>`<span class="pill ${s.pillClass}"><span class="dot" style="background:${s.color}"></span>${fmtDur(t[s.key])}</span>`).join('');
     const live = Store.liveRuns[m];
     const isRunning = live && live.status==='RUNNING';
     const isDowntime = live && live.status==='DOWNTIME';
     let glowColor = '';
-    let liveBadge = '';
     let glowClass = '';
     let cardBorderStyle = '';
     let isNoWork = false;
+    let dotColor = 'var(--line)'; // idle/no live session — plain grey dot
     if(isRunning){
       glowColor = 'var(--run)';
       glowClass = 'glow-running';
       cardBorderStyle = `border-color:${glowColor};--glow-color:${glowColor};`;
-      liveBadge = `<div class="live-badge running" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;">● RUNNING</div>`;
+      dotColor = glowColor;
     } else if(isDowntime){
       const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
       const info = lastDt ? statusInfo(lastDt.status) : null;
       isNoWork = lastDt && lastDt.status==='NO_WORK';
       glowColor = info ? info.color : 'var(--change)';
-      const label = info ? info.label.toUpperCase() : 'DOWNTIME';
       // No Work Scheduled stays visually muted — plain border, no colored glow at all, per spec
       cardBorderStyle = isNoWork ? '' : `border-color:${glowColor};box-shadow:0 0 4px 0px ${glowColor};--glow-color:${glowColor};`;
-      liveBadge = `<div class="live-badge" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;background:${info?info.dim:'var(--change-dim)'};color:${glowColor};">⏸ ${label}</div>`;
+      dotColor = glowColor;
     }
     const clickAction = live ? `goToLiveMachine('${m}')` : `quickNewRecord('${m}')`;
     let liveDetail = '';
@@ -568,18 +569,45 @@ function renderDashboard(){
       const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
       const reasonText = lastDt && lastDt.reason ? lastDt.reason : '';
       const line1 = reasonText ? `<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(reasonText)}</div>` : (live.segments.length===0 ? `<div style="color:var(--muted2);">No production started yet</div>` : '');
-      liveDetail = `<div style="margin-top:6px;font-size:10.5px;line-height:1.4;">${line1}<div style="color:var(--muted);">${fmtDur(elapsed)}</div></div>`;
+      liveDetail = `<div style="margin-top:8px;font-size:10.5px;line-height:1.4;">${line1}<div style="color:var(--muted);">${fmtDur(elapsed)}</div></div>`;
     } else if(live && live.segments && live.segments.length){
       const elapsed = elapsedMinutesSince(live.startedAt);
       const productLine = live.product ? escapeHtml(live.product) : '<span style="color:var(--muted2);">Product not set</span>';
-      liveDetail = `<div style="margin-top:6px;font-size:10.5px;line-height:1.4;">
+      liveDetail = `<div style="margin-top:8px;font-size:10.5px;line-height:1.4;">
         <div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${productLine}</div>
         <div style="color:var(--muted);">${fmtDur(elapsed)}</div>
       </div>`;
     } else if(live){
-      liveDetail = `<div style="margin-top:6px;font-size:10.5px;color:var(--muted2);">No production started yet</div>`;
+      liveDetail = `<div style="margin-top:8px;font-size:10.5px;color:var(--muted2);">No production started yet</div>`;
     }
-    return `<div class="machine-card ${glowClass}" style="cursor:pointer;${cardBorderStyle}" onclick="${clickAction}"><div class="mname">${m}</div>${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:4px;">${eff}%</div>` : ''}<div class="mstat">${chips || '<span style="color:var(--muted2);font-size:11px;">No records</span>'}</div>${liveBadge}${liveDetail}</div>`;
+    // Same categories that were already on the dashboard as colored pills — just shown as plain calmer rows now
+    const rowDefs = [
+      ['Running', t.RUNNING],
+      ['Waiting', t.WAITING],
+      ['Changeover', t.CHANGEOVER],
+      ['Break', t.BREAK],
+      ['No Work', t.NO_WORK]
+    ].filter(([,min])=>min>0);
+    const rowsHtml = rowDefs.map(([label,min])=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:3px 0;"><span>${label}</span><span style="color:var(--text);font-family:'IBM Plex Mono';">${fmtDur(min)}</span></div>`).join('');
+    let liveBadge = '';
+    if(isRunning){
+      liveBadge = `<div class="live-badge running" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;">● RUNNING</div>`;
+    } else if(isDowntime){
+      const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+      const info = lastDt ? statusInfo(lastDt.status) : null;
+      const label = info ? info.label.toUpperCase() : 'DOWNTIME';
+      liveBadge = `<div class="live-badge" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;background:${info?info.dim:'var(--change-dim)'};color:${glowColor};">⏸ ${label}</div>`;
+    }
+    return `<div class="machine-card ${glowClass}" style="cursor:pointer;text-align:left;${cardBorderStyle}" onclick="${clickAction}">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="mname">${m}</div>
+        <div style="width:10px;height:10px;border-radius:50%;background:${dotColor};flex-shrink:0;"></div>
+      </div>
+      ${eff!==null ? `<div class="mono" style="font-size:15px;font-weight:600;color:${efficiencyColor(eff)};margin-top:6px;">${eff}%</div>` : ''}
+      ${rowsHtml ? `<div style="margin-top:8px;">${rowsHtml}</div>` : '<span style="color:var(--muted2);font-size:11px;">No records</span>'}
+      ${liveBadge}
+      ${liveDetail}
+    </div>`;
   }).join('');
 
   let bnList = bn.length ? bn.map(([name,min],i)=>{
