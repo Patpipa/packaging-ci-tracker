@@ -13,6 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
 :root{
   --bg:#181B1E; --panel:#22262A; --panel2:#2B3034; --line:#383E43;
@@ -67,7 +68,7 @@ main{flex:1;padding:0 16px 100px;}
 .btnrow{display:flex;gap:8px;}
 .field{margin-bottom:16px;}
 .field label{display:block;font-size:11px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;font-weight:600;}
-select,input[type=text],input[type=time],input[type=number],textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:16px;border-radius:10px;font-size:18px;font-family:'Inter';appearance:none;}
+select,input[type=text],input[type=time],input[type=number],input[type=password],input[type=email],textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:16px;border-radius:10px;font-size:18px;font-family:'Inter';appearance:none;}
 select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='8'><path d='M1 1l6 6 6-6' stroke='%239AA1A6' stroke-width='2' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 14px center;}
 textarea{min-height:70px;resize:vertical;font-size:15px;}
 .timerow{display:flex;gap:10px;}
@@ -149,7 +150,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v69 - 2026-08-19 (NEW: Product Library flags existing duplicates, warns before adding near-duplicates)';
+const APP_VERSION = 'v71 - 2026-08-19 (NEW: login screen added — Firestore rules still need locking, see chat)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -190,11 +191,43 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "929311010987",
   appId: "1:929311010987:web:e66eacb5ab03d85f2987ee"
 };
+/* ============ LOGIN ============ */
+let loginError = '';
+function renderLoginScreen(){
+  return `<div style="display:flex;align-items:center;justify-content:center;min-height:75vh;padding:20px;">
+    <div class="card" style="max-width:340px;width:100%;">
+      <h3 style="margin-bottom:16px;">🔒 Sign In</h3>
+      ${loginError ? `<div style="color:var(--wait);font-size:12.5px;margin-bottom:12px;">${escapeHtml(loginError)}</div>` : ''}
+      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com"></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="Password"></div>
+      <button class="btn btn-primary" id="loginBtn" onclick="attemptLogin()">Sign In</button>
+    </div>
+  </div>`;
+}
+async function attemptLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if(!email || !password){ loginError = 'Enter both email and password'; document.getElementById('main').innerHTML = renderLoginScreen(); return; }
+  const btn = document.getElementById('loginBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Signing in…'; }
+  try{
+    await firebase.auth().signInWithEmailAndPassword(email, password);
+    loginError = '';
+    // onAuthStateChanged (set up in init) picks this up and loads the app automatically
+  }catch(e){
+    loginError = e && e.message ? e.message : 'Sign in failed — check your email and password';
+    document.getElementById('main').innerHTML = renderLoginScreen();
+  }
+}
+async function signOutApp(){
+  if(!confirm('Sign out of the tracker on this device?')) return;
+  await firebase.auth().signOut();
+  location.reload();
+}
 const Store = {
   ready:false, records:[], dailyReports:[], liveRuns:{}, productLibrary:[], persisted:true, db:null, _initialLoadDone:false,
   async init(){
     try{
-      firebase.initializeApp(FIREBASE_CONFIG);
       this.db = firebase.firestore();
       try{ await this.db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* fine — offline cache just won't work in a second open tab */ }
 
@@ -517,7 +550,13 @@ function renderDashboard(){
     const chaseSvg = live ? `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"><rect class="chase-rect" x="1" y="1" width="98%" height="98%" rx="12" ry="12" pathLength="100" fill="none" stroke="${glowColor}" stroke-width="2.5" stroke-dasharray="14 86"/></svg>` : '';
     const clickAction = live ? `goToLiveMachine('${m}')` : `quickNewRecord('${m}')`;
     let liveDetail = '';
-    if(live && live.segments && live.segments.length){
+    if(live && isDowntime){
+      const elapsed = elapsedMinutesSince(live.startedAt);
+      const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+      const reasonText = lastDt && lastDt.reason ? lastDt.reason : '';
+      const line1 = reasonText ? `<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(reasonText)}</div>` : (live.segments.length===0 ? `<div style="color:var(--muted2);">No production started yet</div>` : '');
+      liveDetail = `<div style="margin-top:6px;font-size:10.5px;line-height:1.4;">${line1}<div style="color:var(--muted);">${fmtDur(elapsed)}</div></div>`;
+    } else if(live && live.segments && live.segments.length){
       const elapsed = elapsedMinutesSince(live.startedAt);
       const productLine = live.product ? escapeHtml(live.product) : '<span style="color:var(--muted2);">Product not set</span>';
       liveDetail = `<div style="margin-top:6px;font-size:10.5px;line-height:1.4;">
@@ -2470,6 +2509,7 @@ function renderSettings(){
     <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
     <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="backupToday()">Backup Today</button>
     <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
+    <button class="btn btn-secondary" style="margin-top:10px;" onclick="signOutApp()">🔒 Sign Out</button>
   </div>
   <div class="card">
     <h3>Storage Status</h3>
@@ -2601,7 +2641,18 @@ const _origGo = Router.go.bind(Router);
 Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); } if(view==='new'){ if(!draft) draft=freshDraft(); } };
 
 /* ============ INIT ============ */
-(async function init(){
+(function bootstrap(){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  firebase.auth().onAuthStateChanged(async (user)=>{
+    if(!user){
+      document.getElementById('main').innerHTML = renderLoginScreen();
+      document.getElementById('pageTitle').textContent = 'Sign In';
+      return;
+    }
+    await startApp();
+  });
+})();
+async function startApp(){
   await Store.init();
   render();
   setInterval(updateClock, 30000);
@@ -2622,7 +2673,7 @@ Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ docume
       });
     }
   });
-})();
+}
 </script>
 </body>
 </html>
