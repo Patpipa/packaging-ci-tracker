@@ -48,8 +48,14 @@ main{flex:1;padding:0 16px 100px;}
   50% { box-shadow:0 0 9px 2px var(--glow-color); }
 }
 .machine-card.glow-running{ animation:breathingGlow 2.8s ease-in-out infinite; }
+@keyframes alarmFlash{
+  0%,100% { box-shadow:0 0 6px 1px var(--wait); background:var(--panel2); }
+  50% { box-shadow:0 0 18px 5px var(--wait); background:rgba(224,90,80,0.14); }
+}
+.machine-card.alarm-flash{ animation:alarmFlash 1s ease-in-out infinite; border-width:2px; }
 @media (prefers-reduced-motion: reduce){
   .machine-card.glow-running{ animation:none; box-shadow:0 0 4px 0px var(--glow-color); }
+  .machine-card.alarm-flash{ animation:none; box-shadow:0 0 10px 2px var(--wait); background:rgba(224,90,80,0.12); }
 }
 .machine-card .mname{font-family:'Oswald';font-size:15px;color:var(--text);letter-spacing:0.05em;}
 .machine-card .mstat{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:8px;}
@@ -156,7 +162,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v77 - 2026-08-19 (added "Waiting for Trimmer to Start" under Upstream/Product)';
+const APP_VERSION = 'v78 - 2026-08-19 (NEW: Downtime Alarm — flashing Dashboard alert past adjustable threshold, Waiting/Changeover only)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -231,7 +237,7 @@ async function signOutApp(){
   location.reload();
 }
 const Store = {
-  ready:false, records:[], dailyReports:[], liveRuns:{}, productLibrary:[], persisted:true, db:null, _initialLoadDone:false,
+  ready:false, records:[], dailyReports:[], liveRuns:{}, productLibrary:[], settings:{downtimeAlarmMinutes:30}, persisted:true, db:null, _initialLoadDone:false,
   async init(){
     try{
       this.db = firebase.firestore();
@@ -241,6 +247,7 @@ const Store = {
       const repRef = this.db.collection('tracker').doc('dailyReports');
       const liveRef = this.db.collection('tracker').doc('liveRuns');
       const prodRef = this.db.collection('tracker').doc('productLibrary');
+      const settRef = this.db.collection('tracker').doc('settings');
 
       const recSnap = await recRef.get();
       this.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
@@ -261,6 +268,9 @@ const Store = {
 
       const prodSnap = await prodRef.get();
       this.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
+
+      const settSnap = await settRef.get();
+      this.settings = (settSnap.exists && settSnap.data().data) ? {...this.settings, ...JSON.parse(settSnap.data().data)} : this.settings;
 
       // One-time local recovery net: if the cloud looks empty but an old local mirror has data (e.g. mid-migration), restore it up to the cloud
       if(this.records.length===0){
@@ -303,6 +313,13 @@ const Store = {
           if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='products')) render();
         }
       }, err=>{ console.error('productLibrary listener error', err); });
+      settRef.onSnapshot(snap=>{
+        if(!this._initialLoadDone) return;
+        if(snap.exists && snap.data().data){
+          this.settings = {...this.settings, ...JSON.parse(snap.data().data)};
+          if(typeof Router!=='undefined' && Router.current==='dashboard') render();
+        }
+      }, err=>{ console.error('settings listener error', err); });
     }catch(e){
       console.error('Storage init failed', e);
       window._lastStorageError = String(e && e.message || e);
@@ -337,6 +354,12 @@ const Store = {
       await this.db.collection('tracker').doc('productLibrary').set({data: JSON.stringify(this.productLibrary), updatedAt: Date.now()});
       return true;
     }catch(e){ console.error('save productLibrary failed', e); toast('Save failed — check connection'); return false; }
+  },
+  async saveSettings(){
+    try{
+      await this.db.collection('tracker').doc('settings').set({data: JSON.stringify(this.settings), updatedAt: Date.now()});
+      return true;
+    }catch(e){ console.error('save settings failed', e); toast('Save failed — check connection'); return false; }
   },
   async saveDailyReports(){
     try{
@@ -561,6 +584,11 @@ function renderDashboard(){
       // No Work Scheduled stays visually muted — plain border, no colored glow at all, per spec
       cardBorderStyle = isNoWork ? '' : `border-color:${glowColor};box-shadow:0 0 4px 0px ${glowColor};--glow-color:${glowColor};`;
       dotColor = glowColor;
+      // Downtime alarm: only Waiting/Changeover count (Break and No Work Scheduled never alarm, regardless of how long they run), and it clears itself automatically the moment the reason/status actually changes
+      if(lastDt && (lastDt.status==='WAITING' || lastDt.status==='CHANGEOVER') && elapsedMinutesSince(lastDt.start) >= (Store.settings.downtimeAlarmMinutes||30)){
+        glowClass = 'alarm-flash';
+        cardBorderStyle = `border-color:var(--wait);--glow-color:var(--wait);`;
+      }
     }
     const clickAction = live ? `goToLiveMachine('${m}')` : `quickNewRecord('${m}')`;
     let liveDetail = '';
@@ -596,7 +624,8 @@ function renderDashboard(){
       const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
       const info = lastDt ? statusInfo(lastDt.status) : null;
       const label = info ? info.label.toUpperCase() : 'DOWNTIME';
-      liveBadge = `<div class="live-badge" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;background:${info?info.dim:'var(--change-dim)'};color:${glowColor};">⏸ ${label}</div>`;
+      const alarmPrefix = glowClass==='alarm-flash' ? '🚨 ' : '⏸ ';
+      liveBadge = `<div class="live-badge" style="margin-top:8px;font-size:9px;padding:3px 8px;font-weight:800;letter-spacing:0.04em;background:${info?info.dim:'var(--change-dim)'};color:${glowColor};">${alarmPrefix}${label}${glowClass==='alarm-flash' ? ` — ${Math.floor(elapsedMinutesSince(lastDt.start))}m` : ''}</div>`;
     }
     return `<div class="machine-card ${glowClass}" style="cursor:pointer;text-align:left;${cardBorderStyle}" onclick="${clickAction}">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -2553,6 +2582,12 @@ function renderSettings(){
     <button class="btn btn-secondary" style="margin-top:10px;" onclick="signOutApp()">🔒 Sign Out</button>
   </div>
   <div class="card">
+    <h3>🚨 Downtime Alarm</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;">A machine flashes red on the Dashboard once an active Waiting or Changeover has run this long. Break and No Work Scheduled never trigger it.</div>
+    <div class="field"><label>Alarm after (minutes)</label><input type="number" min="1" id="alarmMinutesInput" value="${Store.settings.downtimeAlarmMinutes}"></div>
+    <button class="btn btn-primary" onclick="saveDowntimeAlarmMinutes()">Save</button>
+  </div>
+  <div class="card">
     <h3>Storage Status</h3>
     <div class="statrow"><span class="lbl">Cloud sync</span><span class="val" style="color:${Store.ready?'var(--run)':'var(--wait)'}">${Store.ready?'Connected (Firebase)':'Unavailable'}</span></div>
     <div class="statrow"><span class="lbl">Total records</span><span class="val">${Store.records.length}</span></div>
@@ -2658,6 +2693,15 @@ async function importData(evt){
   evt.target.value='';
 }
 /* Manual escape hatch for the "this device looks stale" problem — bypasses the local cache entirely and pulls the true current state directly from the server for everything, not just live runs. Useful when switching between devices (iPad on the floor, phone during a break) if the automatic on-return refresh hasn't caught up yet. */
+async function saveDowntimeAlarmMinutes(){
+  const val = parseInt(document.getElementById('alarmMinutesInput').value, 10);
+  if(!val || val<1){ toast('Enter a number of minutes, 1 or more'); return; }
+  Store.settings = {...Store.settings, downtimeAlarmMinutes: val};
+  const ok = await Store.saveSettings();
+  if(!ok) return;
+  toast(`Downtime alarm set to ${val} min`);
+  render();
+}
 async function forceRefreshFromServer(){
   if(!Store.db){ toast('Not connected yet'); return; }
   toast('Refreshing from server…');
