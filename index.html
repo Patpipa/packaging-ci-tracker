@@ -156,7 +156,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v74 - 2026-08-19 (Dashboard: same status info, calmer plain-row layout instead of colored pills)';
+const APP_VERSION = 'v75 - 2026-08-19 (fixed: stale data when switching devices — forces real server sync on return, added manual Refresh Now)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2560,6 +2560,7 @@ function renderSettings(){
     <div class="statrow"><span class="lbl">Last save error</span><span class="val" style="color:var(--wait);font-size:11px;text-align:right;max-width:220px;">${window._lastStorageError || 'none'}</span></div>
     <div class="statrow"><span class="lbl">Local backup mirror</span><span class="val" style="color:${safeLocalGet('pct_records_backup')?'var(--run)':'var(--muted)'}">${safeLocalGet('pct_records_backup') ? 'present' : 'none yet'}</span></div>
     <div class="statrow"><span class="lbl">Live run local mirror</span><span class="val" style="color:${safeLocalGet('pct_live_runs_backup')?'var(--run)':'var(--muted)'}">${safeLocalGet('pct_live_runs_backup') ? 'present' : 'none yet'}</span></div>
+    <button class="btn btn-secondary" style="margin-top:10px;" onclick="forceRefreshFromServer()">🔄 Refresh Now (force sync from server)</button>
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Data now lives in the cloud and syncs live across every device open on this tracker — no longer tied to a single phone's local storage.</div>
   </div>
   <div class="card">
@@ -2656,6 +2657,30 @@ async function importData(evt){
   }catch(e){ toast('Invalid backup file'); }
   evt.target.value='';
 }
+/* Manual escape hatch for the "this device looks stale" problem — bypasses the local cache entirely and pulls the true current state directly from the server for everything, not just live runs. Useful when switching between devices (iPad on the floor, phone during a break) if the automatic on-return refresh hasn't caught up yet. */
+async function forceRefreshFromServer(){
+  if(!Store.db){ toast('Not connected yet'); return; }
+  toast('Refreshing from server…');
+  try{
+    const [recSnap, repSnap, liveSnap, prodSnap] = await Promise.all([
+      Store.db.collection('tracker').doc('records').get({source:'server'}),
+      Store.db.collection('tracker').doc('dailyReports').get({source:'server'}),
+      Store.db.collection('tracker').doc('liveRuns').get({source:'server'}),
+      Store.db.collection('tracker').doc('productLibrary').get({source:'server'})
+    ]);
+    Store.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
+    Store.dailyReports = (repSnap.exists && repSnap.data().data) ? JSON.parse(repSnap.data().data) : [];
+    Store.liveRuns = (liveSnap.exists && liveSnap.data().data) ? JSON.parse(liveSnap.data().data) : {};
+    Store.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
+    if(liveSnap.exists && liveSnap.data().data) safeLocalSet('pct_live_runs_backup', liveSnap.data().data);
+    if(recSnap.exists && recSnap.data().data) safeLocalSet('pct_records_backup', recSnap.data().data);
+    toast('Synced with server ✓');
+    render();
+  }catch(e){
+    console.error('force refresh failed', e);
+    toast('Refresh failed — check your connection');
+  }
+}
 async function clearAllData(){
   if(!confirm('WARNING: This will permanently delete all production records. Are you sure?')) return;
   if(!confirm('This cannot be undone. Confirm delete ALL data?')) return;
@@ -2699,7 +2724,7 @@ async function startApp(){
   setInterval(updateClock, 30000);
   setInterval(()=>{ if(Router.current==='live'||Router.current==='dashboard') render(); }, 30000);
 
-  /* Self-heal a stale Firestore connection: iOS can tear down the connection while the tab is backgrounded (phone locked, app switched away). Rather than wait for a save to fail with "client has already been terminated," proactively check the connection when the app becomes visible again, and reload automatically if it's actually broken. */
+  /* Self-heal a stale Firestore connection or a stale local cache: iOS can tear down the connection while the tab is backgrounded (phone locked, app switched away, or the device hopped between wifi/cellular). Firestore's offline persistence can silently keep showing old cached data with no error at all when this happens — so on returning to the app, force a genuine server read (bypassing the local cache) for whatever's currently live, rather than trusting the ambient listener to have caught up on its own. This is what keeps two devices (e.g. iPad on the floor, phone during a break) from disagreeing about what's actually running after switching between them. */
   let wasHidden = false;
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='hidden'){ wasHidden = true; return; }
@@ -2710,8 +2735,17 @@ async function startApp(){
         if(msg.includes('terminated') || msg.includes('client is offline')){
           toast('Reconnecting…');
           setTimeout(()=>location.reload(), 600);
+          return;
         }
       });
+      // Force a genuine from-server refresh of live run state specifically — this is the data most likely to have changed on another device while this tab was away, and the one where a stale view causes real confusion
+      Store.db.collection('tracker').doc('liveRuns').get({source:'server'}).then(snap=>{
+        if(snap.exists && snap.data().data){
+          Store.liveRuns = JSON.parse(snap.data().data);
+          safeLocalSet('pct_live_runs_backup', snap.data().data);
+          if(Router.current==='live'||Router.current==='dashboard') render();
+        }
+      }).catch(()=>{ /* server unreachable right now — the visible listener will catch up once it can */ });
     }
   });
 }
