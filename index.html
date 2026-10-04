@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v85 - 2026-08-19 (PLH PDF Report: added plain-English explanation of Gross/Net PLH at the bottom)';
+const APP_VERSION = 'v86 - 2026-08-19 (PLH PDF Report: explanation reorganized into Gross/Net/Target PLH columns)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -921,8 +921,22 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
       </div>
       ${incompleteSection}
       ${summary.runCount ? machineSections : '<div style="color:#999;font-size:13px;">No completed PLH runs in this range.</div>'}
-      <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:12px;font-size:10px;color:#888;line-height:1.5;">
-        Gross PLH = total pounds produced ÷ Gross Labour Hours, where Gross Labour Hours includes all time staff spent on the job — both actively producing and during any downtime (waiting, changeover) while the run was open. Net PLH = total pounds ÷ Net Labour Hours, counting only time actively running, excluding downtime — this is why Net PLH often reads higher than Gross when downtime occurred. Target PLH, where set, is the expected rate for that product; "—" means no target has been established yet. The Staffing Timeline and Downtime sections under each job show the exact segments used to calculate these hours.
+      <div style="border-top:1px solid #ddd;margin-top:20px;padding-top:12px;">
+        <div style="display:flex;gap:18px;margin-bottom:10px;">
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:10.5px;color:#1a1a2e;letter-spacing:0.04em;margin-bottom:3px;">GROSS PLH</div>
+            <div style="font-size:10px;color:#888;line-height:1.5;">Total pounds produced ÷ Gross Labour Hours — all time staff spent on the job, including any downtime (waiting, changeover) while the run was open.</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:10.5px;color:#1a1a2e;letter-spacing:0.04em;margin-bottom:3px;">NET PLH</div>
+            <div style="font-size:10px;color:#888;line-height:1.5;">Total pounds ÷ Net Labour Hours — only time actively running, excluding downtime. Often reads higher than Gross when downtime occurred.</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:10.5px;color:#1a1a2e;letter-spacing:0.04em;margin-bottom:3px;">TARGET PLH</div>
+            <div style="font-size:10px;color:#888;line-height:1.5;">The expected rate for that product. "—" means no target has been set for it yet.</div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:#888;line-height:1.5;">The Staffing Timeline and Downtime sections under each job show the exact segments used to calculate these hours.</div>
       </div>
       <div style="border-top:1px solid #ddd;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;font-size:10.5px;color:#999;">
         <span>Daily PLH Report — ${dateLabel} | Prepared by Walter</span>
