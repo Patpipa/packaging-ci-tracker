@@ -1,0 +1,344 @@
+<!-- © 2026 apo_ni_julian. All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>How it works · Packaging CI Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#181B1E; --panel:#22262A; --panel2:#2B3034; --line:#383E43;
+  --text:#EDEFF1; --muted:#9AA1A6; --muted2:#6D7377;
+  --amber:#E0A030; --amber-dim:#3A2F1C;
+  --run:#3FA35B; --run-dim:#1D3323;
+  --change:#D98F2B; --change-dim:#3A2A14;
+  --wait:#D6534A; --wait-dim:#3A1E1C;
+  --brk:#4A90D9; --brk-dim:#1C2A3A;
+  --up:#C77DD6; --int:#4FB3C2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;overscroll-behavior:none;}
+body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+.tour{width:100%;max-width:460px;height:100%;display:flex;flex-direction:column;padding:14px 20px 16px;}
+.top{display:flex;align-items:center;gap:12px;}
+.progress{flex:1;display:flex;gap:4px;}
+.progress span{flex:1;height:3px;border-radius:2px;background:var(--line);overflow:hidden;position:relative;}
+.progress span.done::after,.progress span.on::after{content:"";position:absolute;inset:0;background:var(--amber);}
+.skip{background:none;border:none;color:var(--muted);font:500 13px 'Inter',sans-serif;padding:8px 2px;cursor:pointer;}
+.brand{margin:14px 0 0;font:600 11px 'Inter',sans-serif;letter-spacing:0.14em;color:var(--amber);text-transform:uppercase;}
+.stage{flex:1;position:relative;overflow:hidden;margin-top:10px;touch-action:pan-y;}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;opacity:0;visibility:hidden;transform:translateX(24px);transition:opacity .35s ease,transform .35s ease,visibility 0s .35s;}
+.slide.active{opacity:1;visibility:visible;transform:none;transition:opacity .35s ease,transform .35s ease;}
+.slide.prev{transform:translateX(-24px);}
+.art{flex:1;min-height:250px;max-height:400px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;justify-content:center;gap:9px;overflow:hidden;position:relative;}
+.copy{padding:20px 2px 0;}
+.copy h2{font:600 25px/1.15 'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.02em;margin:0 0 10px;}
+.copy p{font-size:15.5px;line-height:1.55;color:var(--muted);margin:0;max-width:38ch;}
+.nav{display:flex;gap:10px;padding-top:18px;}
+.btn{flex:1;padding:16px;border-radius:12px;border:none;font:600 16px 'Oswald',sans-serif;letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;text-align:center;text-decoration:none;}
+.btn:active{transform:scale(0.98);}
+.btn:focus-visible,.skip:focus-visible{outline:2px solid var(--amber);outline-offset:3px;}
+.btn-primary{background:var(--amber);color:#1A1500;}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line);flex:0 0 96px;}
+.btn-ghost[hidden]{display:none;}
+.note{font-size:12px;color:var(--muted2);text-align:center;margin-top:10px;min-height:16px;}
+
+.mono{font-family:'IBM Plex Mono',monospace;}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;}
+.mrow .nm{font:600 15px 'Oswald',sans-serif;letter-spacing:0.04em;}
+.mrow .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.pill{font-size:11px;padding:4px 9px;border-radius:20px;font-weight:600;white-space:nowrap;display:inline-flex;gap:5px;align-items:center;}
+.pill.run{background:var(--run-dim);color:var(--run);}
+.pill.change{background:var(--change-dim);color:var(--change);}
+.pill.wait{background:var(--wait-dim);color:var(--wait);}
+.alarm{border-color:var(--wait);}
+.active .alarm{animation:alarm 1.6s ease-in-out infinite;}
+@keyframes alarm{50%{background:rgba(214,83,74,0.13);}}
+.caption{font-size:11.5px;color:var(--muted2);text-align:center;}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chip{font-size:12px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);}
+.chip.sel{border-color:var(--amber);color:var(--amber);background:var(--amber-dim);}
+.reason{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 13px;border-radius:11px;border:1px solid var(--line);background:var(--panel2);font-size:13.5px;}
+.tag{font-size:10.5px;padding:3px 8px;border-radius:6px;font-weight:600;letter-spacing:0.04em;}
+.tag.up{color:var(--up);background:rgba(199,125,214,0.14);}
+.tag.int{color:var(--int);background:rgba(79,179,194,0.14);}
+.active .pick{animation:pick .5s ease 0.9s both;}
+@keyframes pick{from{border-color:var(--line);}to{border-color:var(--up);background:rgba(199,125,214,0.08);}}
+.active .tag-in{animation:tagin .4s ease both;}
+@keyframes tagin{from{opacity:0;transform:scale(.8);}to{opacity:1;transform:none;}}
+
+.rank{display:flex;align-items:center;gap:11px;}
+.rank .n{font:600 14px 'IBM Plex Mono',monospace;color:var(--amber);width:14px;}
+.rank .body{flex:1;min-width:0;}
+.rank .lbl{font-size:12.5px;margin-bottom:5px;line-height:1.3;}
+.rank .track{height:7px;border-radius:5px;background:var(--panel2);overflow:hidden;}
+.rank .fill{height:100%;width:0;border-radius:5px;transition:width 1s cubic-bezier(.2,.8,.2,1);}
+.rank .min{font:500 12px 'IBM Plex Mono',monospace;color:var(--muted);width:56px;text-align:right;}
+.callout{display:flex;justify-content:space-between;align-items:center;background:var(--wait-dim);border:1px solid rgba(214,83,74,0.45);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--wait);margin-top:4px;}
+
+.plh-big{font:600 50px/1 'IBM Plex Mono',monospace;letter-spacing:-0.02em;}
+.plh-unit{font-size:15px;color:var(--muted);font-family:'Inter',sans-serif;font-weight:500;margin-left:6px;}
+.formula{font-size:12px;color:var(--muted2);margin:4px 0 6px;}
+.mstat{display:flex;align-items:center;gap:10px;font-size:13px;}
+.mstat .k{width:94px;color:var(--muted);}
+.mstat .bar{flex:1;height:7px;background:var(--panel2);border-radius:5px;position:relative;overflow:hidden;}
+.mstat .bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--brk);border-radius:5px;transition:width 1s cubic-bezier(.2,.8,.2,1) .3s;}
+.mstat .v{font:600 13px 'IBM Plex Mono',monospace;width:46px;text-align:right;}
+
+.week{display:flex;align-items:flex-end;gap:10px;height:118px;padding:0 4px;border-bottom:1px solid var(--line);}
+.week .col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:5px;}
+.week .b{width:100%;border-radius:6px 6px 2px 2px;background:var(--change);height:0;transition:height .8s cubic-bezier(.2,.8,.2,1);}
+.week .m{font:500 10.5px 'IBM Plex Mono',monospace;color:var(--muted);}
+.days{display:flex;gap:10px;padding:0 4px;}
+.days span{flex:1;text-align:center;font-size:11px;color:var(--muted2);}
+.obs{background:var(--panel2);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:10px 12px;font-size:12.5px;line-height:1.45;}
+.obs b{color:var(--amber);font-weight:600;display:block;font-size:11px;letter-spacing:0.06em;margin-bottom:3px;}
+
+.paper{background:#fff;color:#1a1a2e;border-radius:10px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;align-self:center;width:84%;max-width:290px;}
+.active .paper{animation:rise .6s cubic-bezier(.2,.8,.2,1) both;}
+@keyframes rise{from{transform:translateY(18px);opacity:0;}to{transform:none;opacity:1;}}
+.paper .hd{background:#1e3a5f;color:#fff;padding:10px 12px;}
+.paper .hd b{font-size:13px;display:block;}
+.paper .hd span{font-size:10px;opacity:.85;}
+.paper .bd{padding:10px 12px;}
+.paper .big{border-left:3px solid #2980b9;background:#f4f4f4;padding:7px 9px;font-size:20px;font-weight:700;margin-bottom:8px;}
+.paper .big small{font-size:10px;font-weight:400;color:#666;}
+.paper .ln{height:6px;background:#e6e6e6;border-radius:3px;margin:6px 0;}
+.paper .sec{font-size:9.5px;font-weight:700;letter-spacing:0.05em;margin-top:8px;}
+.pdf{position:absolute;right:16px;top:16px;background:var(--wait);color:#fff;font:600 11px 'Inter',sans-serif;padding:5px 10px;border-radius:20px;letter-spacing:0.04em;}
+
+.devices{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 2px;}
+.dev{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);}
+.dev .frame{border:2px solid var(--line);background:var(--panel2);border-radius:9px;display:flex;align-items:center;justify-content:center;}
+.dev .frame i{width:8px;height:8px;border-radius:50%;background:var(--run);opacity:.25;}
+.active .dev .frame i{animation:ping 2.4s ease-in-out infinite;}
+.active .dev:nth-child(3) .frame i{animation-delay:.4s;}
+.active .dev:nth-child(5) .frame i{animation-delay:.8s;}
+@keyframes ping{0%,60%,100%{opacity:.25;transform:scale(1);}20%{opacity:1;transform:scale(1.5);}}
+.wire{flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 11px);margin-bottom:24px;}
+.cloud{align-self:center;display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--run);background:var(--run-dim);padding:6px 12px;border-radius:20px;}
+.cloud::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--run);}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important;}
+}
+@media (max-height:640px){
+  .art{min-height:210px;}
+  .copy h2{font-size:22px;}
+  .copy p{font-size:14.5px;}
+  .brand{display:none;}
+}
+</style>
+</head>
+<body>
+<main class="tour" aria-roledescription="carousel" aria-label="How the Packaging CI Tracker works">
+  <div class="top">
+    <div class="progress" id="progress" aria-hidden="true"></div>
+    <button class="skip" id="skip">Skip</button>
+  </div>
+  <div class="brand">Packaging CI Tracker</div>
+
+  <div class="stage" id="stage">
+
+    <section class="slide" aria-label="1 of 7">
+      <div class="art" aria-hidden="true">
+        <div class="mrow"><div><div class="nm">Variovac 1</div><div class="sub">Pork cutlet 6oz</div></div><span class="pill run">Running <span class="mono" data-clock="4321">1:12:01</span></span></div>
+        <div class="mrow alarm"><div><div class="nm">Variovac 2</div><div class="sub" style="color:var(--wait)">MAREL - Switching Product</div></div><span class="pill wait">Waiting <span class="mono" data-clock="1928">32:08</span></span></div>
+        <div class="mrow"><div><div class="nm">Manual Pack</div><div class="sub" style="color:var(--change)">Film Change</div></div><span class="pill change">Changeover <span class="mono" data-clock="364">6:04</span></span></div>
+        <div class="caption">Live from the packaging floor</div>
+      </div>
+      <div class="copy">
+        <h2>Know why the line stops</h2>
+        <p>Every machine's status and the reason behind each stop, timed to the minute as it happens on the floor.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="2 of 7">
+      <div class="art" aria-hidden="true">
+        <div class="chips">
+          <span class="chip sel">Upstream / Product</span><span class="chip">Materials</span><span class="chip">Machine</span><span class="chip">Labour</span><span class="chip">QA</span>
+        </div>
+        <div class="reason pick">Waiting for Trimmed Meat<span class="tag up tag-in" style="animation-delay:1.3s">UPSTREAM</span></div>
+        <div class="reason">MAREL - Waiting for It to Cut Meat<span class="tag up">UPSTREAM</span></div>
+        <div class="reason">Machine Jam<span class="tag int">INTERNAL</span></div>
+        <div class="caption">Upstream = another department · Internal = packaging</div>
+      </div>
+      <div class="copy">
+        <h2>Upstream or our own</h2>
+        <p>Each stop is tagged by where it started, another department or inside packaging, so the right team owns the fix.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="3 of 7">
+      <div class="art" aria-hidden="true" id="ranks"></div>
+      <div class="copy">
+        <h2>Biggest time-wasters first</h2>
+        <p>Lost minutes are ranked by cause across every machine, so you can see which fix pays back the most.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="4 of 7">
+      <div class="art" aria-hidden="true">
+        <div style="font-size:12px;color:var(--muted)">Daily PLH</div>
+        <div><span class="plh-big" id="plh">0.0</span><span class="plh-unit">lbs/hr</span></div>
+        <div class="formula">Pounds produced ÷ labour hours</div>
+        <div class="mstat"><span class="k">Variovac 1</span><span class="bar"><i data-w="88"></i></span><span class="v">241.6</span></div>
+        <div class="mstat"><span class="k">Variovac 3</span><span class="bar"><i data-w="84"></i></span><span class="v">230.1</span></div>
+        <div class="mstat"><span class="k">Manual Pack</span><span class="bar"><i data-w="76"></i></span><span class="v">208.8</span></div>
+      </div>
+      <div class="copy">
+        <h2>Productivity in one number</h2>
+        <p>Pounds per labour hour for the day, each machine, and every job, with the staffing and downtime that explain it.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="5 of 7">
+      <div class="art" aria-hidden="true">
+        <div style="font-size:12px;color:var(--muted)">Daily downtime this week</div>
+        <div class="week" id="week"></div>
+        <div class="days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span></div>
+        <div class="obs"><b>RECOMMENDED ACTION</b>MAREL - Switching Product cost 74 min across 9 stops. Group same-product runs to cut changeovers.</div>
+      </div>
+      <div class="copy">
+        <h2>Spot the pattern across the week</h2>
+        <p>Daily downtime and PLH trends show whether things are improving, with a suggested lean action for the top cause.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="6 of 7">
+      <div class="art" aria-hidden="true">
+        <span class="pdf">PDF</span>
+        <div class="paper">
+          <div class="hd"><b>Daily PLH Report</b><span>End of shift · Prepared by Walter</span></div>
+          <div class="bd">
+            <div class="big">222.9 <small>lbs/hr overall</small></div>
+            <div class="sec">TOP BOTTLENECKS</div>
+            <div class="ln" style="width:92%"></div><div class="ln" style="width:70%"></div>
+            <div class="sec">ACTION FOR TOMORROW</div>
+            <div class="ln" style="width:84%"></div><div class="ln" style="width:55%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="copy">
+        <h2>A report ready to hand over</h2>
+        <p>At the end of each shift, the summary, top bottlenecks, and an action for tomorrow are ready to read or save as a PDF.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="7 of 7">
+      <div class="art" aria-hidden="true">
+        <div class="devices">
+          <div class="dev"><div class="frame" style="width:74px;height:56px"><i></i></div>Floor tablet</div>
+          <div class="wire"></div>
+          <div class="dev"><div class="frame" style="width:36px;height:62px;border-radius:8px"><i></i></div>Phone</div>
+          <div class="wire"></div>
+          <div class="dev"><div class="frame" style="width:80px;height:52px;border-radius:6px"><i></i></div>Office</div>
+        </div>
+        <span class="cloud">Saved to the cloud</span>
+      </div>
+      <div class="copy">
+        <h2>One version of the truth</h2>
+        <p>What's logged on the floor shows on every signed-in device within seconds, so everyone reads the same numbers.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="nav">
+    <button class="btn btn-ghost" id="back" hidden>Back</button>
+    <button class="btn btn-primary" id="next">Next</button>
+  </div>
+  <div class="note" id="note"></div>
+</main>
+
+<script>
+(function(){
+  const inApp = new URLSearchParams(location.search).get('app') === '1';
+  const slides = [...document.querySelectorAll('.slide')];
+  const last = slides.length - 1;
+  const progress = document.getElementById('progress');
+  const next = document.getElementById('next');
+  const back = document.getElementById('back');
+  const skip = document.getElementById('skip');
+  const note = document.getElementById('note');
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let idx = 0, timers = [];
+
+  progress.innerHTML = slides.map(()=>'<span></span>').join('');
+  const segs = [...progress.children];
+
+  const ranks = [['MAREL - Waiting for It to Cut Meat',142,'var(--up)'],['Waiting for Trimmed Meat',96,'var(--up)'],['Machine Jam',41,'var(--int)'],['Film Change',28,'var(--int)']];
+  document.getElementById('ranks').innerHTML =
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:2px">Top downtime causes this week</div>' +
+    ranks.map((r,i)=>`<div class="rank"><span class="n">${i+1}</span><div class="body"><div class="lbl">${r[0]}</div><div class="track"><div class="fill" data-w="${Math.round(r[1]/142*100)}" style="background:${r[2]}"></div></div></div><span class="min">${r[1]} min</span></div>`).join('') +
+    '<div class="callout"><span>Most downtime</span><span class="mono">Variovac 2 · 3h 05m</span></div>';
+
+  const week = [96,74,118,61,52];
+  document.getElementById('week').innerHTML = week.map(m=>`<div class="col"><span class="m">${m}m</span><div class="b" data-h="${Math.round(m/118*86)}"></div></div>`).join('');
+
+  function fmtClock(s){ const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0'); }
+  function clearTimers(){ timers.forEach(t=>{clearInterval(t);clearTimeout(t);}); timers=[]; }
+
+  function enter(s){
+    s.querySelectorAll('[data-clock]').forEach(el=>{
+      let v = +el.dataset.clock; el.textContent = fmtClock(v);
+      if(!reduced) timers.push(setInterval(()=>{ v++; el.textContent = fmtClock(v); },1000));
+    });
+    s.querySelectorAll('.fill,.mstat i').forEach(el=>{ el.style.width='0'; timers.push(setTimeout(()=>el.style.width=el.dataset.w+'%',60)); });
+    s.querySelectorAll('.week .b').forEach(el=>{ el.style.height='0'; timers.push(setTimeout(()=>el.style.height=el.dataset.h+'px',60)); });
+    const plh = s.querySelector('#plh');
+    if(plh){
+      const target = 222.9;
+      if(reduced){ plh.textContent = target.toFixed(1); }
+      else { let v=0; const t=setInterval(()=>{ v=Math.min(target, v+target/40); plh.textContent=v.toFixed(1); if(v>=target) clearInterval(t); },22); timers.push(t); }
+    }
+  }
+
+  function show(n){
+    idx = Math.max(0, Math.min(last, n));
+    clearTimers();
+    slides.forEach((s,i)=>{ s.classList.toggle('active', i===idx); s.classList.toggle('prev', i<idx); s.setAttribute('aria-hidden', i===idx?'false':'true'); });
+    segs.forEach((g,i)=>{ g.className = i<idx ? 'done' : (i===idx ? 'on' : ''); });
+    back.hidden = idx===0;
+    skip.style.visibility = idx===last ? 'hidden' : 'visible';
+    if(idx===last){
+      next.textContent = inApp ? 'Start using the app' : 'Open the app';
+      note.textContent = inApp ? 'Replay this tour any time from Settings.' : 'You will need your sign-in to open the app.';
+    } else { next.textContent = 'Next'; note.textContent = ''; }
+    enter(slides[idx]);
+  }
+
+  function finish(){
+    if(inApp && window.parent !== window){ window.parent.postMessage({type:'ci-tour-done'}, location.origin); }
+    else { location.href = './'; }
+  }
+
+  next.onclick = ()=>{ idx===last ? finish() : show(idx+1); };
+  back.onclick = ()=>show(idx-1);
+  skip.onclick = ()=>{ inApp ? finish() : show(last); };
+  document.addEventListener('keydown', e=>{
+    if(e.key==='ArrowRight') next.click();
+    if(e.key==='ArrowLeft' && idx>0) show(idx-1);
+    if(e.key==='Escape' && inApp) finish();
+  });
+
+  let sx=null, sy=null;
+  const stage = document.getElementById('stage');
+  stage.addEventListener('touchstart', e=>{ sx=e.touches[0].clientX; sy=e.touches[0].clientY; }, {passive:true});
+  stage.addEventListener('touchend', e=>{
+    if(sx===null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if(Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)){ if(dx<0 && idx<last) show(idx+1); if(dx>0 && idx>0) show(idx-1); }
+    sx = sy = null;
+  }, {passive:true});
+
+  show(0);
+})();
+</script>
+</body>
+</html>

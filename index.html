@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v89 - 2026-10-04 (downtime reasons cleaned up: MAREL reasons grouped with "MAREL - " prefix, clearer chicken muscle / byproduct / slicer wording, old records renamed to match)';
+const APP_VERSION = 'v90 - 2026-10-04 (new: illustrated App Tour — shows once per device, replay/share from Settings; needs tour.html uploaded next to index.html)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2759,6 +2759,15 @@ function renderSettings(){
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">If this doesn't match what Claude just gave you, the update hasn't been uploaded to GitHub yet.</div>
   </div>
   <div class="card">
+    <h3>App Tour</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:10px;line-height:1.4;">A short illustrated walkthrough of what the app shows. Send the link to supervisors, managers, or the production director so they can see it before signing in.</div>
+    <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="openTour(false)">▶ Replay App Tour</button>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="shareTourLink()">Share Tour Link</button>
+      <button class="btn btn-ghost" onclick="copyTourLink()">Copy Link</button>
+    </div>
+  </div>
+  <div class="card">
     <h3>Product Library</h3>
     <div style="color:var(--muted);font-size:13px;margin-bottom:10px;">${Store.productLibrary.length} product${Store.productLibrary.length===1?'':'s'} saved — add or edit anytime, no need to wait for a live run.</div>
     <button class="btn btn-secondary" onclick="Router.go('products')">📦 Manage Product Library →</button>
@@ -2948,6 +2957,48 @@ function afterRender(){
 const _origGo = Router.go.bind(Router);
 Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); } if(view==='new'){ if(!draft) draft=freshDraft(); } };
 
+/* ============ APP TOUR ============
+The illustrated tour lives in its own file (tour.html, next to index.html) so the same tour serves two places: the shareable "How it works" link for supervisors/managers/the director, and this in-app overlay. One file to update when the tour changes. Shown automatically once per device (after sign-in), and on demand from Settings. */
+const TOUR_SEEN_KEY = 'pct_tour_seen_v1';
+async function openTour(auto){
+  if(document.getElementById('tourOverlay')) return;
+  try{
+    const res = await fetch('tour.html', {method:'HEAD', cache:'no-store'});
+    if(!res.ok) throw new Error('tour.html not found');
+  }catch(e){
+    if(!auto) toast('Tour unavailable — check tour.html is uploaded and you are online');
+    return; // auto: stay silent and try again next launch (seen flag is not set)
+  }
+  const ov = document.createElement('div');
+  ov.id = 'tourOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg);box-sizing:border-box;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);'; // safe-area padding lives here: iOS doesn't pass notch/home-bar insets into an iframe
+  ov.innerHTML = '<iframe src="tour.html?app=1" title="App tour" style="border:0;width:100%;height:100%;display:block;background:var(--bg);"></iframe>';
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+}
+function closeTour(){
+  const ov = document.getElementById('tourOverlay');
+  if(ov) ov.remove();
+  document.body.style.overflow = '';
+  safeLocalSet(TOUR_SEEN_KEY, '1');
+}
+window.addEventListener('message', e=>{
+  if(e.origin !== location.origin) return;
+  if(e.data && e.data.type === 'ci-tour-done') closeTour();
+});
+function tourLink(){ return new URL('tour.html', location.href).href; }
+async function copyTourLink(){
+  const link = tourLink();
+  try{ await navigator.clipboard.writeText(link); toast('Tour link copied — paste it in a text or email'); }
+  catch(e){ prompt('Copy this link:', link); }
+}
+async function shareTourLink(){
+  const link = tourLink();
+  if(navigator.share){
+    try{ await navigator.share({title:'Packaging CI Tracker — how it works', url:link}); }catch(e){ /* user cancelled the share sheet */ }
+  } else { copyTourLink(); }
+}
+
 /* ============ INIT ============ */
 (function bootstrap(){
   firebase.initializeApp(FIREBASE_CONFIG);
@@ -2964,6 +3015,7 @@ async function startApp(){
   await Store.init();
   await migrateReasonLabels();
   render();
+  if(!safeLocalGet(TOUR_SEEN_KEY)) openTour(true);
   setInterval(updateClock, 30000);
   setInterval(()=>{ if(Router.current==='live'||Router.current==='dashboard') render(); }, 30000);
 
