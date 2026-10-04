@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v88 - 2026-10-03 (fixed: PLH PDF machine heading now always moves to the next page together with its first job card)';
+const APP_VERSION = 'v89 - 2026-10-04 (downtime reasons cleaned up: MAREL reasons grouped with "MAREL - " prefix, clearer chicken muscle / byproduct / slicer wording, old records renamed to match)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -180,7 +180,7 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','Waiting for MAREL Cut Meat','MAREL Switching Product','MAREL Cutting Meat for Variovac 1','MAREL Cutting Meat for Variovac 2','MAREL Cutting Chicken Muscle','Meat Ready but MAREL Cutting for Variovac 1','Meat Ready but MAREL Cutting for Variovac 2','MAREL Waiting for Trimmed Meat','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Chicken Diced','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat for SLICER','Waiting for Chicken Muscle','Waiting for End Cut','Waiting for Tenderloin BYPRODUCT','Waiting for BYPRODUCT','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Waiting for It to Cut Meat','MAREL - Switching Product','MAREL - Cutting Chicken Muscle','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Waiting for Management Confirmation/Decision','Label Boxes','Scheduled Stretching','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
@@ -192,7 +192,42 @@ function reasonClassification(category){ return WAITING_CATEGORIES[category] ? W
 /* When a generic "Other" reason was picked, use the operator's note as the specific label wherever reasons are shown or ranked */
 function effectiveReasonLabel(r){
   if(r.reason && /other/i.test(r.reason) && r.notes && r.notes.trim()){ return r.notes.trim(); }
-  return r.reason;
+  return REASON_RENAMES[r.reason] || r.reason;
+}
+/* v88 reason cleanup: old label -> new label. Existing records are migrated on load (migrateReasonLabels) so totals stay combined under one name; effectiveReasonLabel also maps them as a fallback in case an older app version on another device writes an old label. The two removed reasons ("MAREL Cutting Meat for Variovac 1/2") are merged into their closest remaining reason. */
+const REASON_RENAMES = {
+  'Waiting for MAREL Cut Meat':'MAREL - Waiting for It to Cut Meat',
+  'MAREL Switching Product':'MAREL - Switching Product',
+  'MAREL Cutting Chicken Muscle':'MAREL - Cutting Chicken Muscle',
+  'Meat Ready but MAREL Cutting for Variovac 1':'MAREL - Meat Ready, but Cutting for Variovac 1',
+  'Meat Ready but MAREL Cutting for Variovac 2':'MAREL - Meat Ready, but Cutting for Variovac 2',
+  'MAREL Cutting Meat for Variovac 1':'MAREL - Meat Ready, but Cutting for Variovac 1',
+  'MAREL Cutting Meat for Variovac 2':'MAREL - Meat Ready, but Cutting for Variovac 2',
+  'MAREL Waiting for Trimmed Meat':'MAREL - Waiting for Trimmed Meat',
+  'Waiting for Chicken Muscle':'Waiting for Chicken Muscle (Trimmer Cutting by Hand)',
+  'Waiting for Chicken Diced':'Waiting for Diced Chicken',
+  'Waiting for Band Saw Cut Meat for SLICER':'Waiting for Band Saw Cut Meat (for Slicer)',
+  'Waiting for Tenderloin BYPRODUCT':'Waiting for Tenderloin Byproduct',
+  'Waiting for BYPRODUCT':'Waiting for Byproduct'
+};
+/* Replaces any string value that EXACTLY equals an old reason label, anywhere inside a record (incl. PLH downtime segments). Notes and other free text are never touched because they never match exactly. Returns the number of replacements. */
+function renameReasonsDeep(obj){
+  let n=0;
+  if(Array.isArray(obj)){ obj.forEach((v,i)=>{ if(typeof v==='string' && REASON_RENAMES[v]){ obj[i]=REASON_RENAMES[v]; n++; } else if(v && typeof v==='object') n+=renameReasonsDeep(v); }); }
+  else if(obj && typeof obj==='object'){ Object.keys(obj).forEach(k=>{ const v=obj[k]; if(typeof v==='string' && REASON_RENAMES[v]){ obj[k]=REASON_RENAMES[v]; n++; } else if(v && typeof v==='object') n+=renameReasonsDeep(v); }); }
+  return n;
+}
+async function migrateReasonLabels(){
+  try{
+    if(!Store.ready) return;
+    const nR = renameReasonsDeep(Store.records);
+    const nD = renameReasonsDeep(Store.dailyReports);
+    const nL = renameReasonsDeep(Store.liveRuns);
+    if(nR) await Store.saveRecords();
+    if(nD) await Store.saveDailyReports();
+    if(nL) await Store.saveLiveRuns();
+    if(nR+nD+nL) toast(`Updated ${nR+nD+nL} old downtime reason label${nR+nD+nL===1?'':'s'} to the new names`);
+  }catch(e){ console.error('reason label migration failed', e); }
 }
 
 /* ============ STORAGE LAYER — Firebase Firestore (real-time, cloud-synced across every device) ============ */
@@ -2927,6 +2962,7 @@ Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ docume
 })();
 async function startApp(){
   await Store.init();
+  await migrateReasonLabels();
   render();
   setInterval(updateClock, 30000);
   setInterval(()=>{ if(Router.current==='live'||Router.current==='dashboard') render(); }, 30000);
