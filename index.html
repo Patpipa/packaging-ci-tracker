@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v87 - 2026-08-19 (fixed: PLH PDF Report could strand a machine heading alone at the bottom of a page)';
+const APP_VERSION = 'v88 - 2026-10-03 (fixed: PLH PDF machine heading now always moves to the next page together with its first job card)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -891,11 +891,15 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
     const list = byMachine[m];
     const mSummary = computePLHSummary(list);
     return `
-    <div style="margin-top:8px;margin-bottom:6px;page-break-after:avoid;page-break-inside:avoid;">
-      <div style="font-size:17px;font-weight:700;color:#1a1a2e;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin-bottom:4px;">${m}</div>
-      <div style="font-size:11.5px;color:#666;margin-bottom:10px;">${list.length} job${list.length===1?'':'s'} · ${Math.round(mSummary.totalWeight)} lbs total · avg ${mSummary.grossPLH.toFixed(1)} lbs/hr Gross</div>
+    <!-- html2pdf ignores page-break-after:avoid, so the machine heading is wrapped together with its FIRST job card in one unbreakable block — they always land on the same page, and the heading can never be stranded alone at the bottom of a page. -->
+    <div style="page-break-inside:avoid;break-inside:avoid;">
+      <div style="margin-top:8px;margin-bottom:6px;">
+        <div style="font-size:17px;font-weight:700;color:#1a1a2e;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin-bottom:4px;">${m}</div>
+        <div style="font-size:11.5px;color:#666;margin-bottom:10px;">${list.length} job${list.length===1?'':'s'} · ${Math.round(mSummary.totalWeight)} lbs total · avg ${mSummary.grossPLH.toFixed(1)} lbs/hr Gross</div>
+      </div>
+      ${plhJobBlockHTML(list[0])}
     </div>
-    ${list.map(plhJobBlockHTML).join('')}`;
+    ${list.slice(1).map(plhJobBlockHTML).join('')}`;
   }).join('');
 
   return `
