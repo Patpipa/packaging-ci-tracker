@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v83 - 2026-08-19 (fixed: PLH PDF Report was generating blank — off-screen rendering bug in html2canvas, now renders on-screen)';
+const APP_VERSION = 'v84 - 2026-08-19 (fixed: could not edit Qty/Weight on an already-completed PLH record — button was hidden, notes could duplicate)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1824,7 +1824,8 @@ function renderHistory(){
 
   const items = recs.length ? recs.map(r=>{
     const si = statusInfo(r.status);
-    const needsPLHData = r.status==='RUNNING' && (!r.plh || r.plh.grossPLH==null);
+    const showsPLHButton = r.status==='RUNNING';
+    const plhButtonLabel = (r.plh && r.plh.grossPLH!=null) ? '✎ Edit Qty/Weight (PLH)' : '📦 Add Qty/Weight (PLH)';
     const hasTimeline = r.plh && r.plh.segments && r.plh.segments.length;
     const isExpanded = expandedTimelineIds.has(r.id);
     return `<div class="hist-item">
@@ -1834,7 +1835,7 @@ function renderHistory(){
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
       ${hasTimeline ? `<div style="cursor:pointer;color:var(--brk);font-size:12px;margin-top:6px;text-decoration:underline;" onclick="toggleTimeline('${r.id}')">${isExpanded?'▾':'▸'} View Timeline</div>` : ''}
       ${hasTimeline && isExpanded ? renderTimelineRows(r) : ''}
-      ${needsPLHData ? `<button class="btn btn-ghost" style="margin-top:6px;padding:8px;font-size:12px;" onclick="openAddPLHData('${r.id}')">📦 Add Qty/Weight (PLH)</button>` : ''}
+      ${showsPLHButton ? `<button class="btn btn-ghost" style="margin-top:6px;padding:8px;font-size:12px;" onclick="openAddPLHData('${r.id}')">${plhButtonLabel}</button>` : ''}
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editRecord('${r.id}')">✎</div>
         <div class="iconsmall" onclick="deleteRecord('${r.id}')">🗑</div>
@@ -1910,7 +1911,9 @@ async function confirmAddPLHData(){
   const grossPLH = p.grossLaborHours>0 ? weightNum/p.grossLaborHours : null;
   const netPLH = p.netLaborHours>0 ? weightNum/p.netLaborHours : null;
   const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH};
-  let notes = (r.notes||'').replace('Qty/Weight not entered yet — add later from History', '').replace(/ · $/,'').replace(/^ · /,'');
+  // Strip any previously-generated summary (the placeholder text, or a prior real Qty/Weight/Labour/PLH block from an earlier edit) so correcting a value replaces it cleanly instead of stacking a second, conflicting summary alongside the old one
+  let notes = (r.notes||'').replace('Qty/Weight not entered yet — add later from History', '');
+  notes = notes.replace(/\s*·?\s*Qty:.*$/s, '').replace(/ · $/,'').replace(/^ · /,'').trim();
   const extras = [`Qty: ${qtyNum}`, `Weight: ${weightNum} lbs`, `Labour: ${p.grossLaborHours.toFixed(1)}h gross / ${p.netLaborHours.toFixed(1)}h net`, `PLH: ${grossPLH.toFixed(0)} gross${netPLH!=null?' / '+netPLH.toFixed(0)+' net':''}`];
   if(updatedPLH.targetPLH){
     const variance = grossPLH - updatedPLH.targetPLH;
