@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v80 - 2026-08-19 (PLH PDF Report now shows a preview with Share/Close, no blind download)';
+const APP_VERSION = 'v81 - 2026-08-19 (fixed: PLH PDF Report was blank — Safari blocks iframe+blob PDFs, now opens in a new tab)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -928,8 +928,6 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
     </div>
   </div>`;
 }
-let plhReportPreviewBlob = null;
-let plhReportPreviewFilename = '';
 async function exportPLHReportPDF(){
   const startDate = plhLogRange.start, endDate = plhLogRange.end;
   const html = renderPLHReportHTML(startDate, endDate, plhLogFilters.machine);
@@ -950,8 +948,6 @@ async function exportPLHReportPDF(){
       pagebreak: {mode:['css','avoid-all']}
     }).from(container);
     const pdfBlob = await worker.outputPdf('blob');
-    plhReportPreviewBlob = pdfBlob;
-    plhReportPreviewFilename = filename;
     showPLHReportPreview(pdfBlob);
   }catch(e){
     console.error('PLH report PDF export failed', e);
@@ -960,47 +956,17 @@ async function exportPLHReportPDF(){
     document.body.removeChild(container);
   }
 }
+/* Safari (iOS and macOS alike) has a long-standing, well-documented bug where PDFs rendered from a blob: URL inside an iframe show blank — confirmed as the exact cause of the empty preview. The reliable fix is to hand the PDF off to Safari's own native PDF viewer in a new tab rather than trying to embed it ourselves: that viewer actually renders the content, and it already has its own built-in zoom, scroll, print, and Share controls, so no custom overlay is needed. */
 function showPLHReportPreview(blob){
   const url = URL.createObjectURL(blob);
-  const overlay = document.createElement('div');
-  overlay.id = 'plhPdfPreviewOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#1a1a1a;display:flex;flex-direction:column;';
-  overlay.dataset.blobUrl = url;
-  overlay.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#000;color:#fff;border-bottom:1px solid #333;flex-shrink:0;">
-      <div style="font-weight:700;font-size:15px;font-family:'Oswald';letter-spacing:0.03em;">PDF PREVIEW</div>
-      <div style="display:flex;gap:10px;">
-        <button onclick="sharePLHReportPDF()" style="background:#fff;color:#000;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:13px;">Share</button>
-        <button onclick="closePLHReportPreview()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;font-size:13px;">Close</button>
-      </div>
-    </div>
-    <iframe src="${url}" style="flex:1;border:none;width:100%;background:#fff;"></iframe>
-  `;
-  document.body.appendChild(overlay);
-}
-function closePLHReportPreview(){
-  const overlay = document.getElementById('plhPdfPreviewOverlay');
-  if(overlay){
-    URL.revokeObjectURL(overlay.dataset.blobUrl);
-    document.body.removeChild(overlay);
+  const win = window.open(url, '_blank');
+  if(!win){
+    toast('Pop-up blocked — allow pop-ups for this site, then try again');
+    URL.revokeObjectURL(url);
+    return;
   }
-  plhReportPreviewBlob = null;
-}
-async function sharePLHReportPDF(){
-  if(!plhReportPreviewBlob) return;
-  const file = new File([plhReportPreviewBlob], plhReportPreviewFilename, {type:'application/pdf'});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{
-      await navigator.share({files:[file], title:'PLH Report'});
-    }catch(e){ /* user cancelled the share sheet — not an error */ }
-  } else {
-    const url = URL.createObjectURL(plhReportPreviewBlob);
-    const a = document.createElement('a');
-    a.href = url; a.download = plhReportPreviewFilename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 1000);
-    toast('Downloaded — share it from Files');
-  }
+  // Keep the blob alive long enough for the new tab to finish loading it, then free the memory
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
 }
 function renderPLHRunDetail(id){
   const r = Store.records.find(x=>x.id===id);
