@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v81 - 2026-08-19 (fixed: PLH PDF Report was blank — Safari blocks iframe+blob PDFs, now opens in a new tab)';
+const APP_VERSION = 'v82 - 2026-08-19 (fixed: PLH PDF Report was still blank in a new tab too — now triggers a real file download instead)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -948,7 +948,7 @@ async function exportPLHReportPDF(){
       pagebreak: {mode:['css','avoid-all']}
     }).from(container);
     const pdfBlob = await worker.outputPdf('blob');
-    showPLHReportPreview(pdfBlob);
+    showPLHReportPreview(pdfBlob, filename);
   }catch(e){
     console.error('PLH report PDF export failed', e);
     toast('PDF export failed');
@@ -956,17 +956,17 @@ async function exportPLHReportPDF(){
     document.body.removeChild(container);
   }
 }
-/* Safari (iOS and macOS alike) has a long-standing, well-documented bug where PDFs rendered from a blob: URL inside an iframe show blank — confirmed as the exact cause of the empty preview. The reliable fix is to hand the PDF off to Safari's own native PDF viewer in a new tab rather than trying to embed it ourselves: that viewer actually renders the content, and it already has its own built-in zoom, scroll, print, and Share controls, so no custom overlay is needed. */
-function showPLHReportPreview(blob){
+/* Safari (iOS and macOS alike) is unreliable at rendering a PDF purely from an in-memory blob: URL, whether embedded in an iframe or opened directly in a new tab — confirmed blank on both approaches, on both devices, even with pop-ups explicitly allowed. The one thing that's always been reliable is a real file: triggering an actual download, so Preview.app / the Files app / the iOS share sheet are handling a genuine saved PDF rather than a transient in-browser reference. */
+function showPLHReportPreview(blob, filename){
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
-  if(!win){
-    toast('Pop-up blocked — allow pop-ups for this site, then try again');
-    URL.revokeObjectURL(url);
-    return;
-  }
-  // Keep the blob alive long enough for the new tab to finish loading it, then free the memory
-  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'PLH-Report.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  toast('PDF saved — open it from Downloads (Mac) or your Files app (iPhone)');
 }
 function renderPLHRunDetail(id){
   const r = Store.records.find(x=>x.id===id);
