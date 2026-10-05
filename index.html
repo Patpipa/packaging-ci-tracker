@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v93 - 2026-10-05 (fixed: PDF reports exported on a computer came out shifted left/cut off with a blank right side — now identical to iPhone exports)';
+const APP_VERSION = 'v94 - 2026-10-05 (fixed: PDFs exported on a computer were still shifted left/cut off — the real cause was the PDF snapshot width on wide screens)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1012,7 +1012,7 @@ async function buildHtmlReportPDF(html, filename){
     const pdfBlob = await html2pdf().set({
       margin: [20, 0, 20, 0],
       filename,
-      html2canvas: {scale:2, useCORS:true, scrollX:0, scrollY:0, windowWidth: PDF_PAGE_WIDTH_PX},
+      html2canvas: {scale:2, useCORS:true, scrollX:0, scrollY:0, windowWidth: Math.max(window.innerWidth, PDF_PAGE_WIDTH_PX)}, // v94: html2pdf centres its own capture box in the window (margin:auto). On a wide screen (MacBook) that box sits ~300px from the left; forcing the snapshot window to 816px moved it to 0 while the crop still started at ~300px, so the PDF came out shifted left. The snapshot window must match the real window when it's wider than the page; phones (narrower) still use 816px, which already worked.
       jsPDF: {unit:'pt', format:'letter', orientation:'portrait'},
       pagebreak: {mode:['css','avoid-all']}
     }).from(reportEl).outputPdf('blob');
