@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v91 - 2026-10-05 (new: Upstream Impact Summary — weekly waiting time by upstream department, PDF with blank Agreed Actions table)';
+const APP_VERSION = 'v92 - 2026-10-05 (fixed: PDF reports had blank space above the header and cut-off cards when exported after scrolling; now fill the page width and have top/bottom margins on every page)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -939,7 +939,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
   }).join('');
 
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;background:#fff;width:720px;">
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;background:#fff;width:816px;">
     <div style="background:#1e3a5f;color:#fff;padding:26px 36px;">
       <div style="font-size:24px;font-weight:700;">Daily PLH Report</div>
       <div style="font-size:12.5px;opacity:0.85;margin-top:4px;">${dateLabel}${machineFilter?` · ${machineFilter}`:''} &nbsp;|&nbsp; Prepared by Walter</div>
@@ -985,40 +985,50 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
     </div>
   </div>`;
 }
-async function exportPLHReportPDF(){
-  const startDate = plhLogRange.start, endDate = plhLogRange.end;
-  const html = renderPLHReportHTML(startDate, endDate, plhLogFilters.machine);
-  // Positioning the source element off-screen (left:-9999px) is a long-documented html2canvas bug that silently captures a blank image — confirmed as the actual cause of the blank PDF. The reliable fix is to render it genuinely on-screen (briefly, in a loading overlay) instead of trying to hide it off in the margin.
+/* Shared HTML→PDF builder for the PLH and Upstream Impact reports.
+v92 fixes (found from a real iPhone export):
+ 1. Blank space above the header + content cut mid-card: html2canvas captures relative to the page's CURRENT scroll position, so exporting after scrolling down (the Export button sits at the bottom of a long view) shifted the whole report down the page and threw off the page breaks. Fix: scroll to the top first and pass scrollX/scrollY 0, then restore the user's scroll.
+ 2. White strip down the right side: a Letter page is 816px wide in html2pdf's layout, but the reports were 720px — so they never filled the page. Fix: the report is widened to the page width.
+ 3. Content touching the paper edge on page 2+: a 20pt top/bottom page margin on every page. */
+const PDF_PAGE_WIDTH_PX = 816;
+async function buildHtmlReportPDF(html, filename){
+  const savedScroll = window.scrollY;
+  window.scrollTo(0, 0);
   const backdrop = document.createElement('div');
-  backdrop.id = 'plhPdfBuildBackdrop';
   backdrop.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#111;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 0;';
   const banner = document.createElement('div');
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1e3a5f;color:#fff;text-align:center;padding:10px;font-family:Arial;font-size:13px;';
   banner.textContent = 'Building your PDF report…';
   const container = document.createElement('div');
   container.innerHTML = html;
+  const reportEl = container.firstElementChild;
+  reportEl.style.width = PDF_PAGE_WIDTH_PX + 'px';
+  reportEl.style.boxSizing = 'border-box';
   backdrop.appendChild(container);
   document.body.appendChild(backdrop);
   document.body.appendChild(banner);
   toast('Building PDF…');
   try{
-    const filename = `PLH-Report-${startDate}${endDate!==startDate?'_to_'+endDate:''}.pdf`;
-    const worker = html2pdf().set({
-      margin: 0,
+    const pdfBlob = await html2pdf().set({
+      margin: [20, 0, 20, 0],
       filename,
-      html2canvas: {scale:2, useCORS:true},
+      html2canvas: {scale:2, useCORS:true, scrollX:0, scrollY:0, windowWidth: PDF_PAGE_WIDTH_PX},
       jsPDF: {unit:'pt', format:'letter', orientation:'portrait'},
       pagebreak: {mode:['css','avoid-all']}
-    }).from(container.firstElementChild);
-    const pdfBlob = await worker.outputPdf('blob');
+    }).from(reportEl).outputPdf('blob');
     showPLHReportPreview(pdfBlob, filename);
   }catch(e){
-    console.error('PLH report PDF export failed', e);
+    console.error('PDF export failed', e);
     toast('PDF export failed');
   }finally{
-    document.body.removeChild(backdrop);
-    document.body.removeChild(banner);
+    backdrop.remove(); banner.remove();
+    window.scrollTo(0, savedScroll);
   }
+}
+async function exportPLHReportPDF(){
+  const startDate = plhLogRange.start, endDate = plhLogRange.end;
+  const html = renderPLHReportHTML(startDate, endDate, plhLogFilters.machine);
+  await buildHtmlReportPDF(html, `PLH-Report-${startDate}${endDate!==startDate?'_to_'+endDate:''}.pdf`);
 }
 /* Safari (iOS and macOS alike) is unreliable at rendering a PDF purely from an in-memory blob: URL, whether embedded in an iframe or opened directly in a new tab — confirmed blank on both approaches, on both devices, even with pop-ups explicitly allowed. The one thing that's always been reliable is a real file: triggering an actual download, so Preview.app / the Files app / the iOS share sheet are handling a genuine saved PDF rather than a transient in-browser reference. */
 function showPLHReportPreview(blob, filename){
@@ -3089,16 +3099,16 @@ function renderUpstreamReportHTML(start, end){
       <td style="${td}">${d.count}</td>
       <td style="${td}">${Math.round(d.share)}%</td>
       <td style="${td}color:${t.color};">${t.text}</td></tr>`; }).join('');
-  const detail = u.list.map(d=>`
+  const detailBlocks = u.list.map(d=>`
     <div style="page-break-inside:avoid;break-inside:avoid;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;"><span>${escapeHtml(d.name)}</span><span style="color:#8e44ad;">${fmtDur(d.totalMin)}</span></div>
       <div style="font-size:11px;color:#777;margin:2px 0 8px;">${d.count} stop${d.count===1?'':'s'} · avg ${fmtDur(d.totalMin/d.count)} each · machines: ${d.machines.map(([m,min])=>`${escapeHtml(m)} (${fmtDur(min)})`).join(', ')}</div>
       ${d.reasons.slice(0,3).map(r=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-top:1px dashed #eee;"><span>${escapeHtml(r.label)}</span><span style="color:#555;">${fmtDur(r.totalMin)} · ${r.count}×</span></div>`).join('')}
-    </div>`).join('');
+    </div>`);
   const blank = '<div style="border-bottom:1px solid #bbb;height:22px;"></div>';
   const actionRows = u.list.map(d=>`<tr><td style="${td}font-weight:700;width:22%;">${escapeHtml(d.name)}</td><td style="${td}width:44%;">${blank}</td><td style="${td}width:18%;">${blank}</td><td style="${td}width:16%;">${blank}</td></tr>`).join('');
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;background:#fff;width:720px;">
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;background:#fff;width:816px;">
     <div style="background:#1e3a5f;color:#fff;padding:26px 36px;">
       <div style="font-size:24px;font-weight:700;">Upstream Impact Summary</div>
       <div style="font-size:12.5px;opacity:0.85;margin-top:4px;">${dateLabel} &nbsp;|&nbsp; Prepared by Walter, Packaging</div>
@@ -3121,8 +3131,11 @@ function renderUpstreamReportHTML(start, end){
           ${rows}
         </table>
       </div>
-      <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Top Reasons per Department</div>
-      ${detail}
+      <div style="page-break-inside:avoid;break-inside:avoid;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Top Reasons per Department</div>
+        ${detailBlocks[0]||''}
+      </div>
+      ${detailBlocks.slice(1).join('')}
       <div style="page-break-inside:avoid;break-inside:avoid;margin-top:16px;">
         <div style="font-size:15px;font-weight:700;margin-bottom:2px;">Agreed Actions</div>
         <div style="font-size:11px;color:#777;margin-bottom:6px;">To be completed by each department during the meeting.</div>
@@ -3142,32 +3155,7 @@ function renderUpstreamReportHTML(start, end){
 async function exportUpstreamPDF(){
   const {start, end} = upstreamRange;
   if(!upstreamRecordsInRange(start, end).length){ toast('No upstream waiting time in this range'); return; }
-  const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#111;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 0;';
-  const banner = document.createElement('div');
-  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1e3a5f;color:#fff;text-align:center;padding:10px;font-family:Arial;font-size:13px;';
-  banner.textContent = 'Building your PDF report…';
-  const container = document.createElement('div');
-  container.innerHTML = renderUpstreamReportHTML(start, end);
-  backdrop.appendChild(container);
-  document.body.appendChild(backdrop);
-  document.body.appendChild(banner);
-  toast('Building PDF…');
-  try{
-    const filename = `Upstream-Impact-${start}${end!==start?'_to_'+end:''}.pdf`;
-    const pdfBlob = await html2pdf().set({
-      margin: 0, filename,
-      html2canvas: {scale:2, useCORS:true},
-      jsPDF: {unit:'pt', format:'letter', orientation:'portrait'},
-      pagebreak: {mode:['css','avoid-all']}
-    }).from(container.firstElementChild).outputPdf('blob');
-    showPLHReportPreview(pdfBlob, filename);
-  }catch(e){
-    console.error('Upstream PDF export failed', e);
-    toast('PDF export failed');
-  }finally{
-    backdrop.remove(); banner.remove();
-  }
+  await buildHtmlReportPDF(renderUpstreamReportHTML(start, end), `Upstream-Impact-${start}${end!==start?'_to_'+end:''}.pdf`);
 }
 
 /* ============ APP TOUR ============
