@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v92 - 2026-10-05 (fixed: PDF reports had blank space above the header and cut-off cards when exported after scrolling; now fill the page width and have top/bottom margins on every page)';
+const APP_VERSION = 'v93 - 2026-10-05 (fixed: PDF reports exported on a computer came out shifted left/cut off with a blank right side — now identical to iPhone exports)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -995,7 +995,7 @@ async function buildHtmlReportPDF(html, filename){
   const savedScroll = window.scrollY;
   window.scrollTo(0, 0);
   const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#111;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 0;';
+  backdrop.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#111;display:block;overflow:auto;padding:30px 0;'; // v93: report pinned to the LEFT edge (was centred). On a wide screen (MacBook) centring put it ~300px from the left, but html2canvas re-draws the page at the report's own 816px width (where it sits at x=0) while still cropping from the original ~300px offset, so the PDF came out shifted left with a blank strip on the right. Phones never showed it because their screen is narrower than the report, so it already started at x=0.
   const banner = document.createElement('div');
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1e3a5f;color:#fff;text-align:center;padding:10px;font-family:Arial;font-size:13px;';
   banner.textContent = 'Building your PDF report…';
