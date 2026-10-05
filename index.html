@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v90 - 2026-10-04 (new: illustrated App Tour — shows once per device, replay/share from Settings; needs tour.html uploaded next to index.html)';
+const APP_VERSION = 'v91 - 2026-10-05 (new: Upstream Impact Summary — weekly waiting time by upstream department, PDF with blank Agreed Actions table)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -560,11 +560,11 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis', upstreamImpact:'Upstream Impact'};
   document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (titles[Router.current] || 'CI Tracker');
   updateClock();
   let html = '';
@@ -578,6 +578,7 @@ function render(){
     case 'weekly': html += renderWeeklyView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
+    case 'upstreamImpact': html += renderUpstreamImpactView(); break;
     case 'addPLHData': html += renderAddPLHDataForm(); break;
     case 'live': html += renderLive(); break;
     case 'products': html += renderProductsView(); break;
@@ -2449,6 +2450,7 @@ function renderReportsList(){
   let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('upstreamImpact')">🏭 Upstream Impact Summary</button>`;
   if(!list.length){ html += '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>'; return html; }
   html += list.map(r=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
@@ -2956,6 +2958,217 @@ function afterRender(){
 }
 const _origGo = Router.go.bind(Router);
 Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); } if(view==='new'){ if(!draft) draft=freshDraft(); } };
+
+/* ============ UPSTREAM IMPACT SUMMARY ============
+One-page summary of packaging WAITING time caused by upstream departments, for cross-department meetings. Packaging measures; the owning department decides the fix — so the page states measured facts only and leaves a blank "Agreed Actions" table for management to fill in.
+Department mapping is fixed here. Any upstream reason not listed (incl. future new reasons) falls into "Others" so it's never silently dropped. Matching uses the renamed label (REASON_RENAMES) so old records map correctly too. */
+const UPSTREAM_DEPARTMENTS = [
+  {name:'MAREL', match:r=>/^MAREL - /.test(r)},
+  {name:'Trimmers', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Byproduct','Waiting for Tenderloin Byproduct','Waiting for End Cut']},
+  {name:'Band Saw', reasons:['Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)']},
+  {name:'Burger Room', reasons:['Waiting for Burger Room Product']},
+  {name:'Warehouse', reasons:['Waiting for Warehouse to Scan In Product']},
+  {name:'Production Planning', reasons:['Product Not Thawed/Ready','Production Department Behind Schedule','Product Shortage']}
+];
+const UPSTREAM_OTHERS = 'Others';
+function upstreamDeptFor(reason){
+  const r = REASON_RENAMES[reason] || reason || '';
+  const d = UPSTREAM_DEPARTMENTS.find(d=> d.match ? d.match(r) : d.reasons.includes(r));
+  return d ? d.name : UPSTREAM_OTHERS;
+}
+function upstreamRecordsInRange(start, end){
+  return Store.records.filter(r=>r.date>=start && r.date<=end && r.status==='WAITING' && r.classification==='upstream');
+}
+function previousPeriod(start, end){
+  const s = new Date(start+'T00:00:00'), e = new Date(end+'T00:00:00');
+  const days = Math.round((e-s)/86400000)+1;
+  const pe = new Date(s); pe.setDate(pe.getDate()-1);
+  const ps = new Date(pe); ps.setDate(ps.getDate()-(days-1));
+  return {start:localDateStr(ps), end:localDateStr(pe), days};
+}
+function computeUpstreamImpact(start, end){
+  const recs = upstreamRecordsInRange(start, end);
+  const allDown = Store.records.filter(r=>r.date>=start && r.date<=end && (r.status==='WAITING'||r.status==='CHANGEOVER'));
+  const allDownMin = allDown.reduce((a,r)=>a+(r.durationMin||0),0);
+  const prev = previousPeriod(start, end);
+  const prevByDept = {};
+  upstreamRecordsInRange(prev.start, prev.end).forEach(r=>{ const d=upstreamDeptFor(r.reason); prevByDept[d]=(prevByDept[d]||0)+(r.durationMin||0); });
+  const prevHasData = Store.records.some(r=>r.date>=prev.start && r.date<=prev.end);
+  const depts = {};
+  recs.forEach(r=>{
+    const name = upstreamDeptFor(r.reason);
+    const g = depts[name] || (depts[name] = {name, totalMin:0, count:0, reasons:{}, machines:{}});
+    const min = r.durationMin||0;
+    g.totalMin += min; g.count++;
+    const label = effectiveReasonLabel(r) || 'Waiting';
+    const rg = g.reasons[label] || (g.reasons[label] = {label, totalMin:0, count:0});
+    rg.totalMin += min; rg.count++;
+    g.machines[r.machine] = (g.machines[r.machine]||0) + min;
+  });
+  const totalMin = recs.reduce((a,r)=>a+(r.durationMin||0),0);
+  const list = Object.values(depts).map(g=>({
+    ...g,
+    share: totalMin>0 ? g.totalMin/totalMin*100 : 0,
+    reasons: Object.values(g.reasons).sort((a,b)=>b.totalMin-a.totalMin),
+    machines: Object.entries(g.machines).sort((a,b)=>b[1]-a[1]),
+    prevMin: prevByDept[g.name]||0
+  })).sort((a,b)=> (a.name===UPSTREAM_OTHERS) - (b.name===UPSTREAM_OTHERS) || b.totalMin-a.totalMin);
+  const prevTotal = Object.values(prevByDept).reduce((a,b)=>a+b,0);
+  return {list, totalMin, count:recs.length, allDownMin, sharePct: allDownMin>0 ? Math.round(totalMin/allDownMin*100) : 0, prev, prevTotal, prevHasData, days:new Set(recs.map(r=>r.date)).size};
+}
+/* Change vs the previous period of the same length. More waiting = red (worse), less = green. */
+function upstreamTrend(cur, prev, hasPrev, forPdf){
+  if(!hasPrev) return {text:'no earlier data', color: forPdf?'#999':'var(--muted)'};
+  const diff = Math.round(cur - prev);
+  if(prev<=0 && cur>0) return {text:'new this period', color: forPdf?'#c0392b':'var(--wait)'};
+  if(diff===0) return {text:'no change', color: forPdf?'#999':'var(--muted)'};
+  const pct = prev>0 ? Math.round(Math.abs(diff)/prev*100) : 0;
+  return diff>0
+    ? {text:`▲ ${fmtDur(diff)} more (+${pct}%)`, color: forPdf?'#c0392b':'var(--wait)'}
+    : {text:`▼ ${fmtDur(-diff)} less (−${pct}%)`, color: forPdf?'#2e8b57':'var(--run)'};
+}
+let upstreamRange = null;
+function upstreamPresetRange(preset){
+  const today = new Date();
+  const dow = (today.getDay()+6)%7; // Mon=0
+  const monday = new Date(today); monday.setDate(today.getDate()-dow);
+  if(preset==='thisWeek') return {preset, start:localDateStr(monday), end:localDateStr(today)};
+  if(preset==='lastWeek'){ const s=new Date(monday); s.setDate(monday.getDate()-7); const e=new Date(monday); e.setDate(monday.getDate()-1); return {preset, start:localDateStr(s), end:localDateStr(e)}; }
+  const s=new Date(today); s.setDate(today.getDate()-6); return {preset:'last7', start:localDateStr(s), end:localDateStr(today)};
+}
+function setUpstreamPreset(p){ upstreamRange = upstreamPresetRange(p); render(); }
+function renderUpstreamImpactView(){
+  if(!upstreamRange) upstreamRange = upstreamPresetRange('lastWeek');
+  const {start, end} = upstreamRange;
+  const u = computeUpstreamImpact(start, end);
+  const presetBtn = (k,l)=>`<button class="btn ${upstreamRange.preset===k?'btn-primary':'btn-ghost'}" style="padding:10px 6px;font-size:13px;" onclick="setUpstreamPreset('${k}')">${l}</button>`;
+  const maxMin = u.list.length ? Math.max(...u.list.map(d=>d.totalMin)) : 1;
+  const totalTrend = upstreamTrend(u.totalMin, u.prevTotal, u.prevHasData);
+  let html = `
+  <div class="card">
+    <div class="btnrow" style="margin-bottom:10px;">${presetBtn('lastWeek','Last Week')}${presetBtn('thisWeek','This Week')}${presetBtn('last7','Last 7 Days')}</div>
+    <div class="grid3" style="grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field"><label>Start</label><input type="date" value="${start}" onchange="upstreamRange={preset:'custom',start:this.value,end:upstreamRange.end}; render()"></div>
+      <div class="field"><label>End</label><input type="date" value="${end}" onchange="upstreamRange={preset:'custom',start:upstreamRange.start,end:this.value}; render()"></div>
+    </div>
+  </div>`;
+  if(start>end){ return html + '<div class="empty">Start date is after the end date.</div>'; }
+  if(!u.count){ return html + `<div class="empty">No upstream waiting time recorded between ${fmtDate(start)} and ${fmtDate(end)}.</div>`; }
+  html += `
+  <div class="card">
+    <h3>Packaging Waiting on Upstream</h3>
+    <div class="bignum" style="color:var(--up);">${fmtDur(u.totalMin)}</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5;">${u.sharePct}% of all packaging downtime · ${u.count} stop${u.count===1?'':'s'} · ${u.days} production day${u.days===1?'':'s'}</div>
+    <div style="font-size:12.5px;margin-top:6px;color:${totalTrend.color};">${totalTrend.text} <span style="color:var(--muted);">vs ${fmtDate(u.prev.start)} – ${fmtDate(u.prev.end)}</span></div>
+  </div>
+  <div class="card"><h3>By Department</h3>
+    ${u.list.map((d,i)=>`<div class="rank-item"><div class="rank-bar-wrap"><div class="rank-name">${i+1}. ${escapeHtml(d.name)} <span style="color:var(--muted);font-size:12px;">· ${Math.round(d.share)}%</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.round(d.totalMin/maxMin*100)}%;background:var(--up);"></div></div></div><div class="mono" style="font-size:13px;white-space:nowrap;">${fmtDur(d.totalMin)}</div></div>`).join('')}
+  </div>
+  ${u.list.map(d=>{
+    const t = upstreamTrend(d.totalMin, d.prevMin, u.prevHasData);
+    return `<div class="card">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">${escapeHtml(d.name)}<span class="mono" style="font-size:14px;color:var(--up);">${fmtDur(d.totalMin)}</span></h3>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">${d.count} stop${d.count===1?'':'s'} · avg ${fmtDur(d.totalMin/d.count)} each · <span style="color:${t.color};">${t.text}</span></div>
+      ${d.reasons.slice(0,3).map(r=>`<div class="statrow"><span class="lbl">${escapeHtml(r.label)}</span><span class="val" style="white-space:nowrap;">${fmtDur(r.totalMin)} · ${r.count}×</span></div>`).join('')}
+      <div style="font-size:12px;color:var(--muted);margin-top:8px;">Machines affected: ${d.machines.map(([m,min])=>`${escapeHtml(m)} (${fmtDur(min)})`).join(', ')}</div>
+    </div>`;}).join('')}
+  <button class="btn btn-primary" style="margin-bottom:10px;" onclick="exportUpstreamPDF()">📄 Export PDF for Meeting</button>
+  <div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:14px;">Counts Waiting time tagged Upstream only. Reasons without a department appear under "Others". The PDF includes a blank Agreed Actions table for each department to fill in.</div>`;
+  return html;
+}
+function renderUpstreamReportHTML(start, end){
+  const u = computeUpstreamImpact(start, end);
+  const dateLabel = start===end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`;
+  const totalTrend = upstreamTrend(u.totalMin, u.prevTotal, u.prevHasData, true);
+  const statCard = (label,val)=>`<div style="flex:1;min-width:0;background:#f7f7f7;border-radius:8px;padding:12px 14px;"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;">${label}</div><div style="font-size:20px;font-weight:700;color:#1a1a2e;margin-top:2px;">${val}</div></div>`;
+  const th = 'text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.05em;padding:6px 8px;border-bottom:2px solid #1e3a5f;';
+  const td = 'font-size:12px;color:#1a1a2e;padding:8px;border-bottom:1px solid #e6e6e6;vertical-align:top;'; // explicit colour: the app's own dark-theme table styles also apply while the PDF is built on-screen
+  const rows = u.list.map((d,i)=>{ const t=upstreamTrend(d.totalMin, d.prevMin, u.prevHasData, true); return `<tr>
+      <td style="${td}font-weight:700;">${i+1}. ${escapeHtml(d.name)}</td>
+      <td style="${td}">${fmtDur(d.totalMin)}</td>
+      <td style="${td}">${d.count}</td>
+      <td style="${td}">${Math.round(d.share)}%</td>
+      <td style="${td}color:${t.color};">${t.text}</td></tr>`; }).join('');
+  const detail = u.list.map(d=>`
+    <div style="page-break-inside:avoid;break-inside:avoid;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;"><span>${escapeHtml(d.name)}</span><span style="color:#8e44ad;">${fmtDur(d.totalMin)}</span></div>
+      <div style="font-size:11px;color:#777;margin:2px 0 8px;">${d.count} stop${d.count===1?'':'s'} · avg ${fmtDur(d.totalMin/d.count)} each · machines: ${d.machines.map(([m,min])=>`${escapeHtml(m)} (${fmtDur(min)})`).join(', ')}</div>
+      ${d.reasons.slice(0,3).map(r=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-top:1px dashed #eee;"><span>${escapeHtml(r.label)}</span><span style="color:#555;">${fmtDur(r.totalMin)} · ${r.count}×</span></div>`).join('')}
+    </div>`).join('');
+  const blank = '<div style="border-bottom:1px solid #bbb;height:22px;"></div>';
+  const actionRows = u.list.map(d=>`<tr><td style="${td}font-weight:700;width:22%;">${escapeHtml(d.name)}</td><td style="${td}width:44%;">${blank}</td><td style="${td}width:18%;">${blank}</td><td style="${td}width:16%;">${blank}</td></tr>`).join('');
+  return `
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;background:#fff;width:720px;">
+    <div style="background:#1e3a5f;color:#fff;padding:26px 36px;">
+      <div style="font-size:24px;font-weight:700;">Upstream Impact Summary</div>
+      <div style="font-size:12.5px;opacity:0.85;margin-top:4px;">${dateLabel} &nbsp;|&nbsp; Prepared by Walter, Packaging</div>
+    </div>
+    <div style="padding:24px 36px;">
+      <div style="border-left:5px solid #8e44ad;background:#f7f7f7;padding:16px 20px;margin-bottom:16px;">
+        <div style="font-size:15px;line-height:1.5;">Packaging waited <b>${fmtDur(u.totalMin)}</b> on upstream areas, <b>${u.sharePct}%</b> of all packaging downtime.</div>
+        <div style="font-size:11.5px;margin-top:4px;color:${totalTrend.color};">${totalTrend.text} <span style="color:#888;">vs ${fmtDate(u.prev.start)} – ${fmtDate(u.prev.end)}</span></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:20px;">
+        ${statCard('Upstream waiting', fmtDur(u.totalMin))}
+        ${statCard('Stops', u.count)}
+        ${statCard('Departments', u.list.length)}
+        ${statCard('Production days', u.days)}
+      </div>
+      <div style="page-break-inside:avoid;break-inside:avoid;margin-bottom:20px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Minutes Packaging Waited, by Department</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><th style="${th}">Department</th><th style="${th}">Time</th><th style="${th}">Stops</th><th style="${th}">Share</th><th style="${th}">vs previous period</th></tr>
+          ${rows}
+        </table>
+      </div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Top Reasons per Department</div>
+      ${detail}
+      <div style="page-break-inside:avoid;break-inside:avoid;margin-top:16px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:2px;">Agreed Actions</div>
+        <div style="font-size:11px;color:#777;margin-bottom:6px;">To be completed by each department during the meeting.</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><th style="${th}">Department</th><th style="${th}">Agreed action</th><th style="${th}">Owner</th><th style="${th}">Due date</th></tr>
+          ${actionRows}
+        </table>
+      </div>
+      <div style="border-top:1px solid #ddd;margin-top:18px;padding-top:10px;font-size:10px;color:#888;line-height:1.5;">Times are recorded live on the packaging floor, by machine and reason, as each stop happens. This summary measures how long packaging waited; it does not assess causes inside other departments. Reasons without an assigned department are grouped under "Others".</div>
+      <div style="border-top:1px solid #ddd;margin-top:10px;padding-top:10px;display:flex;justify-content:space-between;font-size:10.5px;color:#999;">
+        <span>Upstream Impact Summary — ${dateLabel}</span>
+        <span>Packaging CI Tracker ${APP_VERSION.split(' ')[0]}</span>
+      </div>
+    </div>
+  </div>`;
+}
+async function exportUpstreamPDF(){
+  const {start, end} = upstreamRange;
+  if(!upstreamRecordsInRange(start, end).length){ toast('No upstream waiting time in this range'); return; }
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;z-index:99997;background:#111;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 0;';
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1e3a5f;color:#fff;text-align:center;padding:10px;font-family:Arial;font-size:13px;';
+  banner.textContent = 'Building your PDF report…';
+  const container = document.createElement('div');
+  container.innerHTML = renderUpstreamReportHTML(start, end);
+  backdrop.appendChild(container);
+  document.body.appendChild(backdrop);
+  document.body.appendChild(banner);
+  toast('Building PDF…');
+  try{
+    const filename = `Upstream-Impact-${start}${end!==start?'_to_'+end:''}.pdf`;
+    const pdfBlob = await html2pdf().set({
+      margin: 0, filename,
+      html2canvas: {scale:2, useCORS:true},
+      jsPDF: {unit:'pt', format:'letter', orientation:'portrait'},
+      pagebreak: {mode:['css','avoid-all']}
+    }).from(container.firstElementChild).outputPdf('blob');
+    showPLHReportPreview(pdfBlob, filename);
+  }catch(e){
+    console.error('Upstream PDF export failed', e);
+    toast('PDF export failed');
+  }finally{
+    backdrop.remove(); banner.remove();
+  }
+}
 
 /* ============ APP TOUR ============
 The illustrated tour lives in its own file (tour.html, next to index.html) so the same tour serves two places: the shareable "How it works" link for supervisors/managers/the director, and this in-app overlay. One file to update when the tour changes. Shown automatically once per device (after sign-in), and on demand from Settings. */
