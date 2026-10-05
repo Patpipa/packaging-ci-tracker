@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v94 - 2026-10-05 (fixed: PDFs exported on a computer were still shifted left/cut off — the real cause was the PDF snapshot width on wide screens)';
+const APP_VERSION = 'v95 - 2026-10-05 (Upstream Impact: reason counts now read "9 stops" instead of "9×" on screen and in the PDF)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3079,7 +3079,7 @@ function renderUpstreamImpactView(){
     return `<div class="card">
       <h3 style="display:flex;justify-content:space-between;align-items:center;">${escapeHtml(d.name)}<span class="mono" style="font-size:14px;color:var(--up);">${fmtDur(d.totalMin)}</span></h3>
       <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">${d.count} stop${d.count===1?'':'s'} · avg ${fmtDur(d.totalMin/d.count)} each · <span style="color:${t.color};">${t.text}</span></div>
-      ${d.reasons.slice(0,3).map(r=>`<div class="statrow"><span class="lbl">${escapeHtml(r.label)}</span><span class="val" style="white-space:nowrap;">${fmtDur(r.totalMin)} · ${r.count}×</span></div>`).join('')}
+      ${d.reasons.slice(0,3).map(r=>`<div class="statrow"><span class="lbl">${escapeHtml(r.label)}</span><span class="val" style="white-space:nowrap;">${fmtDur(r.totalMin)} · ${r.count} stop${r.count===1?'':'s'}</span></div>`).join('')}
       <div style="font-size:12px;color:var(--muted);margin-top:8px;">Machines affected: ${d.machines.map(([m,min])=>`${escapeHtml(m)} (${fmtDur(min)})`).join(', ')}</div>
     </div>`;}).join('')}
   <button class="btn btn-primary" style="margin-bottom:10px;" onclick="exportUpstreamPDF()">📄 Export PDF for Meeting</button>
@@ -3103,7 +3103,7 @@ function renderUpstreamReportHTML(start, end){
     <div style="page-break-inside:avoid;break-inside:avoid;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;"><span>${escapeHtml(d.name)}</span><span style="color:#8e44ad;">${fmtDur(d.totalMin)}</span></div>
       <div style="font-size:11px;color:#777;margin:2px 0 8px;">${d.count} stop${d.count===1?'':'s'} · avg ${fmtDur(d.totalMin/d.count)} each · machines: ${d.machines.map(([m,min])=>`${escapeHtml(m)} (${fmtDur(min)})`).join(', ')}</div>
-      ${d.reasons.slice(0,3).map(r=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-top:1px dashed #eee;"><span>${escapeHtml(r.label)}</span><span style="color:#555;">${fmtDur(r.totalMin)} · ${r.count}×</span></div>`).join('')}
+      ${d.reasons.slice(0,3).map(r=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-top:1px dashed #eee;"><span>${escapeHtml(r.label)}</span><span style="color:#555;">${fmtDur(r.totalMin)} · ${r.count} stop${r.count===1?'':'s'}</span></div>`).join('')}
     </div>`);
   const blank = '<div style="border-bottom:1px solid #bbb;height:22px;"></div>';
   const actionRows = u.list.map(d=>`<tr><td style="${td}font-weight:700;width:22%;">${escapeHtml(d.name)}</td><td style="${td}width:44%;">${blank}</td><td style="${td}width:18%;">${blank}</td><td style="${td}width:16%;">${blank}</td></tr>`).join('');
