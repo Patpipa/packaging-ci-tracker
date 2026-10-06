@@ -163,7 +163,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v96 - 2026-10-05 (Upstream Impact PDF: removed the blank Agreed Actions table — planning is left to the manager and supervisor)';
+const APP_VERSION = 'v97 - 2026-10-06 (MAREL reasons: "Meat Being Cut, Not Ready Yet" + "Meat Ready, but Cutting Chicken Muscle for Variovac 3"; MAREL reasons only on Variovac 1-3, never pointing at the line itself; hidden on Manual Pack)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -180,7 +180,7 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Waiting for It to Cut Meat','MAREL - Switching Product','MAREL - Cutting Chicken Muscle','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Switching Product','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Waiting for Management Confirmation/Decision','Label Boxes','Scheduled Stretching','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
@@ -190,15 +190,29 @@ const WAITING_CATEGORIES = {
 function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
 function reasonClassification(category){ return WAITING_CATEGORIES[category] ? WAITING_CATEGORIES[category].cls : 'internal'; }
 /* When a generic "Other" reason was picked, use the operator's note as the specific label wherever reasons are shown or ranked */
+/* v97: MAREL only feeds Variovac 1, 2 and 3 (chicken muscle goes to Variovac 3), so MAREL reasons are hidden on any other machine (Manual Pack). A "Meat Ready, but Cutting … for Variovac N" reason is hidden on Variovac N itself, since a line can't wait on its own meat. If a record being edited already uses a hidden reason, it is still shown (appended) so editing never silently changes saved data. */
+const MAREL_MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
+function reasonAllowedForMachine(reason, machine){
+  if(!/^MAREL - /.test(reason)) return true;
+  if(!MAREL_MACHINES.includes(machine)) return false;
+  const m = reason.match(/for (Variovac \d)$/);
+  return !(m && m[1]===machine);
+}
+function reasonsForMachine(cat, machine, current){
+  const all = WAITING_CATEGORIES[cat].reasons;
+  const list = all.filter(r=>reasonAllowedForMachine(r, machine));
+  if(current && all.includes(current) && !list.includes(current)) list.push(current);
+  return list;
+}
 function effectiveReasonLabel(r){
   if(r.reason && /other/i.test(r.reason) && r.notes && r.notes.trim()){ return r.notes.trim(); }
   return REASON_RENAMES[r.reason] || r.reason;
 }
 /* v88 reason cleanup: old label -> new label. Existing records are migrated on load (migrateReasonLabels) so totals stay combined under one name; effectiveReasonLabel also maps them as a fallback in case an older app version on another device writes an old label. The two removed reasons ("MAREL Cutting Meat for Variovac 1/2") are merged into their closest remaining reason. */
 const REASON_RENAMES = {
-  'Waiting for MAREL Cut Meat':'MAREL - Waiting for It to Cut Meat',
+  'Waiting for MAREL Cut Meat':'MAREL - Meat Being Cut, Not Ready Yet',
   'MAREL Switching Product':'MAREL - Switching Product',
-  'MAREL Cutting Chicken Muscle':'MAREL - Cutting Chicken Muscle',
+  'MAREL Cutting Chicken Muscle':'MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3',
   'Meat Ready but MAREL Cutting for Variovac 1':'MAREL - Meat Ready, but Cutting for Variovac 1',
   'Meat Ready but MAREL Cutting for Variovac 2':'MAREL - Meat Ready, but Cutting for Variovac 2',
   'MAREL Cutting Meat for Variovac 1':'MAREL - Meat Ready, but Cutting for Variovac 1',
@@ -208,7 +222,10 @@ const REASON_RENAMES = {
   'Waiting for Chicken Diced':'Waiting for Diced Chicken',
   'Waiting for Band Saw Cut Meat for SLICER':'Waiting for Band Saw Cut Meat (for Slicer)',
   'Waiting for Tenderloin BYPRODUCT':'Waiting for Tenderloin Byproduct',
-  'Waiting for BYPRODUCT':'Waiting for Byproduct'
+  'Waiting for BYPRODUCT':'Waiting for Byproduct',
+  // v97: MAREL wording — speed vs. priority made explicit
+  'MAREL - Waiting for It to Cut Meat':'MAREL - Meat Being Cut, Not Ready Yet',
+  'MAREL - Cutting Chicken Muscle':'MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3'
 };
 /* Replaces any string value that EXACTLY equals an old reason label, anywhere inside a record (incl. PLH downtime segments). Notes and other free text are never touched because they never match exactly. Returns the number of replacements. */
 function renameReasonsDeep(obj){
@@ -1473,7 +1490,7 @@ function renderLiveDowntimeSetupCard(live){
         <select onchange="liveDowntimeSetup.waitCategory=this.value; liveDowntimeSetup.waitReason=''; render()">${Object.keys(WAITING_CATEGORIES).map(c=>`<option ${s.waitCategory===c?'selected':''}>${c}</option>`).join('')}</select>
       </div>
       <div class="field"><label>Specific Reason</label>
-        <select onchange="liveDowntimeSetup.waitReason=this.value; render()">${WAITING_CATEGORIES[s.waitCategory].reasons.map(r=>`<option value="${r}" ${s.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${s.waitReason==='Other'?'selected':''}>Other</option></select>
+        <select onchange="liveDowntimeSetup.waitReason=this.value; render()">${reasonsForMachine(s.waitCategory, s.machine, s.waitReason).map(r=>`<option value="${r}" ${s.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${s.waitReason==='Other'?'selected':''}>Other</option></select>
       </div>
       ${s.waitReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.waitReasonOther}" oninput="liveDowntimeSetup.waitReasonOther=this.value"></div>` : ''}
     ` : ''}
@@ -1491,7 +1508,7 @@ async function confirmDowntime(){
   let live = Store.liveRuns[s.machine];
   let reasonCategory='', reason='', classification='';
   if(s.status==='CHANGEOVER'){ reason = s.changeReason==='Other' ? (s.changeReasonOther||'Other') : s.changeReason; }
-  if(s.status==='WAITING'){ reasonCategory = s.waitCategory; reason = s.waitReason==='Other' ? (s.waitReasonOther||'Other') : (s.waitReason||WAITING_CATEGORIES[s.waitCategory].reasons[0]); classification = reasonClassification(s.waitCategory); }
+  if(s.status==='WAITING'){ reasonCategory = s.waitCategory; reason = s.waitReason==='Other' ? (s.waitReasonOther||'Other') : (s.waitReason||reasonsForMachine(s.waitCategory, s.machine)[0]); classification = reasonClassification(s.waitCategory); }
   if(!live){
     // Machine was IDLE — start a standalone downtime session, no production running yet
     live = Store.liveRuns[s.machine] = {
@@ -1722,7 +1739,7 @@ function renderNewRecord(){
       <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Tap only the machine(s) on this exact break window. If your groups break at different times, log each machine separately with its own time — don't select all three unless the break is truly simultaneous.</div>
     </div>` : `
     <div class="field"><label>Machine</label>
-      <select onchange="draft.machine=this.value">${MACHINES.map(m=>`<option ${draft.machine===m?'selected':''}>${m}</option>`).join('')}</select>
+      <select onchange="draft.machine=this.value; render()">${MACHINES.map(m=>`<option ${draft.machine===m?'selected':''}>${m}</option>`).join('')}</select>
     </div>`;
 
   return `
@@ -1755,7 +1772,7 @@ function renderNewRecord(){
         <select onchange="draft.waitCategory=this.value; draft.waitReason=''; render()">${Object.keys(WAITING_CATEGORIES).map(c=>`<option ${draft.waitCategory===c?'selected':''}>${c}</option>`).join('')}</select>
       </div>
       <div class="field"><label>Specific Reason <span class="classtag ${reasonClassification(draft.waitCategory)==='upstream'?'up':'int'}" style="margin-left:6px;">${reasonClassification(draft.waitCategory)==='upstream'?'UPSTREAM':'INTERNAL'}</span></label>
-        <select onchange="draft.waitReason=this.value; render()">${WAITING_CATEGORIES[draft.waitCategory].reasons.map(r=>`<option value="${r}" ${draft.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${draft.waitReason==='Other'?'selected':''}>Other</option></select>
+        <select onchange="draft.waitReason=this.value; render()">${reasonsForMachine(draft.waitCategory, draft.machine, draft.waitReason).map(r=>`<option value="${r}" ${draft.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${draft.waitReason==='Other'?'selected':''}>Other</option></select>
       </div>
       ${draft.waitReason==='Other' ? `<div class="field"><label>Specify Reason</label><input type="text" value="${draft.waitReasonOther||''}" oninput="draft.waitReasonOther=this.value" placeholder="Describe the waiting reason"></div>` : ''}` : ''}
     ${draft.status==='NO_WORK' ? `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime.</div>` : ''}
@@ -1847,7 +1864,7 @@ async function _saveRecordInner(){
     const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
     let reasonCategory='', reason='', classification='';
     if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
-    if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
+    if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
     toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification});
   }
   if(!confirmNoOverlap(toSave)) return;
@@ -2031,7 +2048,7 @@ saveRecord = async function(){
         const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
         let reasonCategory='', reason='', classification='';
         if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
-        if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || WAITING_CATEGORIES[draft.waitCategory].reasons[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
+        if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
         const candidate = {date: draft.date||todayStr(), machine:draft.machine, startTime:draft.startTime, endTime:draft.endTime};
         if(!confirmNoOverlap([candidate], draft._editId)) return;
         Store.records[idx] = {...Store.records[idx], date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};

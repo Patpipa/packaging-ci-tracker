@@ -164,7 +164,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
           <span class="chip sel">Upstream / Product</span><span class="chip">Materials</span><span class="chip">Machine</span><span class="chip">Labour</span><span class="chip">QA</span>
         </div>
         <div class="reason pick">Waiting for Trimmed Meat<span class="tag up tag-in" style="animation-delay:1.3s">UPSTREAM</span></div>
-        <div class="reason">MAREL - Waiting for It to Cut Meat<span class="tag up">UPSTREAM</span></div>
+        <div class="reason">MAREL - Meat Being Cut, Not Ready Yet<span class="tag up">UPSTREAM</span></div>
         <div class="reason">Machine Jam<span class="tag int">INTERNAL</span></div>
         <div class="caption">Upstream = another department · Internal = packaging</div>
       </div>
@@ -272,7 +272,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
   progress.innerHTML = slides.map(()=>'<span></span>').join('');
   const segs = [...progress.children];
 
-  const ranks = [['MAREL - Waiting for It to Cut Meat',142,'var(--up)'],['Waiting for Trimmed Meat',96,'var(--up)'],['Machine Jam',41,'var(--int)'],['Film Change',28,'var(--int)']];
+  const ranks = [['MAREL - Meat Being Cut, Not Ready Yet',142,'var(--up)'],['Waiting for Trimmed Meat',96,'var(--up)'],['Machine Jam',41,'var(--int)'],['Film Change',28,'var(--int)']];
   document.getElementById('ranks').innerHTML =
     '<div style="font-size:12px;color:var(--muted);margin-bottom:2px">Top downtime causes this week</div>' +
     ranks.map((r,i)=>`<div class="rank"><span class="n">${i+1}</span><div class="body"><div class="lbl">${r[0]}</div><div class="track"><div class="fill" data-w="${Math.round(r[1]/142*100)}" style="background:${r[2]}"></div></div></div><span class="min">${r[1]} min</span></div>`).join('') +
