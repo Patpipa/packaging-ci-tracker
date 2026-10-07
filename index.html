@@ -25,6 +25,7 @@
   --wait:#D6534A; --wait-dim:#3A1E1C;
   --brk:#4A90D9; --brk-dim:#1C2A3A;
   --nowork:#7C848A; --nowork-dim:#26292C;
+  --planned:#B8A06A; --planned-dim:#302A1E;
   --up:#C77DD6; --int:#4FB3C2;
   --radius:14px;
 }
@@ -67,6 +68,7 @@ main{flex:1;padding:0 16px 100px;}
 .pill.wait{background:var(--wait-dim);color:var(--wait);}
 .pill.brk{background:var(--brk-dim);color:var(--brk);}
 .pill.nowork{background:var(--nowork-dim);color:var(--nowork);}
+.pill.planned{background:var(--planned-dim);color:var(--planned);}
 .bignum{font-family:'IBM Plex Mono';font-size:28px;font-weight:600;}
 .statrow{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;}
 .statrow:last-child{border-bottom:none;}
@@ -163,11 +165,11 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v97 - 2026-10-06 (MAREL reasons: "Meat Being Cut, Not Ready Yet" + "Meat Ready, but Cutting Chicken Muscle for Variovac 3"; MAREL reasons only on Variovac 1-3, never pointing at the line itself; hidden on Manual Pack)';
+const APP_VERSION = 'v98 - 2026-10-06 (new: Planned Stop status + one-tap All-Line Planned Stop / Resume All for stretching, crew talk, town hall — not counted against efficiency or bottlenecks)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
-  brk:[74,144,217], nowork:[124,132,138], upstream:[178,110,190], internal:[70,158,172]
+  brk:[74,144,217], nowork:[124,132,138], planned:[160,138,84], upstream:[178,110,190], internal:[70,158,172]
 };
 const MACHINES = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack'];
 const PRODUCTS = ['Steak','Burger','Ground Beef','Ground Pork','Ground Bison','Ground Venison','Diced Beef','Diced Pork','Diced Bison','Diced Venison','Meat Box','Rebox','Rework','Relabel','Other'];
@@ -177,15 +179,18 @@ const STATUSES = [
   {key:'WAITING', label:'Waiting', color:'var(--wait)', dim:'var(--wait-dim)', pillClass:'wait'},
   {key:'NO_WORK', label:'No Work Scheduled', color:'var(--nowork)', dim:'var(--nowork-dim)', pillClass:'nowork'},
   {key:'BREAK', label:'Break', color:'var(--brk)', dim:'var(--brk-dim)', pillClass:'brk'},
+  {key:'PLANNED', label:'Planned Stop', color:'var(--planned)', dim:'var(--planned-dim)', pillClass:'planned'},
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
+/* v98: Planned stops (stretching, crew talk, town hall…) — recorded and shown in reports as their own line, but like Break / No Work they are NOT counted against efficiency, NOT in bottleneck rankings or the Upstream report, and never trigger the red downtime alarm. They still count as paid labour time, so PLH gross includes them and PLH net excludes them, same as any stop. */
+const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk'];
 const WAITING_CATEGORIES = {
   'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Switching Product','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
-  'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Crew Talk','Town Hall Meeting','Waiting for Management Confirmation/Decision','Label Boxes','Scheduled Stretching','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
+  'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Waiting for Management Confirmation/Decision','Label Boxes','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
   'Cleaning / Sanitation': {cls:'internal', reasons:['Required Cleaning','Sanitation Delay','Cleanup After Product','Waiting for Sanitation']},
-  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','Waiting for QA','QA Inspection','QA Crew Talk','Metal Detector Test','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Other QA Issue']},
+  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','Waiting for QA','QA Inspection','Metal Detector Test','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Other QA Issue']},
 };
 function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
 function reasonClassification(category){ return WAITING_CATEGORIES[category] ? WAITING_CATEGORIES[category].cls : 'internal'; }
@@ -462,7 +467,7 @@ function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).sl
 /* ============ AGGREGATION HELPERS ============ */
 function recordsForDate(date){ return Store.records.filter(r=>r.date===date); }
 function machineTotals(recs, machine){
-  const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0, upstream:0, internal:0};
+  const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0,PLANNED:0, upstream:0, internal:0};
   recs.filter(r=>r.machine===machine).forEach(r=>{
     t[r.status]=(t[r.status]||0)+r.durationMin;
     if(r.status==='WAITING'){ if(r.classification==='upstream') t.upstream+=r.durationMin; else t.internal+=r.durationMin; }
@@ -509,7 +514,7 @@ function totalBreakMinutes(recs){
   return total;
 }
 function dayTotals(recs){
-  const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0, upstream:0, internal:0};
+  const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0,PLANNED:0, upstream:0, internal:0};
   recs.forEach(r=>{
     if(r.status!=='BREAK'){ t[r.status]=(t[r.status]||0)+r.durationMin; }
     if(r.status==='WAITING'){ if(r.classification==='upstream') t.upstream+=r.durationMin; else t.internal+=r.durationMin; }
@@ -668,6 +673,7 @@ function renderDashboard(){
       ['Waiting', t.WAITING],
       ['Changeover', t.CHANGEOVER],
       ['Break', t.BREAK],
+      ['Planned Stops', t.PLANNED||0],
       ['No Work', t.NO_WORK]
     ].filter(([,min])=>min>0);
     const rowsHtml = rowDefs.map(([label,min])=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:3px 0;"><span>${label}</span><span style="color:var(--text);font-family:'IBM Plex Mono';">${fmtDur(min)}</span></div>`).join('');
@@ -711,6 +717,7 @@ function renderDashboard(){
       <div class="statrow"><span class="lbl">— Packaging/Internal Delay</span><span class="val" style="color:var(--int)">${fmtDur(dt.internal)}</span></div>
       <div class="statrow"><span class="lbl">Changeover</span><span class="val" style="color:var(--change)">${fmtDur(dt.CHANGEOVER)}</span></div>
       <div class="statrow"><span class="lbl">Break</span><span class="val" style="color:var(--brk)">${fmtDur(dt.BREAK)}</span></div>
+      <div class="statrow"><span class="lbl">Planned Stops</span><span class="val" style="color:var(--planned)">${fmtDur(dt.PLANNED||0)}</span></div>
       <div class="statrow"><span class="lbl">No Work Scheduled</span><span class="val" style="color:var(--nowork)">${fmtDur(dt.NO_WORK)}</span></div>
     </div>
     <div class="card">
@@ -1151,6 +1158,135 @@ function laborHoursSoFar(live){
   return (mins/60).toFixed(1);
 }
 function machineIdSafe(m){ return m.replace(/\s+/g,'-'); }
+/* ============ ALL-LINE PLANNED STOP (v98) ============
+One tap stops several lines at the same minute for a planned event (stretching, crew talk, town hall), and one tap resumes them all. Each machine gets its own normal PLANNED downtime segment, tagged with a shared group id so the Live Floor can show one banner with "Resume All". Lines can still be resumed one by one from their own card. Idle machines are not ticked by default, so an event isn't logged against a line that wasn't running. */
+let allLineSetup = null;
+let allLineBusy = false;
+function openAllLineSetup(){
+  allLineSetup = {reason: PLANNED_REASONS[0], other:'', machines: MACHINES.filter(m=>!!Store.liveRuns[m])};
+  render();
+}
+function toggleAllLineMachine(m){
+  const i = allLineSetup.machines.indexOf(m);
+  if(i>-1) allLineSetup.machines.splice(i,1); else allLineSetup.machines.push(m);
+  render();
+}
+function renderAllLineSetupCard(){
+  const a = allLineSetup;
+  const reasons = [...PLANNED_REASONS,'Other'];
+  return `<div class="card" style="border-color:var(--planned);">
+    <h3>All-Line Planned Stop</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">Pick the event, check the lines, then Start. Every checked line stops at the same minute.</div>
+    <div class="statusgrid" style="margin-bottom:12px;">
+      ${reasons.map(r=>`<div class="statusopt ${a.reason===r?'sel':''}" style="--sc:var(--planned);--scdim:var(--planned-dim)" onclick="allLineSetup.reason='${r.replace(/'/g,"\\'")}'; render()"><div class="dot" style="background:var(--planned)"></div>${r}</div>`).join('')}
+    </div>
+    ${a.reason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(a.other)}" oninput="allLineSetup.other=this.value" placeholder="Describe the planned stop"></div>` : ''}
+    <div class="field"><label>Lines</label>
+      <div class="machinechecks">${MACHINES.map(m=>{ const live=Store.liveRuns[m]; const tag = !live ? 'idle' : (live.status==='RUNNING' ? 'running' : 'stopped'); return `<div class="mchip ${a.machines.includes(m)?'sel':''}" onclick="toggleAllLineMachine('${m}')">${m}<div style="font-family:'Inter',sans-serif;font-size:10px;opacity:0.75;margin-top:2px;">${tag}</div></div>`; }).join('')}</div>
+    </div>
+    <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Recorded as a Planned Stop — not counted against Efficiency or in the bottleneck rankings.</div>
+    <div class="btnrow">
+      <button class="btn btn-ghost" onclick="allLineSetup=null; render()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--planned);" onclick="startAllLineStop()">⏸ Start</button>
+    </div>
+  </div>`;
+}
+async function startAllLineStop(){
+  if(allLineBusy) return;
+  const a = allLineSetup;
+  if(!a.machines.length){ toast('Check at least one line'); return; }
+  const reason = a.reason==='Other' ? (a.other.trim()||'Other') : a.reason;
+  allLineBusy = true;
+  try{
+    const now = nowHHMM(), gid = uid();
+    a.machines.forEach(m=>{
+      let live = Store.liveRuns[m];
+      if(!live){
+        live = Store.liveRuns[m] = {machine:m, status:'DOWNTIME', product:'', productId:'', date: todayStr(), startedAt: now, employees:0, segments:[], downtimeSegments:[]};
+      } else if(live.status==='RUNNING'){
+        const lastSeg = live.segments[live.segments.length-1];
+        if(lastSeg && !lastSeg.end) lastSeg.end = now;
+      }
+      let resumeTo = null;
+      if(live.status!=='RUNNING'){
+        // Line was already stopped (e.g. Waiting for Trimmed Meat): remember that reason so Resume All puts it back, instead of wrongly marking it Running
+        const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+        if(lastDt && !lastDt.end){ lastDt.end = now; resumeTo = {status:lastDt.status, reasonCategory:lastDt.reasonCategory||'', reason:lastDt.reason||'', classification:lastDt.classification||''}; }
+      }
+      live.downtimeSegments.push({start: now, end:null, status:'PLANNED', reasonCategory:'Planned Stop', reason, classification:'', notes:'', group: gid, resumeTo});
+      live.status = 'DOWNTIME';
+    });
+    if(liveDowntimeSetup && a.machines.includes(liveDowntimeSetup.machine)) liveDowntimeSetup = null;
+    const ok = await Store.saveLiveRuns();
+    if(!ok){ toast('Save failed — check connection'); return; }
+    allLineSetup = null;
+    toast(`${reason} — ${a.machines.length} line${a.machines.length===1?'':'s'} stopped`);
+    render();
+  } finally { allLineBusy = false; }
+}
+/* Open all-line stops, grouped by their shared id — only lines still sitting in that same planned segment count. */
+function openAllLineStops(){
+  const groups = {};
+  MACHINES.forEach(m=>{
+    const live = Store.liveRuns[m];
+    if(!live || live.status==='RUNNING') return;
+    const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+    if(!lastDt || lastDt.end || lastDt.status!=='PLANNED' || !lastDt.group) return;
+    const g = groups[lastDt.group] || (groups[lastDt.group] = {id:lastDt.group, reason:lastDt.reason, start:lastDt.start, machines:[]});
+    g.machines.push(m);
+  });
+  return Object.values(groups);
+}
+function renderAllLineBanners(){
+  return openAllLineStops().map(g=>`<div class="card" style="border-color:var(--planned);background:var(--planned-dim);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div><div style="font-family:'Oswald';font-size:16px;color:var(--planned);text-transform:uppercase;letter-spacing:0.04em;">⏸ ${escapeHtml(g.reason)}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${g.machines.join(', ')} · started ${fmtTime12(g.start)} · ${fmtDur(elapsedMinutesSince(g.start))}</div></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="resumeAllLineStop('${g.id}')">▶ Resume All (${g.machines.length})</button>
+  </div>`).join('');
+}
+async function resumeAllLineStop(gid){
+  if(allLineBusy) return;
+  const g = openAllLineStops().find(x=>x.id===gid);
+  if(!g) return;
+  allLineBusy = true;
+  try{
+    const now = nowHHMM();
+    let resumed = 0, ended = 0, restored = 0;
+    for(const m of g.machines){
+      const live = Store.liveRuns[m];
+      const plannedDt = live.downtimeSegments[live.downtimeSegments.length-1];
+      if(plannedDt.resumeTo){
+        // Line was stopped for another reason before the event — go back to that same reason, still stopped
+        plannedDt.end = now;
+        live.downtimeSegments.push({start: now, end:null, ...plannedDt.resumeTo, notes:''});
+        restored++;
+      } else if(live.segments.length){
+        // Line was producing before the event — close the planned segment and carry on producing
+        const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+        lastDt.end = now;
+        const lastSeg = live.segments[live.segments.length-1];
+        const emp = (live.pendingEmployees!=null) ? live.pendingEmployees : lastSeg.employees;
+        live.segments.push({start: now, end:null, employees: emp});
+        delete live.pendingEmployees;
+        live.status = 'RUNNING';
+        resumed++;
+      } else {
+        // Line had no production run (idle before the event) — save the planned stop to History and clear the line
+        const result = await closeOutLiveRun(m, {});
+        if(!result){ toast('Save failed — check connection'); return; }
+        delete Store.liveRuns[m];
+        ended++;
+      }
+    }
+    const ok = await Store.saveLiveRuns();
+    if(!ok){ toast('Save failed — check connection'); return; }
+    toast(`${g.reason} ended — ${resumed} resumed${restored?`, ${restored} back to previous reason`:''}${ended?`, ${ended} saved`:''}`);
+    render();
+  } finally { allLineBusy = false; }
+}
+
 function renderLive(){
   const cards = MACHINES.map(m=>{
     let cardHtml;
@@ -1171,6 +1307,8 @@ function renderLive(){
   <div class="card" style="margin-bottom:16px;">
     <div style="color:var(--muted);font-size:13px;">Tap a machine to start tracking a run live — set the product now or later. Finishing a product writes it straight into History, same as manual entries.</div>
   </div>
+  ${renderAllLineBanners()}
+  ${allLineSetup ? renderAllLineSetupCard() : `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--planned);color:var(--planned);" onclick="openAllLineSetup()">⏸ All-Line Planned Stop</button>`}
   ${cards}`;
 }
 /* ---- Searchable Product Picker (grows as you add products) ---- */
@@ -1395,14 +1533,15 @@ function renderLiveActiveCard(m, live){
   const hasNoSegmentsYet = live.segments.length===0;
   const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
   const isNoWork = !isRunning && lastDt && lastDt.status==='NO_WORK' && !lastDt.end;
+  const isPlanned = !isRunning && lastDt && lastDt.status==='PLANNED' && !lastDt.end;
   const elapsed = elapsedMinutesSince(live.startedAt);
   const lastSeg = hasNoSegmentsYet ? null : live.segments[live.segments.length-1];
   const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
-  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">${d.status==='NO_WORK'?'No Work Scheduled':'Downtime ('+(d.reason||d.status)+')'}: ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
+  const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">${d.status==='NO_WORK'?'No Work Scheduled':(d.status==='PLANNED'?'Planned Stop ('+escapeHtml(d.reason||'')+')':'Downtime ('+(d.reason||d.status)+')')}: ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
   return `<div class="live-card ${isRunning?'running':(isNoWork?'':'downtime')}" ${isNoWork?'style="border-color:var(--nowork);"':''}>
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3 style="font-family:'Oswald';font-size:16px;">${m}</h3>
-      <span class="live-badge ${isRunning?'running':(isNoWork?'idle':'downtime')}">${isRunning?'● RUNNING':(isNoWork?'⏹ NO WORK SCHEDULED':'⏸ DOWNTIME')}</span>
+      <span class="live-badge ${isRunning?'running':(isNoWork?'idle':'downtime')}">${isRunning?'● RUNNING':(isNoWork?'⏹ NO WORK SCHEDULED':(isPlanned?'⏸ PLANNED STOP':'⏸ DOWNTIME'))}</span>
     </div>
     ${!hasNoSegmentsYet ? `<div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>` : `<div style="color:var(--muted);font-size:13px;margin-top:4px;">No production started yet — logging downtime only</div>`}
     <div class="live-timer">${fmtDur(elapsed)}</div>
@@ -1469,7 +1608,7 @@ async function confirmStaffChange(){
   render();
 }
 function openDowntimeSetup(m){
-  liveDowntimeSetup = {machine:m, status:'WAITING', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', notes:''};
+  liveDowntimeSetup = {machine:m, status:'WAITING', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', plannedReason: PLANNED_REASONS[0], plannedReasonOther:'', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', notes:''};
   render();
 }
 function renderLiveDowntimeSetupCard(live){
@@ -1477,7 +1616,7 @@ function renderLiveDowntimeSetupCard(live){
   return `<div class="live-card downtime">
     <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Log Downtime</h3>
     <div class="statusgrid">
-      ${['WAITING','CHANGEOVER','NO_WORK','BREAK'].map(key=>{ const info=statusInfo(key); return `<div class="statusopt ${s.status===key?'sel':''}" style="--sc:${info.color};--scdim:${info.dim}" onclick="liveDowntimeSetup.status='${key}'; render()"><div class="dot" style="background:${info.color}"></div>${info.label}</div>`; }).join('')}
+      ${['WAITING','CHANGEOVER','PLANNED','NO_WORK','BREAK'].map(key=>{ const info=statusInfo(key); return `<div class="statusopt ${s.status===key?'sel':''}" style="--sc:${info.color};--scdim:${info.dim}" onclick="liveDowntimeSetup.status='${key}'; render()"><div class="dot" style="background:${info.color}"></div>${info.label}</div>`; }).join('')}
     </div>
     ${s.status==='CHANGEOVER' ? `
       <div class="field"><label>Changeover Reason</label>
@@ -1494,6 +1633,13 @@ function renderLiveDowntimeSetupCard(live){
       </div>
       ${s.waitReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.waitReasonOther}" oninput="liveDowntimeSetup.waitReasonOther=this.value"></div>` : ''}
     ` : ''}
+    ${s.status==='PLANNED' ? `
+      <div class="field"><label>Planned Stop</label>
+        <select onchange="liveDowntimeSetup.plannedReason=this.value; render()">${[...PLANNED_REASONS,'Other'].map(r=>`<option ${s.plannedReason===r?'selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      ${s.plannedReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(s.plannedReasonOther||'')}" oninput="liveDowntimeSetup.plannedReasonOther=this.value"></div>` : ''}
+      <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Planned stops are recorded but NOT counted against Efficiency or in the bottleneck rankings.</div>
+    ` : ''}
     ${s.status==='NO_WORK' ? `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime or against Efficiency %.</div>` : ''}
     <div class="field"><label>Notes (optional)</label><textarea oninput="liveDowntimeSetup.notes=this.value" placeholder="e.g. Waiting for trim">${s.notes}</textarea></div>
     <div class="btnrow">
@@ -1508,6 +1654,7 @@ async function confirmDowntime(){
   let live = Store.liveRuns[s.machine];
   let reasonCategory='', reason='', classification='';
   if(s.status==='CHANGEOVER'){ reason = s.changeReason==='Other' ? (s.changeReasonOther||'Other') : s.changeReason; }
+  if(s.status==='PLANNED'){ reasonCategory = 'Planned Stop'; reason = s.plannedReason==='Other' ? (s.plannedReasonOther||'Other') : (s.plannedReason||PLANNED_REASONS[0]); }
   if(s.status==='WAITING'){ reasonCategory = s.waitCategory; reason = s.waitReason==='Other' ? (s.waitReasonOther||'Other') : (s.waitReason||reasonsForMachine(s.waitCategory, s.machine)[0]); classification = reasonClassification(s.waitCategory); }
   if(!live){
     // Machine was IDLE — start a standalone downtime session, no production running yet
@@ -1723,7 +1870,7 @@ async function cancelLiveRun(m){
 /* ============ NEW RECORD ============ */
 let draft = null;
 let lastEndTime = '';
-function freshDraft(){ return {date: todayStr(), machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime: lastEndTime, endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
+function freshDraft(){ return {plannedReason: PLANNED_REASONS[0], plannedReasonOther:'', date: todayStr(), machine: MACHINES[0], breakMachines:[], product: PRODUCTS[0], productOther:'', startTime: lastEndTime, endTime:'', status:'RUNNING', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', notes:''}; }
 function quickNewRecord(machine){
   draft = freshDraft();
   draft.machine = machine;
@@ -1775,6 +1922,12 @@ function renderNewRecord(){
         <select onchange="draft.waitReason=this.value; render()">${reasonsForMachine(draft.waitCategory, draft.machine, draft.waitReason).map(r=>`<option value="${r}" ${draft.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${draft.waitReason==='Other'?'selected':''}>Other</option></select>
       </div>
       ${draft.waitReason==='Other' ? `<div class="field"><label>Specify Reason</label><input type="text" value="${draft.waitReasonOther||''}" oninput="draft.waitReasonOther=this.value" placeholder="Describe the waiting reason"></div>` : ''}` : ''}
+    ${draft.status==='PLANNED' ? `
+      <div class="field"><label>Planned Stop</label>
+        <select onchange="draft.plannedReason=this.value; render()">${[...PLANNED_REASONS,'Other'].map(r=>`<option ${draft.plannedReason===r?'selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      ${draft.plannedReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(draft.plannedReasonOther||'')}" oninput="draft.plannedReasonOther=this.value" placeholder="Describe the planned stop"></div>` : ''}
+      <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Planned stops are NOT counted against Efficiency or in the bottleneck rankings.</div>` : ''}
     ${draft.status==='NO_WORK' ? `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime.</div>` : ''}
     ${draft.status==='BREAK' ? `<div class="warnbanner" style="background:var(--brk-dim);border-color:var(--brk);color:var(--brk);">Break time will NOT be counted as downtime.</div>` : ''}
     <div class="field" style="margin-top:4px;"><label>Notes (optional)</label>
@@ -1864,6 +2017,7 @@ async function _saveRecordInner(){
     const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
     let reasonCategory='', reason='', classification='';
     if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
+    if(draft.status==='PLANNED'){ reasonCategory = 'Planned Stop'; reason = draft.plannedReason==='Other' ? (draft.plannedReasonOther||'Other') : draft.plannedReason; }
     if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
     toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification});
   }
@@ -2025,7 +2179,7 @@ function editRecord(id){
   if(!r) return;
   const isCustomChangeover = r.status==='CHANGEOVER' && !CHANGEOVER_REASONS.includes(r.reason);
   const isCustomWaiting = r.status==='WAITING' && r.reasonCategory && WAITING_CATEGORIES[r.reasonCategory] && !WAITING_CATEGORIES[r.reasonCategory].reasons.includes(r.reason);
-  draft = {date:r.date, machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
+  draft = {plannedReason: r.status==='PLANNED' ? (PLANNED_REASONS.includes(r.reason)?r.reason:'Other') : PLANNED_REASONS[0], plannedReasonOther: (r.status==='PLANNED' && !PLANNED_REASONS.includes(r.reason)) ? (r.reason||'') : '', date:r.date, machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
   draft._editId = id;
   Router.go('new');
 }
@@ -2048,6 +2202,7 @@ saveRecord = async function(){
         const product = draft.product==='Other' ? (draft.productOther||'Other') : draft.product;
         let reasonCategory='', reason='', classification='';
         if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
+        if(draft.status==='PLANNED'){ reasonCategory = 'Planned Stop'; reason = draft.plannedReason==='Other' ? (draft.plannedReasonOther||'Other') : draft.plannedReason; }
         if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
         const candidate = {date: draft.date||todayStr(), machine:draft.machine, startTime:draft.startTime, endTime:draft.endTime};
         if(!confirmNoOverlap([candidate], draft._editId)) return;
@@ -2208,6 +2363,7 @@ function renderWeeklyView(){
       <div class="statrow"><span class="lbl">Waiting</span><span class="val" style="color:var(--wait)">${fmtDur(mt.WAITING||0)}</span></div>
       <div class="statrow"><span class="lbl">Changeover</span><span class="val" style="color:var(--change)">${fmtDur(mt.CHANGEOVER||0)}</span></div>
       <div class="statrow"><span class="lbl">Break</span><span class="val" style="color:var(--brk)">${fmtDur(mt.BREAK||0)}</span></div>
+      <div class="statrow"><span class="lbl">Planned Stops</span><span class="val" style="color:var(--planned)">${fmtDur(mt.PLANNED||0)}</span></div>
       <div class="statrow"><span class="lbl">No Work</span><span class="val" style="color:var(--nowork)">${fmtDur(mt.NO_WORK||0)}</span></div>
     </div>`;
   }).join('');
@@ -2241,6 +2397,7 @@ function renderWeeklyView(){
     <div class="statrow"><span class="lbl">Waiting / Downtime</span><span class="val" style="color:var(--wait)">${fmtDur(t.WAITING)}</span></div>
     <div class="statrow"><span class="lbl">Changeover</span><span class="val">${fmtDur(t.CHANGEOVER)}</span></div>
     <div class="statrow"><span class="lbl">Break</span><span class="val">${fmtDur(t.BREAK)}</span></div>
+    <div class="statrow"><span class="lbl">Planned Stops</span><span class="val">${fmtDur(t.PLANNED||0)}</span></div>
     <div class="statrow"><span class="lbl">No Work Scheduled</span><span class="val">${fmtDur(t.NO_WORK)}</span></div>
   </div>
   <div class="card">
@@ -2368,6 +2525,7 @@ function exportWeeklyPDF(){
     rowC('Waiting/Downtime', fmtDur(mt.WAITING||0), PDF_COLOR.wait);
     rowC('Changeover Time', fmtDur(mt.CHANGEOVER||0), PDF_COLOR.change);
     rowC('Break Time', fmtDur(mt.BREAK||0), PDF_COLOR.brk);
+    rowC('Planned Stops', fmtDur(mt.PLANNED||0), PDF_COLOR.planned);
     rowC('No Work Scheduled', fmtDur(mt.NO_WORK||0), PDF_COLOR.nowork);
     y+=6;
   });
@@ -2378,6 +2536,7 @@ function exportWeeklyPDF(){
   rowC('Total Waiting/Downtime', fmtDur(t.WAITING), PDF_COLOR.wait);
   rowC('Total Changeover', fmtDur(t.CHANGEOVER), PDF_COLOR.change);
   rowC('Total Break Time', fmtDur(t.BREAK), PDF_COLOR.brk);
+  rowC('Total Planned Stops', fmtDur(t.PLANNED||0), PDF_COLOR.planned);
   rowC('Total No Work Scheduled', fmtDur(t.NO_WORK), PDF_COLOR.nowork);
 
   ensure(120); y+=6; section('DOWNTIME ANALYSIS');
@@ -2503,6 +2662,7 @@ function renderReportView(date){
       <div class="statrow"><span class="lbl">Waiting</span><span class="val" style="color:var(--wait)">${fmtDur(mt.WAITING||0)}</span></div>
       <div class="statrow"><span class="lbl">Changeover</span><span class="val" style="color:var(--change)">${fmtDur(mt.CHANGEOVER||0)}</span></div>
       <div class="statrow"><span class="lbl">Break</span><span class="val" style="color:var(--brk)">${fmtDur(mt.BREAK||0)}</span></div>
+      <div class="statrow"><span class="lbl">Planned Stops</span><span class="val" style="color:var(--planned)">${fmtDur(mt.PLANNED||0)}</span></div>
       <div class="statrow"><span class="lbl">No Work</span><span class="val" style="color:var(--nowork)">${fmtDur(mt.NO_WORK||0)}</span></div>
     </div>`;
   }).join('');
@@ -2521,6 +2681,7 @@ function renderReportView(date){
     <div class="statrow"><span class="lbl">Waiting / Downtime</span><span class="val">${fmtDur(t.WAITING)}</span></div>
     <div class="statrow"><span class="lbl">Changeover</span><span class="val">${fmtDur(t.CHANGEOVER)}</span></div>
     <div class="statrow"><span class="lbl">Break</span><span class="val">${fmtDur(t.BREAK)}</span></div>
+    <div class="statrow"><span class="lbl">Planned Stops</span><span class="val">${fmtDur(t.PLANNED||0)}</span></div>
     <div class="statrow"><span class="lbl">No Work Scheduled</span><span class="val">${fmtDur(t.NO_WORK)}</span></div>
   </div>
   <div class="card">
@@ -2691,6 +2852,7 @@ function exportReportPDF(date){
     rowC('Waiting/Downtime', fmtDur(mt.WAITING||0), PDF_COLOR.wait);
     rowC('Changeover Time', fmtDur(mt.CHANGEOVER||0), PDF_COLOR.change);
     rowC('Break Time', fmtDur(mt.BREAK||0), PDF_COLOR.brk);
+    rowC('Planned Stops', fmtDur(mt.PLANNED||0), PDF_COLOR.planned);
     rowC('No Work Scheduled', fmtDur(mt.NO_WORK||0), PDF_COLOR.nowork);
     y+=6;
   });
@@ -2701,6 +2863,7 @@ function exportReportPDF(date){
   rowC('Total Waiting/Downtime', fmtDur(t.WAITING), PDF_COLOR.wait);
   rowC('Total Changeover', fmtDur(t.CHANGEOVER), PDF_COLOR.change);
   rowC('Total Break Time', fmtDur(t.BREAK), PDF_COLOR.brk);
+  rowC('Total Planned Stops', fmtDur(t.PLANNED||0), PDF_COLOR.planned);
   rowC('Total No Work Scheduled', fmtDur(t.NO_WORK), PDF_COLOR.nowork);
 
   ensure(120); y+=6; section('DOWNTIME ANALYSIS');
