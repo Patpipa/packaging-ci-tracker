@@ -165,7 +165,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v98 - 2026-10-06 (new: Planned Stop status + one-tap All-Line Planned Stop / Resume All for stretching, crew talk, town hall — not counted against efficiency or bottlenecks)';
+const APP_VERSION = 'v99 - 2026-10-09 (PLH: same product run several times on the same machine and day is combined into one job — total lbs ÷ total labour hours)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -740,6 +740,39 @@ function plhRecordsInRange(startDate, endDate){
 function incompletePLHRecordsInRange(startDate, endDate){
   return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.date>=startDate && r.date<=endDate);
 }
+/* v99: Same product run in several pieces on the same machine on the same day (e.g. stopped waiting for strogi/trim, then restarted) is ONE job. Runs are combined by date + machine + product (product ID if set, otherwise the product name). Combined PLH = total lbs ÷ total labour hours across all its runs — never an average of the runs' PLH, so a short run can't skew it. Each run is still kept (job.runs) so its time window and staffing stay visible. Single runs pass through unchanged. */
+function plhJobKey(r){
+  const pid = String((r.plh && r.plh.productId) || '').trim().toLowerCase();
+  const pname = String((r.plh && r.plh.product) || r.product || '').trim().toLowerCase();
+  return `${r.date}|${r.machine}|${pid || pname}`;
+}
+function groupPLHJobs(recs){
+  const groups = {};
+  recs.slice().sort((a,b)=> a.date.localeCompare(b.date) || toMin(a.startTime)-toMin(b.startTime)).forEach(r=>{
+    (groups[plhJobKey(r)] = groups[plhJobKey(r)] || []).push(r);
+  });
+  return Object.values(groups).map(runs=>{
+    if(runs.length===1) return {...runs[0], runs, ids:[runs[0].id]};
+    const first = runs[0];
+    const weightLbs = runs.reduce((a,r)=>a+(r.plh.weightLbs||0),0);
+    const quantity = runs.reduce((a,r)=>a+(r.plh.quantity||0),0);
+    const grossLaborHours = runs.reduce((a,r)=>a+(r.plh.grossLaborHours||0),0);
+    const netLaborHours = runs.reduce((a,r)=>a+(r.plh.netLaborHours||0),0);
+    const tgt = runs.find(r=>r.plh.targetPLH);
+    return {
+      ...first, runs, ids: runs.map(r=>r.id),
+      endTime: runs[runs.length-1].endTime,
+      plh: {
+        ...first.plh, weightLbs, quantity, grossLaborHours, netLaborHours,
+        grossPLH: grossLaborHours>0 ? weightLbs/grossLaborHours : 0,
+        netPLH: netLaborHours>0 ? weightLbs/netLaborHours : null,
+        targetPLH: tgt ? tgt.plh.targetPLH : null,
+        segments: runs.flatMap((r,ri)=>(r.plh.segments||[]).map(seg=>({...seg, run:ri+1}))),
+        downtimeSegments: runs.flatMap((r,ri)=>(r.plh.downtimeSegments||[]).map(d=>({...d, run:ri+1})))
+      }
+    };
+  });
+}
 function computePLHSummary(recs){
   const totalWeight = recs.reduce((a,r)=>a+(r.plh.weightLbs||0),0);
   const totalQty = recs.reduce((a,r)=>a+(r.plh.quantity||0),0);
@@ -747,11 +780,12 @@ function computePLHSummary(recs){
   const totalNetHours = recs.reduce((a,r)=>a+(r.plh.netLaborHours||0),0);
   const grossPLH = totalGrossHours>0 ? totalWeight/totalGrossHours : 0;
   const netPLH = totalNetHours>0 ? totalWeight/totalNetHours : 0;
+  const jobs = groupPLHJobs(recs);
   let best=null, worst=null;
-  recs.forEach(r=>{ if(!best || r.plh.grossPLH>best.plh.grossPLH) best=r; if(!worst || r.plh.grossPLH<worst.plh.grossPLH) worst=r; });
-  const withTarget = recs.filter(r=>r.plh.targetPLH);
+  jobs.forEach(r=>{ if(!best || r.plh.grossPLH>best.plh.grossPLH) best=r; if(!worst || r.plh.grossPLH<worst.plh.grossPLH) worst=r; });
+  const withTarget = jobs.filter(r=>r.plh.targetPLH);
   const avgTarget = withTarget.length ? withTarget.reduce((a,r)=>a+r.plh.targetPLH,0)/withTarget.length : null;
-  return {totalWeight, totalQty, totalGrossHours, totalNetHours, grossPLH, netPLH, best, worst, avgTarget, runCount:recs.length};
+  return {totalWeight, totalQty, totalGrossHours, totalNetHours, grossPLH, netPLH, best, worst, avgTarget, runCount:jobs.length, rawRunCount:recs.length}; // runCount = jobs (same product combined)
 }
 function renderPLHCard(summary, title){
   if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">No finished runs with weight recorded yet.</div></div>`;
@@ -774,7 +808,7 @@ function renderPLHCard(summary, title){
     <div class="statrow"><span class="lbl">Total Pounds</span><span class="val">${Math.round(summary.totalWeight)}</span></div>
     <div class="statrow"><span class="lbl">Total Quantity</span><span class="val">${Math.round(summary.totalQty)}</span></div>
     <div class="statrow"><span class="lbl">Labour Hours (gross)</span><span class="val">${summary.totalGrossHours.toFixed(1)}</span></div>
-    <div class="statrow"><span class="lbl">Production Runs</span><span class="val">${summary.runCount}</span></div>
+    <div class="statrow"><span class="lbl">Jobs</span><span class="val">${summary.runCount}${summary.rawRunCount>summary.runCount?` <span style="color:var(--muted);font-size:11px;">(${summary.rawRunCount} runs)</span>`:''}</span></div>
     ${summary.best ? `<div class="statrow"><span class="lbl">Best Product</span><span class="val" style="color:var(--run);font-size:12px;">${escapeHtml(summary.best.plh.product||summary.best.product||'')} — ${summary.best.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
     ${summary.worst && summary.worst!==summary.best ? `<div class="statrow"><span class="lbl">Lowest Product</span><span class="val" style="color:var(--wait);font-size:12px;">${escapeHtml(summary.worst.plh.product||summary.worst.product||'')} — ${summary.worst.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
   </div>`;
@@ -867,6 +901,8 @@ function setPLHLogPreset(preset){
   plhLogRange = {preset, ...plhPresetRange(preset)};
   render();
 }
+let plhLogExpanded = new Set();
+function togglePLHJob(key){ if(plhLogExpanded.has(key)) plhLogExpanded.delete(key); else plhLogExpanded.add(key); render(); }
 function renderPLHLogView(){
   if(!plhLogRange) plhLogRange = {preset:'today', ...plhPresetRange('today')};
   if(plhLogDetailId) return renderPLHRunDetail(plhLogDetailId);
@@ -874,16 +910,27 @@ function renderPLHLogView(){
   let recs = allRecs;
   if(plhLogFilters.machine) recs = recs.filter(r=>r.machine===plhLogFilters.machine);
   if(plhLogFilters.product) recs = recs.filter(r=>r.plh.product===plhLogFilters.product);
-  recs = recs.slice().sort((a,b)=> b.date.localeCompare(a.date) || toMin(b.startTime)-toMin(a.startTime));
+  const jobs = groupPLHJobs(recs).sort((a,b)=> b.date.localeCompare(a.date) || toMin(b.startTime)-toMin(a.startTime));
   const uniqueProducts = [...new Set(allRecs.map(r=>r.plh.product).filter(Boolean))];
   const presets = [['today','Today'],['yesterday','Yesterday'],['7days','7 days'],['30days','30 days'],['thisWeek','This week']];
 
-  const rows = recs.length ? recs.map(r=>`
-    <div class="hist-item" style="cursor:pointer;" onclick="plhLogDetailId='${r.id}'; render()">
-      <div class="hist-top"><span class="mach">${fmtDate(r.date)}</span><span class="pill run">${r.plh.grossPLH.toFixed(0)} PLH</span></div>
-      <div class="hist-mid" style="color:var(--brk);text-decoration:underline;">${escapeHtml(r.plh.product||r.product)}</div>
-      <div class="hist-mid">${r.machine} · ${r.plh.weightLbs} lbs</div>
-    </div>`).join('') : '<div class="empty">No finished runs in this range.</div>';
+  const runRow = (r, indent) => `
+    <div class="hist-item" style="cursor:pointer;${indent?'margin-left:14px;border-left:3px solid var(--line);':''}" onclick="plhLogDetailId='${r.id}'; render()">
+      <div class="hist-top"><span class="mach">${indent ? fmtTime12(r.startTime)+'–'+fmtTime12(r.endTime) : fmtDate(r.date)}</span><span class="pill run">${r.plh.grossPLH.toFixed(0)} PLH</span></div>
+      ${indent ? '' : `<div class="hist-mid" style="color:var(--brk);text-decoration:underline;">${escapeHtml(r.plh.product||r.product)}</div>`}
+      <div class="hist-mid">${indent ? '' : r.machine+' · '}${r.plh.weightLbs} lbs</div>
+    </div>`;
+  const rows = jobs.length ? jobs.map(j=>{
+    if(j.runs.length===1) return runRow(j.runs[0], false);
+    const key = plhJobKey(j); const open = plhLogExpanded.has(key);
+    return `
+    <div class="hist-item" style="cursor:pointer;border-color:var(--brk);" onclick="togglePLHJob('${key.replace(/'/g,"\\'")}')">
+      <div class="hist-top"><span class="mach">${fmtDate(j.date)}</span><span class="pill run">${j.plh.grossPLH.toFixed(0)} PLH</span></div>
+      <div class="hist-mid" style="color:var(--brk);">${escapeHtml(j.plh.product||j.product)}</div>
+      <div class="hist-mid">${j.machine} · ${Math.round(j.plh.weightLbs*10)/10} lbs · <b style="color:var(--text);">${j.runs.length} runs combined</b> ${open?'▲':'▼'}</div>
+    </div>
+    ${open ? j.runs.map(r=>runRow(r, true)).join('') : ''}`;
+  }).join('') : '<div class="empty">No finished runs in this range.</div>';
 
   return `
   <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${plhLogRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setPLHLogPreset('${v}')">${l}</div>`).join('')}</div>
@@ -892,7 +939,7 @@ function renderPLHLogView(){
     <select onchange="plhLogFilters.product=this.value; render()"><option value="">All Products</option>${uniqueProducts.map(p=>`<option value="${escapeHtml(p)}" ${plhLogFilters.product===p?'selected':''}>${escapeHtml(p)}</option>`).join('')}</select>
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <div style="color:var(--muted);font-size:13px;">${recs.length} run${recs.length===1?'':'s'}</div>
+    <div style="color:var(--muted);font-size:13px;">${jobs.length} job${jobs.length===1?'':'s'}${recs.length>jobs.length?` (${recs.length} runs)`:''}</div>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:12px;" onclick="exportPLHLogCSV()">Export CSV</button>
       <button class="btn btn-primary" style="width:auto;padding:8px 14px;font-size:12px;" onclick="exportPLHReportPDF()">📄 PDF Report</button>
@@ -903,14 +950,17 @@ function renderPLHLogView(){
 /* ---- PLH Report PDF — a polished, print-ready report for handing to management, grouped by machine with full per-job detail (not a trimmed summary) ---- */
 function plhJobBlockHTML(r){
   const p = r.plh;
-  const segRows = (p.segments||[]).map((seg,i)=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>Segment ${i+1}: ${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span style="font-weight:600;">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
-  const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>${escapeHtml(d.reason||d.status)}</span><span style="font-weight:600;">${fmtTime12(d.start)}–${fmtTime12(d.end)}</span></div>`).join('') : '<div style="font-size:11.5px;color:#999;">No downtime recorded.</div>';
+  const multi = r.runs && r.runs.length>1;
+  const runTag = x => (multi && x.run) ? `Run ${x.run} · ` : '';
+  const runRows = multi ? r.runs.map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>Run ${i+1}: ${fmtTime12(x.startTime)}–${fmtTime12(x.endTime)}</span><span style="font-weight:600;">${(x.plh.weightLbs||0).toFixed(1)} lbs · ${(x.plh.grossPLH||0).toFixed(1)} PLH</span></div>`).join('') : '';
+  const segRows = (p.segments||[]).map((seg,i)=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>${runTag(seg)}Segment ${multi ? (p.segments.slice(0,i).filter(x=>x.run===seg.run).length+1) : i+1}: ${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span style="font-weight:600;">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
+  const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>${runTag(d)}${escapeHtml(d.reason||d.status)}</span><span style="font-weight:600;">${fmtTime12(d.start)}–${fmtTime12(d.end)}</span></div>`).join('') : '<div style="font-size:11.5px;color:#999;">No downtime recorded.</div>';
   const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
   const stat = (label,val)=>`<div style="flex:1;min-width:0;"><div style="font-size:9.5px;color:#888;text-transform:uppercase;letter-spacing:0.06em;">${label}</div><div style="font-size:17px;font-weight:700;color:#1a1a2e;">${val}</div></div>`;
   return `
   <div style="border:1px solid #ddd;border-radius:8px;padding:16px 18px;margin-bottom:14px;page-break-inside:avoid;">
     <div style="font-weight:700;font-size:14.5px;color:#1a1a2e;">${escapeHtml(p.product||r.product||'(no product)')}</div>
-    <div style="font-size:11px;color:#888;margin-bottom:8px;">${fmtDate(r.date)} · ${r.machine}</div>
+    <div style="font-size:11px;color:#888;margin-bottom:8px;">${fmtDate(r.date)} · ${r.machine}${multi?` · <b style="color:#1e3a5f;">${r.runs.length} runs combined</b>`:''}</div>
     <div style="font-size:30px;font-weight:700;color:#2980b9;margin-bottom:10px;">${p.grossPLH.toFixed(1)} <span style="font-size:13px;font-weight:400;color:#555;">lbs/hr Gross</span></div>
     <div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap;">
       ${stat('Quantity', Math.round(p.quantity||0))}
@@ -924,6 +974,7 @@ function plhJobBlockHTML(r){
       ${stat('Downtime', fmtDur(downtimeMin))}
       ${stat('Target PLH', p.targetPLH ? p.targetPLH : '—')}
     </div>
+    ${multi ? `<div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;margin-top:10px;">Runs</div>${runRows}` : ''}
     <div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;margin-top:10px;">Staffing Timeline</div>
     ${segRows || '<div style="font-size:11.5px;color:#999;">No segments recorded.</div>'}
     <div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;margin-top:10px;">Downtime</div>
@@ -936,7 +987,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
   const summary = computePLHSummary(allRecs);
   const dateLabel = startDate===endDate ? fmtDate(startDate) : `${fmtDate(startDate)} – ${fmtDate(endDate)}`;
   const byMachine = {};
-  allRecs.forEach(r=>{ (byMachine[r.machine]=byMachine[r.machine]||[]).push(r); });
+  groupPLHJobs(allRecs).forEach(j=>{ (byMachine[j.machine]=byMachine[j.machine]||[]).push(j); });
   Object.values(byMachine).forEach(list=>list.sort((a,b)=> a.date.localeCompare(b.date) || toMin(a.startTime)-toMin(b.startTime)));
 
   const statCard = (label,val,sub)=>`<div style="flex:1;min-width:0;background:#f7f7f7;border-radius:8px;padding:14px 16px;"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;">${label}</div><div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px;">${val}</div>${sub?`<div style="font-size:10.5px;color:#999;margin-top:2px;">${sub}</div>`:''}</div>`;
@@ -949,7 +1000,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
 
   const machineSections = Object.keys(byMachine).sort().map(m=>{
     const list = byMachine[m];
-    const mSummary = computePLHSummary(list);
+    const mSummary = computePLHSummary(list.flatMap(j=>j.runs));
     return `
     <!-- html2pdf ignores page-break-after:avoid, so the machine heading is wrapped together with its FIRST job card in one unbreakable block — they always land on the same page, and the heading can never be stranded alone at the bottom of a page. -->
     <div style="page-break-inside:avoid;break-inside:avoid;">
@@ -2464,7 +2515,7 @@ function weeklySummaryText(){
   const plhBlock = plh.runCount>0 ? `
 PLH This Period:
 Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
-Total Pounds: ${Math.round(plh.totalWeight)} · Runs: ${plh.runCount}
+Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
 ${plh.best ? 'Best: '+(plh.best.plh.product||'')+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}` : '';
   return `PACKAGING CI WEEKLY SUMMARY
 ${fmtDate(rep.startDate)} – ${fmtDate(rep.endDate)}
@@ -2599,7 +2650,7 @@ function exportWeeklyPDF(){
       row('Total Pounds', Math.round(plhSummary.totalWeight));
       row('Total Quantity', Math.round(plhSummary.totalQty));
       row('Labour Hours (gross)', plhSummary.totalGrossHours.toFixed(1));
-      row('Production Runs', plhSummary.runCount);
+      row('Jobs', plhSummary.runCount);
       if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
       if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
       if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
@@ -2793,7 +2844,7 @@ function summaryText(date){
   const plhBlock = plh.runCount>0 ? `
 PLH Today:
 Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
-Total Pounds: ${Math.round(plh.totalWeight)} · Runs: ${plh.runCount}
+Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
 ` : '';
   return `PACKAGING CI DAILY REPORT
 Date: ${fmtDate(rep.date)}
@@ -2915,7 +2966,7 @@ function exportReportPDF(date){
       row('Total Pounds', Math.round(plhSummary.totalWeight));
       row('Total Quantity', Math.round(plhSummary.totalQty));
       row('Labour Hours (gross)', plhSummary.totalGrossHours.toFixed(1));
-      row('Production Runs', plhSummary.runCount);
+      row('Jobs', plhSummary.runCount);
       if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
       if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
       if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
