@@ -165,7 +165,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v100 - 2026-10-09 (new: one-tap Metal Detector button on Variovac 1-3 Live Floor cards, logged as a Planned Stop)';
+const APP_VERSION = 'v101 - 2026-10-09 (Daily summary report: PLH section replaced by a one-line headline pointing to the attached PLH report; Weekly Summary unchanged)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2792,7 +2792,7 @@ function renderReportView(date){
     <h3>Continuous Improvement Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
-  ${renderPLHCard(computePLHSummary(plhRecordsInRange(rep.date,rep.date)), 'PLH Today')}
+  ${(()=>{ const h=plhHeadline(rep.date); return `<div class="card" style="border-left:3px solid var(--brk);"><div style="font-size:14px;line-height:1.5;"><b style="color:var(--brk);">${h.main}</b>${h.note?` <span style="color:var(--muted);font-style:italic;">${h.note}</span>`:''}</div></div>`; })()}
   <div class="card">
     <h3>Action for Tomorrow</h3>
     <textarea id="ciActionBox" placeholder="e.g. Review trim availability and communication with packaging before the morning run." oninput="updateCiAction('${rep.date}', this.value)">${rep.ciAction||''}</textarea>
@@ -2877,15 +2877,22 @@ function renderEndShiftConfirm(){
   `;
 }
 
+/* v101: the daily summary report carries only a one-line PLH headline — the full PLH breakdown lives in the separate PLH PDF that's attached alongside it. (Weekly Summary keeps its full PLH section + trend chart.) */
+function plhHeadline(date){
+  const x = computePLHSummary(plhRecordsInRange(date, date));
+  if(!x.runCount) return {main:'PLH today: no finished runs with weight recorded.', note:''};
+  return {
+    main: `PLH today: ${x.grossPLH.toFixed(1)} lbs/hr gross · ${x.netPLH.toFixed(1)} net · ${Math.round(x.totalWeight).toLocaleString('en-US')} lbs · ${x.runCount} job${x.runCount===1?'':'s'}.`,
+    note: 'Full breakdown in the attached PLH report.'
+  };
+}
 function summaryText(date){
   const rep = getReportForView(date);
   const t = rep.totals;
-  const plh = computePLHSummary(plhRecordsInRange(rep.date, rep.date));
-  const plhBlock = plh.runCount>0 ? `
-PLH Today:
-Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
-Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
-` : '';
+  const plhH = plhHeadline(rep.date);
+  const plhBlock = `
+${plhH.main}${plhH.note?' '+plhH.note:''}
+`;
   return `PACKAGING CI DAILY REPORT
 Date: ${fmtDate(rep.date)}
 
@@ -2997,20 +3004,11 @@ function exportReportPDF(date){
   doc.text(obsLines, 46, y); y += obsLines.length*14+10;
 
   {
-    const plhSummary = computePLHSummary(plhRecordsInRange(rep.date, rep.date));
-    ensure(120); y+=6; section('PLH SUMMARY (TODAY)');
-    if(plhSummary.runCount===0){ doc.text('No finished runs with weight recorded yet.',46,y); y+=15; }
-    else{
-      row('Gross PLH (lbs/labour-hr)', plhSummary.grossPLH.toFixed(0));
-      row('Net PLH (lbs/labour-hr)', plhSummary.netPLH.toFixed(0));
-      row('Total Pounds', Math.round(plhSummary.totalWeight));
-      row('Total Quantity', Math.round(plhSummary.totalQty));
-      row('Labour Hours (gross)', plhSummary.totalGrossHours.toFixed(1));
-      row('Jobs', plhSummary.runCount);
-      if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
-      if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
-      if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
-    }
+    const h = plhHeadline(rep.date);
+    ensure(60); y+=6; section('PLH');
+    doc.setFont('helvetica','bold'); const ln = doc.splitTextToSize(h.main, 520); doc.text(ln, 46, y); y += ln.length*14;
+    if(h.note){ doc.setFont('helvetica','italic'); doc.setTextColor(110); doc.text(h.note, 46, y); y+=14; doc.setTextColor(0); }
+    doc.setFont('helvetica','normal'); y+=6;
   }
 
   ensure(90); section('CI ACTION / FOLLOW-UP');
