@@ -165,7 +165,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v99 - 2026-10-09 (PLH: same product run several times on the same machine and day is combined into one job — total lbs ÷ total labour hours)';
+const APP_VERSION = 'v100 - 2026-10-09 (new: one-tap Metal Detector button on Variovac 1-3 Live Floor cards, logged as a Planned Stop)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -183,14 +183,15 @@ const STATUSES = [
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
 /* v98: Planned stops (stretching, crew talk, town hall…) — recorded and shown in reports as their own line, but like Break / No Work they are NOT counted against efficiency, NOT in bottleneck rankings or the Upstream report, and never trigger the red downtime alarm. They still count as paid labour time, so PLH gross includes them and PLH net excludes them, same as any stop. */
-const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk'];
+const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk','Metal Detector Test'];
+const METAL_DETECTOR_MACHINES = ['Variovac 1','Variovac 2','Variovac 3']; // v100: one-tap Metal Detector button shows on these lines
 const WAITING_CATEGORIES = {
   'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Switching Product','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Waiting for Management Confirmation/Decision','Label Boxes','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
   'Cleaning / Sanitation': {cls:'internal', reasons:['Required Cleaning','Sanitation Delay','Cleanup After Product','Waiting for Sanitation']},
-  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','Waiting for QA','QA Inspection','Metal Detector Test','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Other QA Issue']},
+  'QA / Pre-Op': {cls:'internal', reasons:['Pre-Op Inspection','Waiting for QA','QA Inspection','QA Approval Pending','Product Hold','Weight/Label Verification','Packaging Verification','Allergen Check','Temperature Check','Corrective Action','QA Recheck','Other QA Issue']},
 };
 function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
 function reasonClassification(category){ return WAITING_CATEGORIES[category] ? WAITING_CATEGORIES[category].cls : 'internal'; }
@@ -1211,6 +1212,35 @@ function laborHoursSoFar(live){
 function machineIdSafe(m){ return m.replace(/\s+/g,'-'); }
 /* ============ ALL-LINE PLANNED STOP (v98) ============
 One tap stops several lines at the same minute for a planned event (stretching, crew talk, town hall), and one tap resumes them all. Each machine gets its own normal PLANNED downtime segment, tagged with a shared group id so the Live Floor can show one banner with "Resume All". Lines can still be resumed one by one from their own card. Idle machines are not ticked by default, so an event isn't logged against a line that wasn't running. */
+/* v100: one-tap Metal Detector Test. Starts a Planned Stop on that line at this minute (no menus). If the line was already stopped for another reason, that reason is remembered and comes back when the check is done; otherwise ▶ Resume puts it back to running as usual. */
+let metalBusy = false;
+async function quickMetalDetector(m){
+  if(metalBusy) return;
+  const live = Store.liveRuns[m];
+  if(!live) return;
+  metalBusy = true;
+  try{
+    const now = nowHHMM();
+    let resumeTo = null;
+    if(live.status==='RUNNING'){
+      const lastSeg = live.segments[live.segments.length-1];
+      if(lastSeg && !lastSeg.end) lastSeg.end = now;
+    } else {
+      const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+      if(lastDt && !lastDt.end){ lastDt.end = now; resumeTo = {status:lastDt.status, reasonCategory:lastDt.reasonCategory||'', reason:lastDt.reason||'', classification:lastDt.classification||''}; }
+    }
+    live.downtimeSegments.push({start: now, end:null, status:'PLANNED', reasonCategory:'Planned Stop', reason:'Metal Detector Test', classification:'', notes:'', resumeTo});
+    live.status = 'DOWNTIME';
+    const ok = await Store.saveLiveRuns();
+    if(!ok) return;
+    toast(`${m} — metal detector test started`);
+    render();
+  } finally { metalBusy = false; }
+}
+function inMetalCheck(live){
+  const lastDt = live && (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+  return !!(lastDt && !lastDt.end && lastDt.status==='PLANNED' && lastDt.reason==='Metal Detector Test');
+}
 let allLineSetup = null;
 let allLineBusy = false;
 function openAllLineSetup(){
@@ -1614,6 +1644,7 @@ function renderLiveActiveCard(m, live){
         ? `<button class="btn btn-secondary" onclick="openDowntimeSetup('${m}')">⏸ Downtime</button>`
         : `<button class="btn btn-primary" style="background:var(--run);" onclick="resumeRun('${m}')">▶ Resume</button>`}
     </div>
+    ${METAL_DETECTOR_MACHINES.includes(m) && !inMetalCheck(live) ? `<button class="btn btn-secondary" style="margin-top:8px;border-color:var(--planned);color:var(--planned);" onclick="quickMetalDetector('${m}')">🧲 Metal Detector</button>` : ''}
     <button class="btn btn-primary" style="margin-top:8px;" onclick="openFinishSetup('${m}')">✅ Finish Product</button>
     ${isRunning ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="switchProduct('${m}')">🔄 Switch Product (no stop)</button>` : ''}
     ${!isRunning && !hasNoSegmentsYet ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="openDowntimeSetup('${m}')">🔄 Change Reason (no stop)</button>` : ''}
@@ -1735,6 +1766,15 @@ async function resumeRun(m){
   const now = nowHHMM();
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt) lastDt.end = now;
+  if(lastDt && lastDt.resumeTo){
+    // v100: a planned stop (e.g. Metal Detector Test) taken while the line was already stopped — go back to that earlier reason, not to running
+    live.downtimeSegments.push({start: now, end:null, ...lastDt.resumeTo, notes:''});
+    const okR = await Store.saveLiveRuns();
+    if(!okR) return;
+    toast(`${m} — back to ${lastDt.resumeTo.reason||'previous status'}`);
+    render();
+    return;
+  }
   const lastSeg = live.segments[live.segments.length-1];
   const nextEmployees = (live.pendingEmployees!=null) ? live.pendingEmployees : lastSeg.employees;
   live.segments.push({start: now, end:null, employees: nextEmployees});
