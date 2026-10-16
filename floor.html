@@ -74,7 +74,6 @@ button.sm{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--lin
 #loginErr{color:var(--down);font-size:12.5px}
 @media (max-width:480px){h1{font-size:19px}.total{width:100%;order:9}}
 /* shown inside the CI Tracker's Live tab (floor.html?embed=1) */
-.embed #app{position:fixed;inset:0;height:auto}
 .embed header{padding-block:6px;gap:8px}.embed header h1{display:none}.embed #banner{display:none}
 .embed #stage{min-height:0}.embed #cards{padding-block:6px;gap:8px}.embed .card{flex-basis:200px;padding:8px 10px 8px 12px;gap:4px}
 .embed .cname{font-size:16px}.embed .plh b{font-size:15px}.embed .hbtn{padding:5px 9px;font-size:12px}
@@ -653,6 +652,18 @@ function startPreview(){
 function resize(){const r=stage.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/Math.max(1,r.height);
   camera.fov=r.width<520?55:42;camera.updateProjectionMatrix()}
 new ResizeObserver(resize).observe(stage);resize();
+// Inside the tracker, size the page from the tracker's frame in pixels.
+// (iPhone Safari stretches an iframe to fit its content, so viewport units can't be trusted there.)
+let embedH=0;
+function fitEmbed(){
+  if(!EMBED)return;
+  let h=0;try{h=window.frameElement?window.frameElement.clientHeight:0}catch(e){}
+  if(!h)h=window.innerHeight;
+  if(Math.abs(h-embedH)<2)return;embedH=h;
+  [document.documentElement,document.body,document.getElementById("app")].forEach(el=>{el.style.height=h+"px";el.style.minHeight="0";el.style.overflow="hidden"});
+  resize();
+}
+if(EMBED){fitEmbed();setInterval(fitEmbed,600);window.addEventListener("resize",fitEmbed)}
 let last=performance.now(),paused=false;
 // the CI Tracker pauses the 3D floor while it's hidden (List view or another tab) to save battery
 window.addEventListener("message",e=>{if(e.origin!==location.origin||!e.data)return;
