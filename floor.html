@@ -72,6 +72,10 @@ button.sm{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--lin
 #login button{font:inherit;font-weight:600;padding:10px;border-radius:6px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer}
 #loginErr{color:var(--down);font-size:12.5px}
 @media (max-width:480px){h1{font-size:19px}.total{width:100%;order:9}}
+/* shown inside the CI Tracker's Live tab (floor.html?embed=1) */
+.embed header{padding-block:6px;gap:8px}.embed header h1{display:none}.embed #banner{display:none}
+.embed #stage{min-height:0}.embed #cards{padding-block:6px;gap:8px}.embed .card{flex-basis:200px;padding:8px 10px 8px 12px;gap:4px}
+.embed .cname{font-size:16px}.embed .plh b{font-size:15px}.embed .hbtn{padding:5px 9px;font-size:12px}
 </style>
 
 </head>
@@ -109,6 +113,7 @@ button.sm{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--lin
 <script>
 (function(){
 "use strict";
+const EMBED=/[?&]embed=1/.test(location.search);if(EMBED){document.documentElement.dataset.theme="dark";document.body.classList.add("embed")}
 /* ---------- three setup ---------- */
 const stage=document.getElementById("stage");
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -646,8 +651,12 @@ function startPreview(){
 function resize(){const r=stage.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/Math.max(1,r.height);
   camera.fov=r.width<520?55:42;camera.updateProjectionMatrix()}
 new ResizeObserver(resize).observe(stage);resize();
-let last=performance.now();
+let last=performance.now(),paused=false;
+// the CI Tracker pauses the 3D floor while it's hidden (List view or another tab) to save battery
+window.addEventListener("message",e=>{if(e.origin!==location.origin||!e.data)return;
+  if(e.data.floor==="pause")paused=true;if(e.data.floor==="resume"&&paused){paused=false;last=performance.now();resize()}});
 function loop(now){
+  if(paused){requestAnimationFrame(loop);return}
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
   ["v1","v2","v3"].forEach(k=>updateMachineVis(k,dt,t));
   const ms=marelStopped();
