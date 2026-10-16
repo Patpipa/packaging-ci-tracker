@@ -25,6 +25,7 @@
   --accent:#f2b705; --accent-ink:#1d1500; --run:#3cc47a; --down:#ff5d4f; --brk:#f0b429; --idle:#76838c;
   --scene:#1b2328; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important} /* make sure hidden panels (sign-in, banner) really hide */
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden}
 #app{height:100vh;height:100dvh;display:flex;flex-direction:column}
@@ -73,6 +74,7 @@ button.sm{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--lin
 #loginErr{color:var(--down);font-size:12.5px}
 @media (max-width:480px){h1{font-size:19px}.total{width:100%;order:9}}
 /* shown inside the CI Tracker's Live tab (floor.html?embed=1) */
+.embed #app{position:fixed;inset:0;height:auto}
 .embed header{padding-block:6px;gap:8px}.embed header h1{display:none}.embed #banner{display:none}
 .embed #stage{min-height:0}.embed #cards{padding-block:6px;gap:8px}.embed .card{flex-basis:200px;padding:8px 10px 8px 12px;gap:4px}
 .embed .cname{font-size:16px}.embed .plh b{font-size:15px}.embed .hbtn{padding:5px 9px;font-size:12px}
