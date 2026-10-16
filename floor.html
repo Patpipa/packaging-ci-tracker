@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Packaging Floor 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: full-screen 3D floor, slim header strip, live machine cards docked at the bottom */
+:root{
+  --bg:#e9edf0; --panel:#ffffff; --fg:#1b2329; --muted:#5d6b75; --line:#d3dbe0;
+  --accent:#e0a100; --accent-ink:#2a1f00; --run:#1f9d55; --down:#d63b2f; --brk:#c98a00; --idle:#8a96a0;
+  --scene:#cfd8de;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11171b; --panel:#1a2227; --fg:#e6ecef; --muted:#93a2ac; --line:#2c373e;
+  --accent:#f2b705; --accent-ink:#1d1500; --run:#3cc47a; --down:#ff5d4f; --brk:#f0b429; --idle:#76838c;
+  --scene:#1b2328; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11171b; --panel:#1a2227; --fg:#e6ecef; --muted:#93a2ac; --line:#2c373e;
+  --accent:#f2b705; --accent-ink:#1d1500; --run:#3cc47a; --down:#ff5d4f; --brk:#f0b429; --idle:#76838c;
+  --scene:#1b2328; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden}
+#app{height:100vh;height:100dvh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;margin:0;text-transform:uppercase}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:3px 9px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--idle)}
+.pill[data-s="live"] i{background:var(--run)} .pill[data-s="off"] i{background:var(--down)} .pill[data-s="demo"] i{background:var(--accent)}
+.total{font-family:var(--mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.spacer{flex:1}
+.hbtn{font:inherit;font-size:13px;background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#stage{position:relative;flex:1 1 auto;min-height:55vh}
+#stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
+.banner{position:absolute;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));top:10px;font-size:12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);padding:6px 10px;border-radius:4px;max-width:520px}
+#cards{flex:0 0 auto;align-items:flex-start;display:flex;gap:10px;overflow-x:auto;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:var(--panel);border-top:1px solid var(--line);scroll-snap-type:x mandatory}
+.card{flex:1 0 230px;max-width:320px;scroll-snap-align:start;border:1px solid var(--line);border-radius:8px;padding:10px 12px 10px 14px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;--st:var(--idle)}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--st)}
+.card[data-st="run"]{--st:var(--run)} .card[data-st="down"]{--st:var(--down)} .card[data-st="break"]{--st:var(--brk)}
+.ctop{display:flex;align-items:center;gap:8px}
+.cname{font-family:var(--display);font-weight:700;font-size:19px;text-transform:uppercase;letter-spacing:.03em;background:none;border:0;color:var(--fg);padding:0;cursor:pointer;text-align:left}
+.chip{margin-left:auto;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--st);border:1px solid var(--st);border-radius:20px;padding:2px 8px;white-space:nowrap}
+.prod{font-size:13px;min-height:1.2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.why{font-size:12.5px;color:var(--down);line-height:1.3}
+.card[data-st="break"] .why{color:var(--brk)}
+.meta{display:flex;gap:12px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.meta b{font-family:var(--mono);color:var(--fg);font-weight:500}
+.plh{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.plh b{font-size:18px;color:var(--fg);font-weight:500}
+.card.other{--st:var(--accent);flex-basis:250px;gap:4px}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.staff{display:flex;align-items:center;gap:6px}
+.staff b{font-family:var(--mono);min-width:14px;text-align:center}
+button.sm{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;min-width:30px;height:28px;padding:0 8px;cursor:pointer}
+.note{font-size:12px;color:var(--muted);line-height:1.35}
+#login{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 80%,transparent);padding:16px}
+#login form{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;width:100%;max-width:330px;display:flex;flex-direction:column;gap:10px}
+#login h2{font-family:var(--display);text-transform:uppercase;margin:0;font-size:22px}
+#login p{margin:0;font-size:13px;color:var(--muted)}
+#login input{font:inherit;font-size:16px;padding:9px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+#login button{font:inherit;font-weight:600;padding:10px;border-radius:6px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+#loginErr{color:var(--down);font-size:12.5px}
+@media (max-width:480px){h1{font-size:19px}.total{width:100%;order:9}}
+</style>
+
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Packaging Floor</h1>
+    <span class="pill" id="conn" data-s="wait"><i></i><span>Connecting…</span></span>
+    <span class="spacer"></span>
+    <button class="hbtn" id="vvCam">Variovacs</button>
+    <button class="hbtn" id="resetCam">Whole floor</button>
+    <span class="total" id="total"></span>
+  </header>
+  <div id="stage">
+    <div class="banner" id="banner" hidden></div>
+    <div id="login" hidden>
+      <form id="loginForm">
+        <h2>Sign in</h2>
+        <p>Use the same login as the CI Tracker.</p>
+        <span id="loginErr"></span>
+        <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
+        <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+        <button type="submit" id="loginBtn">Sign in</button>
+      </form>
+    </div>
+  </div>
+  <div id="cards"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+/* ---------- three setup ---------- */
+const stage=document.getElementById("stage");
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+stage.prepend(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,1,0.5,300);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;controls.maxPolarAngle=Math.PI*0.47;controls.minDistance=8;controls.maxDistance=90;
+const HOME={pos:new THREE.Vector3(2,54,38),target:new THREE.Vector3(0,0,1)};
+// default view: the Variovac section (V3 at the top, V2 and V1 below, Manual Pack on the right)
+const VVIEW={pos:new THREE.Vector3(3,34,28),target:new THREE.Vector3(3,0,6.5)};
+camera.position.copy(VVIEW.pos);controls.target.copy(VVIEW.target);
+
+function sceneBg(){const c=getComputedStyle(document.documentElement).getPropertyValue("--scene").trim()||"#cfd8de";scene.background=new THREE.Color(c);scene.fog=new THREE.Fog(c,70,140)}
+sceneBg();
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",sceneBg)}catch(e){}
+new MutationObserver(sceneBg).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+
+scene.add(new THREE.HemisphereLight(0xf4f8ff,0x6b7480,0.75));
+const sun=new THREE.DirectionalLight(0xffffff,0.75);
+sun.position.set(18,40,22);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-30,right:30,top:32,bottom:-32,near:1,far:120});
+scene.add(sun);
+
+const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.7,metalness:.05},o));
+const mats={
+  floor:M(0x9fadb6,{roughness:.55}), wh:M(0x7c858c), burger:M(0x8f9aa2),
+  wall:M(0xdfe5e8), steel:M(0xb8c2c8,{metalness:.55,roughness:.35}), darkSteel:M(0x5e6a72,{metalness:.5,roughness:.4}),
+  belt:M(0x2d3338), poly:M(0xf3f5f6), yellow:M(0xe0a800), blueTray:M(0x3b7fc4), film:M(0xd9edf7,{transparent:true,opacity:.55,roughness:.1}),
+  pallet:M(0x9c7a4c), box:M(0xc9a36d), meat:M(0xb5414a), skin:M(0xe2b08f), skin2:M(0x9b6a4a), smock:M(0xf7f8f8), pants:M(0x3a4650), boot:M(0xf0f0f0)
+};
+function box(w,h,d,mat,x,y,z,parent){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;(parent||scene).add(m);return m}
+
+/* ---------- label sprites ---------- */
+function label(text,x,y,z,scale=1,parent){
+  const c=document.createElement("canvas");c.width=512;c.height=112;const g=c.getContext("2d");
+  g.font="700 64px 'Barlow Condensed', 'Arial Narrow', Arial";const w=Math.min(500,g.measureText(text.toUpperCase()).width+44);
+  g.fillStyle="rgba(22,28,33,.86)";const x0=(512-w)/2;g.beginPath();
+  if(g.roundRect)g.roundRect(x0,14,w,84,14);else g.rect(x0,14,w,84);g.fill();
+  g.fillStyle="#fff";g.textAlign="center";g.textBaseline="middle";g.fillText(text.toUpperCase(),256,58);
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false}));
+  s.scale.set(5.2*scale,1.14*scale,1);s.position.set(x,y,z);(parent||scene).add(s);return s;
+}
+document.fonts&&document.fonts.ready.then(()=>{}); // labels drawn after fonts below
+
+/* ---------- equipment ---------- */
+function table(w,d,x,z,rotY=0,mat=mats.steel){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rotY;scene.add(g);
+  box(w,0.08,d,mats.poly,0,0.92,0,g);box(w,0.06,d,mat,0,0.85,0,g);
+  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>box(0.08,0.85,0.08,mats.steel,a*(w/2-0.15),0.42,b*(d/2-0.15),g));
+  return g;
+}
+function scale(x,z,w=1.2,d=1){const g=new THREE.Group();g.position.set(x,0,z);scene.add(g);
+  box(0.14,0.9,0.14,mats.steel,0,0.45,0,g);box(w,0.1,d,mats.steel,0,0.95,0,g);
+  box(0.5,0.38,0.12,mats.darkSteel,0,1.3,-d/2+0.06,g);
+  const scr=box(0.38,0.22,0.02,M(0x6fd2ff,{emissive:0x3aa9e0,emissiveIntensity:.7}),0,1.32,-d/2+0.125,g);
+  return g}
+function conveyor(len,x,z,rotY){const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rotY;scene.add(g);
+  box(len,0.08,0.7,mats.belt,0,0.82,0,g);box(len,0.14,0.08,mats.steel,0,0.86,0.39,g);box(len,0.14,0.08,mats.steel,0,0.86,-0.39,g);
+  for(let i=-len/2+0.3;i<len/2;i+=1.2){box(0.08,0.78,0.6,mats.steel,i,0.39,0,g)}return g}
+
+// Variovac: local +x is the product flow direction
+const vv={};
+function variovac(id,len,w,x,z,rotY){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rotY;scene.add(g);
+  box(len,0.75,w,mats.steel,0,0.5,0,g);                 // body
+  box(len,0.08,w*0.82,mats.belt,0,0.9,0,g);              // forming chain
+  box(len*0.22,0.9,w*1.02,mats.steel,len*0.12,1.33,0,g);  // sealing station
+  const hood=box(len*0.22,0.25,w*1.06,mats.darkSteel,len*0.12,1.9,0,g);
+  const roll=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.42,w*0.9,20),mats.film);roll.rotation.x=Math.PI/2;roll.position.set(-len/2+0.6,1.35,0);g.add(roll);
+  const roll2=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.34,w*0.9,20),mats.film);roll2.rotation.x=Math.PI/2;roll2.position.set(len*0.25,2.25,0);g.add(roll2);
+  box(0.6,1.0,0.4,mats.darkSteel,len*0.32,1.2,w/2+0.25,g);  // HMI
+  const hmi=box(0.44,0.3,0.03,M(0x6fd2ff,{emissive:0x3aa9e0,emissiveIntensity:.7}),len*0.32,1.45,w/2+0.46,g);
+  box(0.08,1.4,0.08,mats.steel,len/2-0.3,1.6,-w/2+0.2,g); // beacon pole
+  const beaconMat=new THREE.MeshStandardMaterial({color:0x1f9d55,emissive:0x1f9d55,emissiveIntensity:1});
+  const beacon=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.32,16),beaconMat);beacon.position.set(len/2-0.3,2.45,-w/2+0.2);g.add(beacon);
+  const glow=new THREE.PointLight(0x1f9d55,0.9,6);glow.position.copy(beacon.position);g.add(glow);
+  // trays travelling along the chain
+  const trays=[];for(let i=0;i<7;i++){const t=new THREE.Group();
+    box(0.62,0.12,w*0.55,mats.film,0,0,0,t);box(0.5,0.1,w*0.42,mats.meat,0,0.03,0,t);
+    t.position.set(-len/2+0.4+i*(len/7),1.0,0);g.add(t);trays.push(t)}
+  label(VNAME[id],0,3.4,0,1,g).material.rotation=0;
+  vv[id]={g,len,w,beacon,beaconMat,glow,trays};
+}
+/* ---------- layout from Walter's second sketch ----------
+   Plan coordinates come straight from the drawing (pixels), 40 px = 1 unit. */
+const PX=(px,py)=>[(px-750)/40,(py-1000)/40];
+const OBST=[]; // rectangles people walk around: [x1,z1,x2,z2]
+function solidPx(x1,y1,x2,y2){const a=PX(x1,y1),b=PX(x2,y2);OBST.push([a[0],a[1],b[0],b[1]]);return {x:(a[0]+b[0])/2,z:(a[1]+b[1])/2,w:b[0]-a[0],d:b[1]-a[1]}}
+function blockPx(x1,y1,x2,y2,h,mat){const r=solidPx(x1,y1,x2,y2);box(r.w,h,r.d,mat,r.x,h/2,r.z);return r}
+function tablePx(x1,y1,x2,y2){const r=solidPx(x1,y1,x2,y2);table(r.w,r.d,r.x,r.z);return r}
+function scalePx(x1,y1,x2,y2){const r=solidPx(x1,y1,x2,y2);scale(r.x,r.z,r.w,r.d);return r}
+function convPx(x1,y1,x2,y2){const r=solidPx(x1,y1,x2,y2);if(r.w>=r.d)conveyor(r.w,r.x,r.z,0);else conveyor(r.d,r.x,r.z,Math.PI/2);return r}
+function floorPx(x1,y1,x2,y2,mat,y=0.01){const a=PX(x1,y1),b=PX(x2,y2);const m=new THREE.Mesh(new THREE.PlaneGeometry(b[0]-a[0],b[1]-a[1]),mat);m.rotation.x=-Math.PI/2;m.position.set((a[0]+b[0])/2,y,(a[1]+b[1])/2);m.receiveShadow=true;scene.add(m)}
+
+// floors
+// rooms we don't work in are kept as thin strips so the packaging floor gets the space
+function floorU(x1,z1,x2,z2,mat,y=0.01){const m=new THREE.Mesh(new THREE.PlaneGeometry(x2-x1,z2-z1),mat);m.rotation.x=-Math.PI/2;m.position.set((x1+x2)/2,y,(z1+z2)/2);m.receiveShadow=true;scene.add(m)}
+floorU(-18.75,-24,4,24,mats.floor,0);floorU(4,-12.5,18.5,24,mats.floor,0);
+floorU(10.9,-24,18.5,-4.9,mats.wh);floorU(10.9,-4.9,18.5,0.25,mats.wh);   // Warehouse 1 + In & Out passage
+floorU(4,-24,10.9,-12.5,mats.burger);floorU(14,0.25,18.5,22.75,mats.burger); // debox room, burger room
+floorPx(0,60,370,180,mats.burger);  // washdown
+floorPx(0,1450,300,1960,M(0x7d878e)); // walled-off area (pushed back to give the Variovacs room)
+
+// walls (with door gaps)
+const WALL_H=2.6;
+function wallPx(x1,y1,x2,y2){const a=PX(x1,y1),b=PX(x2,y2);const t=0.15;const r=[Math.min(a[0],b[0])-t,Math.min(a[1],b[1])-t,Math.max(a[0],b[0])+t,Math.max(a[1],b[1])+t];
+  OBST.push(r);box(r[2]-r[0],WALL_H,r[3]-r[1],mats.wall,(r[0]+r[2])/2,WALL_H/2,(r[1]+r[3])/2)}
+function wallU(x1,z1,x2,z2){const t=0.15;const r=[Math.min(x1,x2)-t,Math.min(z1,z2)-t,Math.max(x1,x2)+t,Math.max(z1,z2)+t];
+  OBST.push(r);box(r[2]-r[0],WALL_H,r[3]-r[1],mats.wall,(r[0]+r[2])/2,WALL_H/2,(r[1]+r[3])/2)}
+// Debox room + Warehouse 1 as in the earlier version Walter picked
+wallU(4,-22.25,4,-17.5);wallU(4,-15.5,4,-12.5);              // Debox room, door to the floor
+wallU(4,-12.5,10.9,-12.5);                                    // Debox room bottom
+wallU(10.9,-22.5,10.9,-18);wallU(10.9,-16.5,10.9,-4.9);       // Debox ↔ Warehouse 1 door, then the wall behind grinder / dicer / band saw 1
+wallU(13.25,-4.9,18.5,-4.9);                                  // In & Out passage top (door into Warehouse 1 at the left end)
+wallU(15.3,0.25,18.5,0.25);                                   // passage bottom (door into the Burger Room)
+wallU(14,0.25,14,20.75);wallU(14,22.75,18.5,22.75);curbU(18.5,-23.5,18.5,-4.9);curbU(18.5,0.25,18.5,22.75); // Burger Room, exit at the bottom; outer edge kept low so the floor feels open
+function curbU(x1,z1,x2,z2){const t=0.15;const r=[Math.min(x1,x2)-t,Math.min(z1,z2)-t,Math.max(x1,x2)+t,Math.max(z1,z2)+t];OBST.push(r);box(r[2]-r[0],0.5,r[3]-r[1],mats.wall,(r[0]+r[2])/2,0.25,(r[1]+r[3])/2)}
+wallPx(15,180,150,180);wallPx(230,180,365,180);wallPx(370,60,370,180); // Washdown area + door
+wallPx(30,1450,300,1450);wallPx(300,1450,300,1830);           // walled-off area, exit door at the bottom
+// outer edge curbs
+[[0,40,1480,40],[0,40,0,1960],[0,1960,1480,1960]].forEach(([a,b,c,d])=>{const p=PX(a,b),q=PX(c,d);box(Math.abs(q[0]-p[0])||0.3,0.5,Math.abs(q[1]-p[1])||0.3,mats.wall,(p[0]+q[0])/2,0.25,(p[1]+q[1])/2)});
+const exitMat=M(0x1f9d55,{emissive:0x1f9d55,emissiveIntensity:.6});
+box(0.6,0.35,0.12,exitMat,PX(300,1870)[0]+0.4,2.4,PX(300,1870)[1]);box(0.12,0.35,0.6,exitMat,13.75,2.4,21.75);
+
+// Variovacs (local +x is product flow)
+const VNAME={v1:"Variovac 1",v2:"Variovac 2",v3:"Variovac 3"};
+variovac("v1",8.8,3.0,0.0,18.6,0);      // flows toward the centre conveyor / Manual Pack side
+variovac("v2",8.8,3.0,0.0,7.95,0);
+variovac("v3",5.6,2.2,5.25,-7.1,-Math.PI/2); // flows down toward its scale
+OBST.push([-4.5,17.0,4.5,20.2],[-4.5,6.35,4.5,9.55],[4.0,-10.0,6.5,-4.2]);
+// V1 / V2 outfeeds, scales and the centre conveyor between them
+convPx(945,1690,985,1740);scalePx(970,1810,1015,1880);
+convPx(945,1235,985,1285);scalePx(945,1120,985,1190);
+const centreConv=convPx(970,1310,1010,1660);label("Conveyor",centreConv.x,2.0,centreConv.z,.6);
+// V3 outfeed + scale
+convPx(950,835,985,890);scalePx(905,835,945,895);
+// Manual Pack (rebox) along the Burger Room wall
+const mpT=tablePx(1244,1240,1304,1600);label("Manual Pack",mpT.x,2.4,mpT.z,.8);scalePx(1244,1150,1289,1235);
+label("Scale",PX(965,1150)[0],2.3,PX(965,1150)[1],.55);label("Scale",PX(992,1845)[0],2.3,PX(992,1845)[1],.55);label("Scale",PX(925,865)[0],2.3,PX(925,865)[1],.55);
+
+// Marel and its tables
+const marel=solidPx(400,700,660,1040);
+(function(){const g=new THREE.Group();g.position.set(marel.x,0,marel.z);scene.add(g);
+  box(marel.w,0.9,marel.d,mats.steel,0,0.45,0,g);box(1.8,0.08,marel.d,mats.belt,0,0.94,0,g);
+  [-2.2,-0.6,1.0].forEach(z=>{box(marel.w*0.7,1.2,0.9,mats.steel,0,1.5,z,g)});
+  box(1.0,1.6,0.6,mats.darkSteel,marel.w/2-0.4,1.3,-marel.d/2+0.5,g);
+  label("Marel",0,3.4,0,1.1,g)})();
+tablePx(360,830,395,995);tablePx(680,825,715,970);
+label("Meat out",PX(378,910)[0],2.3,PX(378,910)[1],.55);label("Meat out",PX(698,900)[0],2.3,PX(698,900)[1],.55);
+[[378,860],[378,940],[698,850],[698,930]].forEach(([a,b],i)=>{const p=PX(a,b);box(0.65,0.45,0.75,mats.blueTray,p[0],1.18,p[1]);if(i%2===0)box(0.5,0.12,0.6,mats.meat,p[0],1.42,p[1])});
+const marelMeat=[];for(let i=0;i<8;i++){const b=box(0.42,0.14,0.32,mats.meat,marel.x,1.05,0);marelMeat.push({b,z:marel.z-marel.d/2+0.5+i*0.9,side:i%2?1:-1})}
+const marelTbl=tablePx(445,1070,645,1105);label("Marel table",marelTbl.x,2.2,marelTbl.z,.65);
+// chicken line beside Variovac 2 / 1
+blockPx(322,1293,402,1343,1.4,mats.steel);label("Fajita machine",PX(362,1318)[0],2.6,PX(362,1318)[1],.65);
+blockPx(419,1298,489,1338,1.4,mats.steel);label("Cutlet machine",PX(454,1318)[0],2.6,PX(454,1318)[1],.65); // in line behind Variovac 2
+tablePx(40,1408,290,1448);            // table against the walled-off area
+const chick=tablePx(302,1460,352,1820); // chicken table against the walllabel("Table for chicken",chick.x,2.2,chick.z,.7);
+
+// Variovac 3 corner: grinder, dicer, band saw 1, debox room
+(function(){const r=solidPx(1120,520,1170,590);box(r.w,1.6,r.d,mats.steel,r.x,0.8,r.z);const h=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.3,0.8,16),mats.steel);h.position.set(r.x,2.0,r.z);scene.add(h);label("Grinder",r.x,3.1,r.z,.6)})();
+(function(){const r=blockPx(1135,605,1165,725,1.5,mats.steel);box(0.7,0.5,1.0,mats.darkSteel,r.x,1.75,r.z-0.8);label("Dicer",r.x,3.0,r.z,.55)})();
+function bandsaw(x,z,w,d){box(w,0.95,d,mats.steel,x,0.48,z);box(Math.min(0.9,w*0.6),2.0,Math.min(0.6,d*0.6),M(0x2f6aa8),x,1.95,z);}
+(function(){const r=solidPx(1095,740,1160,800);bandsaw(r.x,r.z,r.w,r.d);label("Band saw 1",r.x,3.5,r.z,.65)})();
+
+// trimming area
+const trimBig=tablePx(435,255,635,625);label("Trim table (main)",trimBig.x,2.3,trimBig.z,.8);
+const trimMid=tablePx(280,245,365,610);label("Trim table",trimMid.x,2.3,trimMid.z,.7);
+const trimSmall=tablePx(15,225,90,465);   // west side pushed against the walllabel("Trim table 3",trimSmall.x,2.3,trimSmall.z,.65);
+(function(){const r=solidPx(10,480,85,565);bandsaw(r.x,r.z,r.w,r.d);label("Band saw 2",r.x,3.5,r.z,.65)})();
+(function(){const r=blockPx(15,615,90,755,1.0,mats.steel);box(r.w*0.8,0.7,r.d*0.4,mats.darkSteel,r.x,1.35,r.z);label("Vacuum sealer",r.x,2.8,r.z,.7)})();
+(function(){const r=blockPx(30,805,105,975,1.0,mats.steel);const bl=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,0.08,28),mats.steel);bl.rotation.x=Math.PI/2;bl.position.set(r.x,1.7,r.z-0.6);scene.add(bl);blockPx(55,975,85,1010,0.9,mats.steel);label("Slicer",r.x,3.0,r.z,.6)})();
+
+// rooms and passages
+label("Warehouse 1",14.3,3.4,-17.5,1);label("Debox room",7.4,3.4,-17.5,1);
+label("In & Out",16.3,3.0,-2.3,.75);
+label("Burger Room",16.2,3.2,8,.85);label("Washdown",PX(180,110)[0],3.0,PX(180,110)[1],.85);
+label("Exit",PX(300,1880)[0]+0.6,3.0,PX(300,1880)[1],.55);label("Exit",13.2,3.0,21.75,.55);
+[[12.5,-20],[15.75,-20.5],[12.75,-9.5],[15.75,-9]].forEach((p,i)=>{box(1.6,0.18,1.3,mats.pallet,p[0],0.09,p[1]);const h=0.6+(i%2)*0.5;box(1.4,h,1.1,mats.box,p[0],0.18+h/2,p[1])});
+[[16.4,13],[16.4,17]].forEach(p=>{box(1.4,1.2,2.2,mats.steel,p[0],0.6,p[1])});
+
+/* ---------- walking grid: people find their own way around equipment ---------- */
+const G={x0:-19,z0:-24,cell:0.5,nx:76,nz:98};G.blk=new Uint8Array(G.nx*G.nz);
+function buildGrid(){G.blk.fill(0);const pad=0.3;
+  OBST.forEach(r=>{const x1=Math.floor((r[0]-pad-G.x0)/G.cell),x2=Math.floor((r[2]+pad-G.x0)/G.cell),z1=Math.floor((r[1]-pad-G.z0)/G.cell),z2=Math.floor((r[3]+pad-G.z0)/G.cell);
+    for(let i=Math.max(0,x1);i<=Math.min(G.nx-1,x2);i++)for(let j=Math.max(0,z1);j<=Math.min(G.nz-1,z2);j++)G.blk[j*G.nx+i]=1});
+  // outside the building edge
+  for(let i=0;i<G.nx;i++)for(let j=0;j<G.nz;j++){const x=G.x0+(i+0.5)*G.cell,z=G.z0+(j+0.5)*G.cell;
+    const inMain=x>-18.5&&x<18.4&&z>-23.4&&z<23.9;if(!inMain)G.blk[j*G.nx+i]=1}
+  // the walled-off area is not walkable
+  for(let i=0;i<G.nx;i++)for(let j=0;j<G.nz;j++){const x=G.x0+(i+0.5)*G.cell,z=G.z0+(j+0.5)*G.cell;if(x<-11.3&&z>11.2)G.blk[j*G.nx+i]=1}
+}
+const cellOf=(x,z)=>[Math.max(0,Math.min(G.nx-1,Math.floor((x-G.x0)/G.cell))),Math.max(0,Math.min(G.nz-1,Math.floor((z-G.z0)/G.cell)))];
+const ctr=(i,j)=>[G.x0+(i+0.5)*G.cell,G.z0+(j+0.5)*G.cell];
+function freeNear(i,j){if(!G.blk[j*G.nx+i])return [i,j];for(let r=1;r<8;r++)for(let di=-r;di<=r;di++)for(let dj=-r;dj<=r;dj++){const a=i+di,b=j+dj;if(a>=0&&b>=0&&a<G.nx&&b<G.nz&&!G.blk[b*G.nx+a])return [a,b]}return [i,j]}
+function los(a,b){const d=Math.hypot(b[0]-a[0],b[1]-a[1]);const n=Math.ceil(d/(G.cell*0.5));for(let k=0;k<=n;k++){const x=a[0]+(b[0]-a[0])*k/n,z=a[1]+(b[1]-a[1])*k/n;const c=cellOf(x,z);if(G.blk[c[1]*G.nx+c[0]])return false}return true}
+function findPath(from,to){
+  const s=freeNear(...cellOf(from[0],from[1])),e=freeNear(...cellOf(to[0],to[1]));
+  const N=G.nx*G.nz,gs=new Float32Array(N).fill(1e9),came=new Int32Array(N).fill(-1),closed=new Uint8Array(N);
+  const si=s[1]*G.nx+s[0],ei=e[1]*G.nx+e[0];gs[si]=0;const open=[[0,si]];
+  const h=(i)=>{const x=i%G.nx,z=(i/G.nx)|0;return Math.hypot(x-e[0],z-e[1])};
+  let found=false,guard=0;
+  while(open.length&&guard++<20000){
+    let bi=0;for(let k=1;k<open.length;k++)if(open[k][0]<open[bi][0])bi=k;
+    const cur=open.splice(bi,1)[0][1];if(cur===ei){found=true;break}if(closed[cur])continue;closed[cur]=1;
+    const cx=cur%G.nx,cz=(cur/G.nx)|0;
+    for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){if(!dx&&!dz)continue;const nx=cx+dx,nz=cz+dz;
+      if(nx<0||nz<0||nx>=G.nx||nz>=G.nz)continue;const ni=nz*G.nx+nx;if(G.blk[ni]||closed[ni])continue;
+      if(dx&&dz&&(G.blk[cz*G.nx+nx]||G.blk[nz*G.nx+cx]))continue;
+      const g=gs[cur]+(dx&&dz?1.414:1);if(g<gs[ni]){gs[ni]=g;came[ni]=cur;open.push([g+h(ni),ni])}}
+  }
+  if(!found)return [to.slice()];
+  const cells=[];for(let c=ei;c!==-1;c=came[c])cells.push(ctr(c%G.nx,(c/G.nx)|0));cells.reverse();
+  // smooth: keep only turning points that are needed
+  const pts=[from.slice()];let anchor=from.slice();
+  for(let k=1;k<cells.length;k++){if(!los(anchor,cells[k])){anchor=cells[k-1];pts.push(anchor)}}
+  pts.push(to.slice());pts.shift();return pts;
+}
+
+/* ---------- workers ---------- */
+const workers=[];
+const WHITE_HAT=0xf4f6f7; // everyone on the floor wears a white helmet
+function makeWorker(hatColor,skin){
+  const g=new THREE.Group();
+  const legs=[],arms=[];
+  [-0.13,0.13].forEach(x=>{const p=new THREE.Group();p.position.set(x,0.78,0);g.add(p);box(0.18,0.72,0.2,mats.pants,0,-0.36,0,p);box(0.2,0.12,0.3,mats.boot,0,-0.72,0.04,p);legs.push(p)});
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.27,0.32,0.82,12),mats.smock);body.position.y=1.18;body.castShadow=true;g.add(body);
+  const apron=box(0.44,0.6,0.04,M(0x9ec9e8),0,1.08,0.3,g);
+  [-0.36,0.36].forEach(x=>{const p=new THREE.Group();p.position.set(x,1.5,0);g.add(p);box(0.13,0.62,0.15,mats.smock,0,-0.28,0,p);box(0.12,0.12,0.13,M(0x4b8fd6),0,-0.62,0,p);arms.push(p)});
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.2,16,12),skin);head.position.y=1.82;head.castShadow=true;g.add(head);
+  const hat=new THREE.Mesh(new THREE.SphereGeometry(0.235,16,8,0,Math.PI*2,0,Math.PI/2),M(hatColor));hat.position.y=1.86;g.add(hat);
+  const brim=new THREE.Mesh(new THREE.CylinderGeometry(0.29,0.29,0.03,16),M(hatColor));brim.position.set(0,1.87,0.05);g.add(brim);
+  const carry=box(0.55,0.32,0.4,mats.box,0,1.2,0.42,g);carry.visible=false;
+  scene.add(g);
+  return {g,legs,arms,carry,phase:Math.random()*6};
+}
+let wid=0;
+function newWorker(x,z){
+  const p=makeWorker(WHITE_HAT,wid%3===1?mats.skin2:mats.skin);
+  const w=Object.assign({id:wid++,state:"work",path:[],speed:1.5+Math.random()*0.3,timer:3+Math.random()*6,key:null,slot:0,spot:[x,z],look:[x,z-1]},p);
+  w.g.position.set(x,0,z);workers.push(w);return w;
+}
+
+/* ---------- where people stand: [x, z, lookX, lookZ] ----------
+   Variovac 1 & 2: 1st loader, 2nd packer, 3rd centre-line (skid & labels), rest extra hands.
+   Variovac 3: 1st loader, 2nd boxing & labelling, 3rd loader. Manual Pack works the rebox table. */
+const SPOTS={
+  // Variovac 1 & 2: loader at the infeed (chicken table side), packer at the outfeed, 3rd on the centre conveyor
+  v1:[[-5.3,18.0,-4.4,18.0],[6.0,19.3,5.4,18.0],[7.3,14.2,6.1,14.2],[-1.5,16.2,-1.5,18.6],[1.8,16.2,1.8,18.6],[-1.5,21.0,-1.5,18.6],[1.8,21.0,1.8,18.6],[-5.3,19.4,-4.4,19.4]],
+  v2:[[-5.3,7.4,-4.4,7.4],[6.3,5.6,5.4,6.5],[7.3,9.6,6.1,9.6],[-1.5,5.6,-1.5,7.95],[1.8,5.6,1.8,7.95],[-1.5,10.3,-1.5,7.95],[1.8,10.3,1.8,7.95],[-5.3,8.7,-4.4,8.7]],
+  // Variovac 3: loader at the top (infeed), boxing & labelling at the scale, then more loaders
+  v3:[[4.7,-10.8,4.7,-9.9],[4.9,-2.2,4.9,-3.4],[3.3,-8.6,4.1,-8.6],[3.3,-6.4,4.1,-6.4],[7.3,-8.6,6.4,-8.6],[7.3,-6.4,6.4,-6.4],[3.3,-4.8,4.1,-4.8],[7.3,-4.8,6.4,-4.8]],
+  // Manual Pack works the rebox table along the Burger Room wall
+  mp:[[11.8,6.8,13.1,6.8],[11.8,8.5,13.1,8.5],[11.8,10.2,13.1,10.2],[11.8,11.9,13.1,11.9],[11.8,13.6,13.1,13.6],[11.8,5.2,12.9,4.8],[11.2,15.6,13.1,15.0],[11.8,15.2,13.1,14.8]],
+  marel:[[-10.5,-2.4,-9.3,-2.4],[-0.2,-2.6,-1.3,-2.6]],
+  trimmer:[[-8.6,-17.0,-5.4,-17.0],[-8.6,-14.0,-5.4,-14.0],[-8.6,-11.0,-5.4,-11.0],[-2.2,-16.0,-5.4,-16.0],[-2.2,-12.5,-5.4,-12.5],[-2.2,-10.2,-5.4,-10.2]],
+  trim:[[-12.5,-14.3,-10.7,-14.3],[-12.5,-11.5,-10.7,-11.5]],
+  trim3:[[-15.8,-16.4,-17.4,-16.4],[-15.8,-14.4,-17.4,-14.4]],
+  bs1:[[7.8,-5.75,9.4,-5.75],[9.4,-4.2,9.4,-5.75]],
+  bs2:[[-15.7,-12.0,-17.5,-12.0],[-15.7,-10.6,-17.5,-11.6]],
+  dicer:[[8.4,-8.6,10.0,-8.6],[8.4,-11.2,9.9,-11.2]],
+  slicer:[[-15.3,-2.8,-17.0,-2.8]],
+  maint:[[7.3,-7.2,6.4,-7.2]]
+};
+const MAINT_SPOT={v1:[0.2,16.2,0.2,18.6],v2:[0.2,10.3,0.2,7.95],v3:[7.3,-7.2,6.4,-7.2]};
+const DOOR=[17.6,-2.3];             // people come in from the warehouse through In & Out
+const OUT=[18.3,-2.3];
+function routeTo(x,z,from){return findPath(from||DOOR,[x,z])}
+
+/* ---------- the floor model: what each station should have ---------- */
+const MACHINE_KEYS={"Variovac 1":"v1","Variovac 2":"v2","Variovac 3":"v3","Manual Pack":"mp"};
+const MACHINES=[{key:"v1",name:"Variovac 1"},{key:"v2",name:"Variovac 2"},{key:"v3",name:"Variovac 3"},{key:"mp",name:"Manual Pack",sub:"Rebox table"}];
+const OTHER=[{key:"marel",name:"Marel",def:2},{key:"trimmer",name:"Trim table (main)",def:5},{key:"trim",name:"Trim table",def:1},{key:"trim3",name:"Trim table 3",def:0},
+  {key:"bs1",name:"Band saw 1",def:1},{key:"bs2",name:"Band saw 2",def:1},{key:"dicer",name:"Dicer / Grinder",def:1}];
+let other={};OTHER.forEach(o=>other[o.key]=o.def);
+try{const saved=JSON.parse(localStorage.getItem("floor_other_stations")||"null");if(saved)OTHER.forEach(o=>{if(typeof saved[o.key]==="number")other[o.key]=saved[o.key]})}catch(e){}
+function saveOther(){try{localStorage.setItem("floor_other_stations",JSON.stringify(other))}catch(e){}}
+
+let liveRuns={},records=[];
+const view={}; // per machine key: {state, staff, product, reason, category, since, live}
+function readMachine(name){
+  const live=liveRuns[name];
+  if(!live)return {state:"none",staff:0,label:"Not started"};
+  const segs=live.segments||[],dts=live.downtimeSegments||[];
+  const lastSeg=segs[segs.length-1];
+  const openDt=[...dts].reverse().find(d=>!d.end);
+  const v={product:live.product||"",since:live.startedAt||"",live};
+  if(live.status==="RUNNING"){
+    return Object.assign(v,{state:"run",staff:lastSeg?lastSeg.employees||0:0,label:"Running",since:lastSeg?lastSeg.start:v.since});
+  }
+  const crew=live.pendingEmployees!=null?live.pendingEmployees:(lastSeg?lastSeg.employees||0:0);
+  const st=openDt?openDt.status:"WAITING";
+  Object.assign(v,{reason:openDt?(openDt.reason||""):"",category:openDt?(openDt.reasonCategory||""):"",since:openDt?openDt.start:v.since,crew});
+  if(st==="NO_WORK")return Object.assign(v,{state:"nowork",staff:0,label:"No work"});
+  if(st==="BREAK")return Object.assign(v,{state:"break",staff:0,label:"Break"});
+  const lab=st==="CHANGEOVER"?"Changeover":st==="PLANNED"?"Planned stop":"Waiting";
+  return Object.assign(v,{state:"down",staff:crew,label:lab});
+}
+function wanted(){
+  const n={};
+  MACHINES.forEach(m=>{view[m.key]=readMachine(m.name);n[m.key]=Math.min(8,view[m.key].staff||0)});
+  OTHER.forEach(o=>n[o.key]=Math.min(SPOTS[o.key].length,other[o.key]));
+  // the slicer is worked only when there's no rebox (Manual Pack) going
+  const mp=view.mp.state;n.slicer=(mp==="none"||mp==="nowork")?1:0;
+  // maintenance comes out for a Machine / Equipment problem
+  const broken=MACHINES.find(m=>m.key!=="mp"&&view[m.key].state==="down"&&/machine|equipment/i.test(view[m.key].category||""));
+  n.maint=broken?1:0;maintFor=broken?broken.key:null;
+  return n;
+}
+let maintFor=null;
+const crews={};
+function spotFor(key,i){if(key==="maint"&&maintFor)return MAINT_SPOT[maintFor];return SPOTS[key][i]}
+function roleFor(key,i){
+  if((key==="v1"||key==="v2")&&i===2)return "centre";
+  if(key==="v3"&&i===1)return "boxer";
+  if(key==="marel"&&i===1)return "tubs";
+  return null;
+}
+function assign(w,key,i,fromDoor){
+  const sp=spotFor(key,i);
+  w.key=key;w.slot=i;w.role=roleFor(key,i);w.spot=[sp[0],sp[1]];w.look=[sp[2],sp[3]];
+  w.leaving=false;w.carry.visible=false;w.drop=false;w.onDrop=null;w.state="walk";
+  w.path=findPath(fromDoor?DOOR:[w.g.position.x,w.g.position.z],[sp[0],sp[1]]);
+}
+// move people to match the floor: surplus people are reused for open spots before anyone new walks in
+function syncFloor(){
+  const n=wanted();const pool=[],leave=[];
+  Object.keys(n).forEach(k=>{const list=crews[k]||(crews[k]=[]);while(list.length>n[k])(k==="maint"?leave:pool).push(list.pop())});
+  if(maintFor&&crews.maint&&crews.maint[0]){const w=crews.maint[0];const sp=MAINT_SPOT[maintFor];if(w.spot[0]!==sp[0]||w.spot[1]!==sp[1])assign(w,"maint",0,false)}
+  Object.keys(n).forEach(k=>{const list=crews[k];
+    while(list.length<n[k]){const i=list.length;let w;
+      if(k!=="maint"&&pool.length){
+        const sp=spotFor(k,i);pool.sort((a,b)=>Math.hypot(a.g.position.x-sp[0],a.g.position.z-sp[1])-Math.hypot(b.g.position.x-sp[0],b.g.position.z-sp[1]));
+        w=pool.shift();assign(w,k,i,false);
+      }else{w=newWorker(DOOR[0],DOOR[1]);assign(w,k,i,true)}
+      list.push(w)}});
+  pool.concat(leave).forEach(w=>{w.path=findPath([w.g.position.x,w.g.position.z],DOOR).concat([OUT]);w.leaving=true;w.key=null;w.carry.visible=false;w.drop=false;w.state="walk"});
+}
+
+/* ---------- skids: one at the end of the centre conveyor, one beside Variovac 3 ---------- */
+function makeSkid(x,z,start,name){const k={g:new THREE.Group(),count:0,boxes:[],x,z};k.g.position.set(x,0,z);scene.add(k.g);
+  box(1.6,0.18,1.3,mats.pallet,0,0.09,0,k.g);OBST.push([x-0.8,z-0.65,x+0.8,z+0.65]);
+  for(let i=0;i<start;i++)addSkidBox(k);if(name)label(name,x,2.6,z,.65);return k}
+function addSkidBox(k){if(k.count>=12)return;const i=k.count++,layer=Math.floor(i/4),q=i%4;
+  k.boxes.push(box(0.7,0.32,0.55,mats.box,(q%2?0.37:-0.37),0.34+layer*0.33,(q<2?-0.3:0.3),k.g))}
+function clearSkid(k){k.boxes.forEach(b=>k.g.remove(b));k.boxes=[];k.count=0}
+const skid=makeSkid(8.4,17.6,4,"Skid & labels");
+const skid3=makeSkid(7.9,-2.0,3,null);
+buildGrid();
+const beltBoxes=[];for(let i=0;i<4;i++){const b=box(0.42,0.3,0.5,mats.box,6.0,1.02,0);beltBoxes.push({b,from:i<2?"v2":"v1",off:(i%2)*2.1})}
+
+/* ---------- worker behaviour ---------- */
+function faceTo(w,x,z,dt){const target=Math.atan2(x-w.g.position.x,z-w.g.position.z);let d=target-w.g.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));w.g.rotation.y+=d*Math.min(1,dt*8)}
+// walk to a place and come back; carrying a box on the way out if asked
+function trip(w,dest,carry,onDrop){const here=[w.g.position.x,w.g.position.z];
+  const out=findPath(here,dest),back=findPath(dest,w.spot);
+  w.state="walk";w.path=out.concat(back);w.dropAt=back.length;w.drop=!!carry;w.carry.visible=!!carry;w.onDrop=onDrop||null}
+function isBusy(w){
+  const k=w.key;if(!k)return false;
+  if(view[k])return view[k].state==="run";
+  if(k==="maint")return !!maintFor;
+  return true;
+}
+function updateWorker(w,dt,t){
+  const p=w.g.position;
+  if(w.state==="walk"){
+    const tgt=w.path[0];
+    if(!tgt){w.state=w.leaving?"gone":"work";return}
+    const dx=tgt[0]-p.x,dz=tgt[1]-p.z,d=Math.hypot(dx,dz);
+    if(d<0.08){w.path.shift();
+      if(w.drop&&w.path.length===w.dropAt){w.carry.visible=false;w.drop=false;if(w.onDrop){const f=w.onDrop;w.onDrop=null;f()}}
+      return}
+    const step=Math.min(d,w.speed*dt);p.x+=dx/d*step;p.z+=dz/d*step;faceTo(w,tgt[0],tgt[1],dt);
+    w.phase+=dt*w.speed*5;const s=Math.sin(w.phase)*0.6;
+    w.legs[0].rotation.x=s;w.legs[1].rotation.x=-s;
+    w.arms[0].rotation.x=w.carry.visible?-1.2:-s*0.8;w.arms[1].rotation.x=w.carry.visible?-1.2:s*0.8;
+    p.y=Math.abs(Math.sin(w.phase))*0.05;return;
+  }
+  p.y=0;w.legs[0].rotation.x*=0.8;w.legs[1].rotation.x*=0.8;
+  faceTo(w,w.look[0],w.look[1],dt);
+  const busy=isBusy(w);
+  if(busy){w.phase+=dt*7;w.arms[0].rotation.x=-0.9+Math.sin(w.phase)*0.45;w.arms[1].rotation.x=-0.9-Math.sin(w.phase)*0.45}
+  else{w.arms[0].rotation.x*=0.9;w.arms[1].rotation.x*=0.9;w.g.rotation.y+=Math.sin(t*0.6+w.id)*0.004}
+  w.timer-=dt;if(w.timer>0)return;
+  w.timer=6+Math.random()*8;
+  if(!busy)return;
+  if(w.role==="boxer"){ // Variovac 3 boxes go on its skid
+    if(skid3.count>=12){clearSkid(skid3);trip(w,[17.0,-2.3],true)}
+    else trip(w,[skid3.x-1.0,skid3.z],true,()=>addSkidBox(skid3));
+  }else if(w.role==="centre"){
+    if(skid.count>=12){clearSkid(skid);trip(w,[17.0,-2.3],true)} // full skid to the warehouse
+    else if(Math.random()<0.25)trip(w,[11.8,4.6],false);          // labels from the Manual Pack scale
+    else{trip(w,[skid.x-1.0,skid.z],true,()=>addSkidBox(skid));w.timer=3+Math.random()*3}
+  }else if(w.role==="tubs"){ // tubs from the meat-out table to a running Variovac
+    const dest=["v1","v2","v3"].filter(k=>view[k]&&view[k].state==="run");if(!dest.length)return;
+    const k=dest[Math.floor(Math.random()*dest.length)];
+    trip(w,k==="v1"?[-6.2,16.8]:k==="v2"?[-6.2,6.2]:[4.0,-11.2],true);
+  }
+}
+
+/* ---------- machine visuals ---------- */
+const COLORS={run:0x1f9d55,down:0xd63b2f,break:0xe0a100,nowork:0x6f7b84,none:0x6f7b84};
+function updateMachineVis(key,dt,t){
+  const v=vv[key];if(!v)return;const st=view[key]?view[key].state:"none";const c=COLORS[st];
+  v.beaconMat.color.setHex(c);v.beaconMat.emissive.setHex(c);v.glow.color.setHex(c);
+  const pulse=st==="down"?(Math.sin(t*6)>0?1.4:0.15):st==="run"?1:st==="break"?0.8:0.2;
+  v.beaconMat.emissiveIntensity=pulse;v.glow.intensity=(st==="none"||st==="nowork")?0:pulse*0.9;
+  if(st==="run"){const sp=0.55+view[key].staff*0.12;v.trays.forEach(tr=>{tr.position.x+=sp*dt;if(tr.position.x>v.len/2-0.3)tr.position.x-=v.len-0.6})}
+}
+function marelStopped(){return MACHINES.some(m=>view[m.key]&&view[m.key].state==="down"&&/^MAREL - Switching Product/i.test(view[m.key].reason||""))}
+
+/* ---------- cards ---------- */
+const cardsEl=document.getElementById("cards");
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function localDate(d=new Date()){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function t12(hhmm){if(!hhmm)return"";const [h,m]=hhmm.split(":").map(Number);return ((h%12)||12)+":"+String(m).padStart(2,"0")+(h<12?" am":" pm")}
+function todayPLH(name){
+  const today=localDate();let lbs=0,gh=0,runs=0;
+  records.forEach(r=>{if(r.date===today&&r.plh&&(!name||r.machine===name)&&r.plh.grossLaborHours>0){lbs+=r.plh.weightLbs||0;gh+=r.plh.grossLaborHours;runs++}});
+  return {lbs,gh,runs,plh:gh>0?lbs/gh:null};
+}
+const fmt=n=>Math.round(n).toLocaleString("en-CA");
+function renderCards(){
+  const html=MACHINES.map(m=>{const v=view[m.key]||{state:"none",label:"Not started"};const p=todayPLH(m.name);
+    const st=v.state==="nowork"?"none":v.state;
+    const staffTxt=v.state==="run"||v.state==="down"?`<span>Staff <b>${v.staff}</b></span>`:(v.state==="break"&&v.crew?`<span>On break <b>${v.crew}</b></span>`:"");
+    const since=v.since&&v.state!=="none"?`<span>since <b>${t12(v.since)}</b></span>`:"";
+    return `<div class="card" data-st="${st}" data-key="${m.key}">
+      <div class="ctop"><button class="cname" data-fly="${m.key}">${m.name}</button><span class="chip">${esc(v.label)}</span></div>
+      ${m.sub?`<div class="note">${m.sub}</div>`:""}
+      <div class="prod">${v.product?esc(v.product):'<span class="note">No product</span>'}</div>
+      ${v.reason&&v.state!=="run"?`<div class="why">${esc(v.reason)}</div>`:""}
+      <div class="meta">${staffTxt}${since}</div>
+      <div class="plh">${p.runs?`Today <b>${p.plh.toFixed(1)}</b> PLH · ${fmt(p.lbs)} lbs`:"No finished runs today"}</div>
+    </div>`}).join("")+`
+    <div class="card other">
+      <div class="ctop"><span class="cname" style="cursor:default">Other stations</span></div>
+      ${OTHER.map(o=>`<div class="srow" data-k="${o.key}"><span>${o.name}</span><span class="staff"><button class="sm" data-d="-1" aria-label="Remove a worker from ${o.name}">−</button><b>${other[o.key]}</b><button class="sm" data-d="1" aria-label="Add a worker to ${o.name}">+</button></span></div>`).join("")}
+      <div class="srow"><span>Slicer</span><span class="note">${(crews.slicer||[]).length?"1 (no rebox running)":"0 (rebox running)"}</span></div>
+      <div class="note">Not tracked in the CI Tracker. Saved on this device.</div>
+    </div>`;
+  cardsEl.innerHTML=html;
+  const tp=todayPLH(null);
+  document.getElementById("total").textContent=tp.runs?`Floor today: ${fmt(tp.lbs)} lbs · ${tp.plh.toFixed(1)} PLH`:"";
+}
+cardsEl.addEventListener("click",e=>{
+  const f=e.target.closest("[data-fly]");if(f){flyTo(f.dataset.fly);return}
+  const b=e.target.closest("[data-d]");if(!b)return;
+  const o=OTHER.find(x=>x.key===b.closest(".srow").dataset.k);
+  other[o.key]=Math.max(0,Math.min(SPOTS[o.key].length,other[o.key]+Number(b.dataset.d)));
+  saveOther();syncFloor();renderCards();
+});
+let placed=false;
+function refresh(){syncFloor();
+  if(!placed){placed=true;workers.forEach(w=>{const s=w.spot;w.g.position.set(s[0],0,s[1]);w.path=[];w.state="work"})} // first load: everyone already at their station
+  renderCards()}
+
+/* ---------- camera ---------- */
+let fly=null;
+const FOCUS={v1:[0.0,18.6],v2:[0.0,7.95],v3:[5.25,-7.1],mp:[13.1,10.4]};
+function flyTo(key){const g=FOCUS[key];const tgt=new THREE.Vector3(g[0],0.8,g[1]);
+  fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+7,11,g[1]+13),toT:tgt,t:0}}
+document.getElementById("resetCam").onclick=()=>{fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:HOME.pos.clone(),toT:HOME.target.clone(),t:0}};
+document.getElementById("vvCam").onclick=()=>{fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:VVIEW.pos.clone(),toT:VVIEW.target.clone(),t:0}};
+
+/* ---------- connection status ---------- */
+const connEl=document.getElementById("conn");
+function setConn(s,text){connEl.dataset.s=s;connEl.lastElementChild.textContent=text}
+function hhmmss(){const d=new Date();return d.toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"})}
+
+/* ---------- live data from the CI Tracker (read only) ---------- */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyDRttvEVYAKjZIUTtjtmVOBXbveH2kbiKY",authDomain:"packaging-ci-tracker.firebaseapp.com",projectId:"packaging-ci-tracker",
+  storageBucket:"packaging-ci-tracker.firebasestorage.app",messagingSenderId:"929311010987",appId:"1:929311010987:web:e66eacb5ab03d85f2987ee"
+};
+function parseDoc(snap,fallback){try{return (snap.exists&&snap.data().data)?JSON.parse(snap.data().data):fallback}catch(e){return fallback}}
+function startLive(){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const loginEl=document.getElementById("login");let unsub=[];
+  firebase.auth().onAuthStateChanged(user=>{
+    unsub.forEach(u=>u());unsub=[];
+    if(!user){loginEl.hidden=false;setConn("off","Signed out");return}
+    loginEl.hidden=true;setConn("wait","Connecting…");
+    const db=firebase.firestore();const col=db.collection("tracker");
+    unsub.push(col.doc("liveRuns").onSnapshot({includeMetadataChanges:true},snap=>{
+      liveRuns=parseDoc(snap,{});refresh();
+      setConn(snap.metadata.fromCache?"off":"live",snap.metadata.fromCache?"Offline · last known":"Live · "+hhmmss());
+    },err=>{setConn("off","Can't reach tracker");console.error(err)}));
+    unsub.push(col.doc("records").onSnapshot(snap=>{records=parseDoc(snap,[]);renderCards()},err=>console.error(err)));
+  });
+  document.getElementById("loginForm").addEventListener("submit",async e=>{
+    e.preventDefault();const btn=document.getElementById("loginBtn"),err=document.getElementById("loginErr");
+    const email=document.getElementById("loginEmail").value.trim(),pw=document.getElementById("loginPassword").value;
+    if(!email||!pw){err.textContent="Enter your email and password.";return}
+    btn.disabled=true;btn.textContent="Signing in…";err.textContent="";
+    try{await firebase.auth().signInWithEmailAndPassword(email,pw)}catch(x){err.textContent="Sign-in failed. Check the email and password."}
+    btn.disabled=false;btn.textContent="Sign in";
+  });
+  // update the "Live" time every minute so it's clear the feed is fresh
+  setInterval(()=>{if(connEl.dataset.s==="live")setConn("live","Live · "+hhmmss())},60000);
+}
+
+/* ---------- preview mode (no Firebase available, e.g. inside Claude) ---------- */
+function startPreview(){
+  setConn("demo","Preview");
+  const b=document.getElementById("banner");b.hidden=false;
+  b.textContent="Preview with sample data. It changes every 15 seconds to show how the floor reacts. Upload to GitHub to see your real Live Floor.";
+  const today=localDate();
+  records=[
+    {date:today,machine:"Variovac 1",plh:{weightLbs:1180,grossLaborHours:5.1}},
+    {date:today,machine:"Variovac 3",plh:{weightLbs:640,grossLaborHours:3.2}},
+    {date:today,machine:"Manual Pack",plh:{weightLbs:420,grossLaborHours:2.4}}];
+  const run=(emp,product,start)=>({status:"RUNNING",product,startedAt:start,segments:[{start,end:null,employees:emp}],downtimeSegments:[]});
+  const down=(emp,status,reason,cat,product,start)=>({status:"DOWNTIME",product,startedAt:"08:00",segments:[{start:"08:00",end:start,employees:emp}],downtimeSegments:[{start,end:null,status,reason,reasonCategory:cat}]});
+  const steps=[
+    {"Variovac 1":run(3,"10012 · Striploin Steak 10oz","09:05"),"Variovac 2":run(3,"20450 · Chicken Breast 6oz","08:40"),
+     "Variovac 3":down(2,"WAITING","MAREL - Switching Product","Upstream / Product","30110 · Ground Beef Lean","10:12"),"Manual Pack":run(2,"Rebox · Steak Box #10","08:30")},
+    {"Variovac 1":run(3,"10012 · Striploin Steak 10oz","09:05"),"Variovac 2":down(3,"WAITING","Film jam on forming station","Machine / Equipment","20450 · Chicken Breast 6oz","10:20"),
+     "Variovac 3":run(2,"30110 · Ground Beef Lean","10:18"),"Manual Pack":run(2,"Rebox · Steak Box #10","08:30")},
+    {"Variovac 1":down(3,"NO_WORK","No Work Scheduled","","10012 · Striploin Steak 10oz","10:40"),"Variovac 2":run(2,"20450 · Chicken Breast 6oz","10:31"),
+     "Variovac 3":run(3,"30110 · Ground Beef Lean","10:18"),"Manual Pack":run(4,"Rebox · Steak Box #10","10:40")},
+    {"Variovac 1":run(2,"10040 · Ribeye 12oz","13:30"),"Variovac 2":run(2,"20450 · Chicken Breast 6oz","13:30"),
+     "Variovac 3":down(3,"BREAK","Break","","30110 · Ground Beef Lean","13:00")}
+  ];
+  let i=0;const step=()=>{liveRuns=JSON.parse(JSON.stringify(steps[i%steps.length]));i++;refresh()};
+  step();setInterval(step,15000);
+}
+
+/* ---------- loop ---------- */
+function resize(){const r=stage.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/Math.max(1,r.height);
+  camera.fov=r.width<520?55:42;camera.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(stage);resize();
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
+  ["v1","v2","v3"].forEach(k=>updateMachineVis(k,dt,t));
+  const ms=marelStopped();
+  const mz0=marel.z-marel.d/2+0.5,mz1=marel.z+0.6;
+  marelMeat.forEach(o=>{if(ms)return;o.z+=dt*0.9;if(o.z>mz1+1.3){o.z=mz0;o.side*=-1}
+    o.b.position.z=Math.min(o.z,mz1);o.b.position.x=marel.x+(o.z>mz1?o.side*Math.min(marel.w/2+0.8,(o.z-mz1)*3.4):0)});
+  beltBoxes.forEach(o=>{const on=view[o.from]&&view[o.from].state==="run";o.b.visible=on;if(!on)return;
+    o.off=(o.off+dt*0.7)%4.2;o.b.position.z=o.from==="v2"?7.9+o.off:16.4-o.off});
+  for(let i=workers.length-1;i>=0;i--){const w=workers[i];updateWorker(w,dt,t);if(w.state==="gone"){scene.remove(w.g);workers.splice(i,1)}}
+  if(fly){fly.t=Math.min(1,fly.t+dt*1.2);const e=fly.t<.5?2*fly.t*fly.t:1-Math.pow(-2*fly.t+2,2)/2;
+    camera.position.lerpVectors(fly.fromP,fly.toP,e);controls.target.lerpVectors(fly.fromT,fly.toT,e);if(fly.t>=1)fly=null}
+  controls.update();renderer.render(scene,camera);requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// start: everyone already at their stations on first load, then follow the data
+(function boot(){
+  if(typeof firebase!=="undefined"&&firebase.initializeApp){startLive()}else{startPreview()}
+})();
+renderCards();
+
+})();
+</script>
+</body>
+</html>
