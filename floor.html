@@ -49,6 +49,17 @@ button:focus-visible,input:focus-visible,.card:focus-visible{outline:2px solid v
 .banner{position:absolute;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));top:10px;font-size:12px;line-height:1.4;color:var(--text);background:rgba(34,38,42,.94);border:1px solid var(--line);border-left:4px solid var(--amber);padding:7px 10px;border-radius:8px;max-width:520px}
 
 /* machine cards */
+#cards{display:none!important}
+.alarmbar{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:5;max-width:calc(100% - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:700 13px var(--body);color:#fff;background:var(--wait);border:0;border-radius:20px;padding:8px 16px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);animation:alarmPulse 1.2s ease-in-out infinite}
+.alarmbar span{opacity:.8;font-weight:600}
+.mstate{display:flex;align-items:center;gap:8px;font:600 18px var(--body);margin:6px 0 2px;color:var(--st)} .mstate .dot{width:10px;height:10px;border-radius:50%;background:var(--st)}
+.mreason{font-size:15px;color:var(--st);margin:2px 0 6px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}
+.mgrid div{background:var(--panel2);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.mgrid b{font-size:14px;font-weight:600;overflow-wrap:anywhere} .mgrid .people svg{width:9px;height:13px;fill:var(--text)}
+.runlist .dtr{color:var(--muted);text-align:right;font-family:var(--body);font-size:12.5px;max-width:60%}
+.note.foot{border-left:3px solid var(--amber);padding:6px 8px;background:var(--panel2);border-radius:6px;margin-top:6px}
+.total sup{color:var(--amber)}
 #cards{flex:0 0 auto;align-items:stretch;display:flex;gap:10px;overflow-x:auto;padding-block:10px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   background:var(--bg);border-top:1px solid var(--line);scroll-snap-type:x mandatory;scrollbar-width:none}
@@ -152,6 +163,7 @@ button.big{font:600 22px var(--body);width:48px;height:44px;border-radius:10px;b
   </header>
   <div id="stage">
     <div class="banner" id="banner" hidden></div>
+    <button class="alarmbar" id="alarmBar" hidden></button>
     <button class="tourchip" id="tourExit">Display mode · tap to stop</button>
     <div id="login" hidden>
       <form id="loginForm">
@@ -470,30 +482,37 @@ Object.keys(vv).forEach(k=>{const v=vv[k];
 });
 
 // floating tag above each Variovac: name + status line
-function makeTag(k){const c=document.createElement("canvas");c.width=512;c.height=190;const t=new THREE.CanvasTexture(c);t.anisotropy=4;
+function makeTag(k){const c=document.createElement("canvas");c.width=640;c.height=190;const t=new THREE.CanvasTexture(c);t.anisotropy=4;
   const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false,transparent:true}));
-  const wp=new THREE.Vector3();vv[k].g.getWorldPosition(wp);s.position.set(wp.x,3.9,wp.z);s.scale.set(5.6,2.08,1);scene.add(s);
+  const wp=new THREE.Vector3();vv[k].g.getWorldPosition(wp);s.position.set(wp.x,4.1,wp.z);s.scale.set(7.4,7.4*190/640,1); // bigger so it reads without tappingscene.add(s);
   return {c,t,s,key:""}}
 const TAGS={};Object.keys(vv).forEach(k=>TAGS[k]=makeTag(k));
+// short downtime reason for the floating tag, e.g. "MAREL", "Machine", "Film Change"
+function shortReason(v){const r=v.reason||"",c=v.category||"";
+  if(/^MAREL/i.test(r))return "MAREL";
+  if(v.label==="Changeover"||v.label==="Planned stop")return r.length>16?r.slice(0,15)+"…":r;
+  const map={"Upstream / Product":"Upstream","Materials / Warehouse":"Materials","Machine / Equipment":"Machine","Labour / Operational":"Labour","Cleaning / Sanitation":"Cleaning","QA / Pre-Op":"QA / Pre-op"};
+  return map[c]||(r.length>16?r.slice(0,15)+"…":r)}
 function drawTag(k,v){
   const tone=toneOf(v);const name=VNAME[k];let line;
   if(!v||v.state==="none")line="Not started";
   else if(v.state==="nowork")line="No work";
   else if(v.state==="run")line=v.staff+" staff · running";
   else if(v.state==="break")line="Break · "+fmtMins(minsSince(v.since));
-  else line=(isAlarm(v)?"⚠ ":"")+(v.label||"Down")+" · "+fmtMins(minsSince(v.since));
+  else{const sr=shortReason(v);line=(isAlarm(v)?"⚠ ":"")+(v.label||"Down")+(sr?" · "+sr:"")+" · "+fmtMins(minsSince(v.since))}
   const alarm=isAlarm(v);
   const key=name+"|"+line+"|"+tone+"|"+alarm;const T=TAGS[k];if(T.key===key)return;T.key=key;
-  const g=T.c.getContext("2d");g.clearRect(0,0,512,190);
-  g.font="600 40px Inter, system-ui, sans-serif";const w2=g.measureText(line).width;
+  const W=T.c.width,g=T.c.getContext("2d");g.clearRect(0,0,W,190);
+  let fs=40;g.font=`600 ${fs}px Inter, system-ui, sans-serif`;while(g.measureText(line).width>W-110&&fs>26){fs-=2;g.font=`600 ${fs}px Inter, system-ui, sans-serif`}
+  const w2=g.measureText(line).width;
   g.font="700 64px Oswald, 'Arial Narrow', Arial";const w1=g.measureText(name.toUpperCase()).width;
-  const w=Math.min(500,Math.max(w1,w2+44)+52),x0=(512-w)/2;
+  const w=Math.min(W-12,Math.max(w1,w2+44)+52),x0=(W-w)/2,cx=W/2+5;
   g.fillStyle=alarm?"rgba(86,24,22,.95)":"rgba(24,27,30,.92)";g.beginPath();if(g.roundRect)g.roundRect(x0,8,w,170,24);else g.rect(x0,8,w,170);g.fill();
   if(alarm){g.strokeStyle="#D6534A";g.lineWidth=6;g.stroke()}
   g.fillStyle=TONE_CSS[tone];g.fillRect(x0,8,10,170);
-  g.fillStyle="#EDEFF1";g.textAlign="center";g.textBaseline="middle";g.fillText(name.toUpperCase(),256+5,62);
-  g.font="600 40px Inter, system-ui, sans-serif";g.fillStyle=TONE_CSS[tone];
-  const lx=256+5-w2/2;g.beginPath();g.arc(lx-20,128,10,0,Math.PI*2);g.fill();
+  g.fillStyle="#EDEFF1";g.textAlign="center";g.textBaseline="middle";g.fillText(name.toUpperCase(),cx,62);
+  g.font=`600 ${fs}px Inter, system-ui, sans-serif`;g.fillStyle=TONE_CSS[tone];
+  const lx=cx-w2/2;g.beginPath();g.arc(lx-20,128,10,0,Math.PI*2);g.fill();
   g.fillStyle=tone==="nowork"?"#9AA1A6":"#EDEFF1";g.textAlign="left";g.fillText(line,lx,130);
   T.t.needsUpdate=true;
 }
@@ -595,21 +614,23 @@ function updateSideVis(t){SIDE.forEach(s=>{const R=SIDE_RIG[s.key];const st=side
   R.glow.opacity=op;drawSideTag(s)})}
 
 /* ---------- tap a machine on the floor ---------- */
+const MACHINE_HITS=["v1","v2","v3","mp"].map(k=>{const v=vv[k];const h=new THREE.Mesh(new THREE.BoxGeometry(v.len+0.6,2.8,v.w+0.8),new THREE.MeshBasicMaterial({visible:false}));
+  h.position.y=1.4;h.userData.machine=k;v.g.add(h);return h});
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let downAt=null;
 renderer.domElement.addEventListener("pointerdown",e=>{downAt={x:e.clientX,y:e.clientY,t:performance.now()}});
 renderer.domElement.addEventListener("pointerup",e=>{
   if(!downAt)return;const moved=Math.hypot(e.clientX-downAt.x,e.clientY-downAt.y),dt=performance.now()-downAt.t;downAt=null;
   if(moved>8||dt>600)return;
   const r=renderer.domElement.getBoundingClientRect();ptr.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
-  ray.setFromCamera(ptr,camera);const hits=ray.intersectObjects(Object.values(SIDE_RIG).map(R=>R.hit));
-  if(hits.length)openSide(hits[0].object.userData.side);
+  ray.setFromCamera(ptr,camera);const hits=ray.intersectObjects(Object.values(SIDE_RIG).map(R=>R.hit).concat(MACHINE_HITS));
+  if(!hits.length)return;const u=hits[0].object.userData;if(u.machine)openMachine(u.machine);else openSide(u.side);
 });
 
 /* ---------- the on/off panel ---------- */
 const sideSheet=document.getElementById("sideSheet"),sideBody=document.getElementById("sideBody");
 let sidePick=null;
 function sideToast(msg){const el=document.getElementById("sideMsg");if(el)el.textContent=msg}
-function openSide(key){const s=SIDE.find(x=>x.key===key);if(!s)return;sidePick={key,people:s.defPeople||0};highlight[key]=performance.now()/1000;renderSide();sideSheet.hidden=false}
+function openSide(key){const s=SIDE.find(x=>x.key===key);if(!s)return;machinePick=null;sidePick={key,people:s.defPeople||0};highlight[key]=performance.now()/1000;renderSide();sideSheet.hidden=false}
 function renderSide(){
   const s=SIDE.find(x=>x.key===sidePick.key),st=sideState(s.key),runs=(today().runs||[]).filter(r=>r.m===s.key);
   const hist=runs.length?`<div class="runlist">${runs.map(r=>`<div><span>${t12(r.on)} – ${r.off?t12(r.off):"now"}</span>${s.marel?"":`<span>${r.people} ${r.people===1?"person":"people"}</span>`}</div>`).join("")}</div>`:`<p class="note">Nothing logged today yet.</p>`;
@@ -638,6 +659,7 @@ sideSheet.addEventListener("click",async e=>{
   const ok=a.dataset.side==="start"?await startSide(sidePick.key,sidePick.people,sidePick.key==="marel"?tv:null):a.dataset.side==="fixstart"?await setStart(sidePick.key,tv):await stopSide(sidePick.key);
   if(ok){renderSide();refresh()}else{renderSide();sideToast("Couldn't save. Check the connection and try again.")}
 });
+var machinePick=null;
 function afterLogChange(){if(!sideSheet.hidden&&sidePick)renderSide();refresh()}
 
 /* ---------- workers ---------- */
@@ -839,6 +861,12 @@ function updateWorker(w,dt,t){
     const a=findPath(here,at),b=findPath(at,drop),c=findPath(drop,w.spot);
     w.state="walk";w.path=a.concat(b,c);w.carry.visible=false;w.drop=false;
     w.events=[{at:b.length+c.length,fn:()=>{clearSkid(k);w.jackLoad.visible=true}},{at:c.length,fn:()=>{w.jackLoad.visible=false;w.timer=4}}];
+  }else if(w.role==="rack"){ // brings a loaded meat rack out of the Debox room to the trim table, returns it empty
+    const here=[w.g.position.x,w.g.position.z],drop=[-1.3,-13.6];
+    const a=findPath(here,drop),b=findPath(drop,w.spot);
+    w.state="walk";w.path=a.concat(b);w.carry.visible=false;w.drop=false;w.rackMeat.visible=true;
+    w.events=[{at:b.length,fn:()=>{w.rackMeat.visible=false}},{at:0,fn:()=>{w.timer=8;setTimeout(()=>{w.rackMeat.visible=true},5000)}}];
+    w.timer=18+Math.random()*8;
   }else if(w.role==="tubs"){ // tubs from the meat-out table to a running Variovac
     const dest=["v1","v2","v3"].filter(k=>view[k]&&view[k].state==="run");if(!dest.length)return;
     const k=dest[Math.floor(Math.random()*dest.length)];
@@ -897,9 +925,47 @@ function renderCards(){
   cardsEl.innerHTML=html+sideCard;
   renderStations();
   const tp=todayPLH(null);
-  document.getElementById("total").innerHTML=tp.runs?`<b>${fmt(tp.lbs)}</b> lbs · <b>${tp.plh.toFixed(1)}</b> PLH today`:"No finished runs today";
+  const crewTxt=(()=>{const c=today().crew;const on=HELPERS.filter(h=>sideState(h.key).on).map(h=>h.key==="lead"?"lead hand":"yield");
+    if(c==null&&!on.length)return "";return " · Crew "+(c==null?"–":c)+(on.length?"<sup>*</sup> + "+on.join(" + ")+" on line":"")})();
+  document.getElementById("total").innerHTML=(tp.runs?`<b>${fmt(tp.lbs)}</b> lbs · <b>${tp.plh.toFixed(1)}</b> PLH`:"No finished runs")+crewTxt;
 }
 // keep downtime timers and floating tags current
+/* ---------- machine detail pop-up (tap a Variovac or Manual Pack) ---------- */
+function openMachine(k){machinePick=k;sidePick=null;highlight[k]=performance.now()/1000;renderMachine();sideSheet.hidden=false}
+function renderMachine(){
+  const k=machinePick,m=MACHINES.find(x=>x.key===k),v=view[k]||{state:"none",label:"Not started"},tone=toneOf(v),p=todayPLH(m.name),al=isAlarm(v);
+  const live=v.live,segs=live?(live.segments||[]):[],dts=live?(live.downtimeSegments||[]):[];
+  const crew=v.state==="run"||v.state==="down"?v.staff:(v.state==="break"?v.crew:0);
+  let head;
+  if(v.state==="run")head=`Running since ${t12(v.since)}`;
+  else if(v.state==="down")head=`${v.label} · ${fmtMins(minsSince(v.since))}`;
+  else if(v.state==="break")head=`Break · ${fmtMins(minsSince(v.since))}`;
+  else head=v.state==="nowork"?"No work scheduled":"No run started";
+  const dtRows=dts.length?`<div class="runlist">${dts.slice().reverse().map(d=>`<div><span>${t12(d.start)} – ${d.end?t12(d.end):"now"}</span><span class="dtr">${esc(d.reason||d.status||"")}</span></div>`).join("")}</div>`:`<p class="note">No downtime on this run.</p>`;
+  const staffRows=segs.length>1?`<p class="note">Staff changes: ${segs.map(s=>`${t12(s.start)} → ${s.employees}`).join(" · ")}</p>`:"";
+  sideBody.innerHTML=`<div class="sheethead"><h2>${m.name}</h2><button class="hbtn" id="sideDone">Done</button></div>
+    ${m.sub?`<p class="note">${m.sub}</p>`:""}
+    <p class="mstate" style="--st:${TONE_CSS[tone]}"><i class="dot"></i>${esc(head)}</p>
+    ${al?`<div class="alarmline">⚠ Down over ${alarmMin} min</div>`:""}
+    ${v.reason&&v.state!=="run"?`<p class="mreason" style="--st:${TONE_CSS[tone]}">${esc(v.reason)}${v.category?` <span class="note">· ${esc(v.category)}</span>`:""}</p>`:""}
+    <div class="mgrid">
+      <div><span class="note">Product</span><b>${v.product?esc(v.product):"—"}</b></div>
+      <div><span class="note">Staff</span><b>${crew?people(crew)+" "+crew:"—"}</b></div>
+      <div><span class="note">Finished today</span><b>${p.runs?p.runs+(p.runs===1?" run":" runs")+" · "+fmt(p.lbs)+" lbs":"None yet"}</b></div>
+      <div><span class="note">PLH today</span><b>${p.runs?p.plh.toFixed(1):"—"}</b></div>
+    </div>${staffRows}
+    <h3 class="sub">Downtime this run</h3>${dtRows}
+    <p class="note">To change anything, use the CI Tracker's Live list.</p>`;
+}
+/* ---------- alarm banner: shows when any machine is past the alarm time ---------- */
+function updateAlarmBar(){const bar=document.getElementById("alarmBar");if(!bar)return;
+  const list=MACHINES.filter(m=>isAlarm(view[m.key]));
+  if(!list.length){bar.hidden=true;return}
+  const m=list[0],v=view[m.key];bar.dataset.key=m.key;
+  bar.innerHTML=`⚠ ${m.name} · ${esc(v.label)} ${fmtMins(minsSince(v.since))}${list.length>1?` <span>+${list.length-1} more</span>`:""}`;bar.hidden=false;
+}
+document.getElementById("alarmBar").addEventListener("click",e=>{const k=e.currentTarget.dataset.key;if(k){if(tour.on)setTour(false);flyTo(k);openMachine(k)}});
+setInterval(updateAlarmBar,10000);
 let alarmKey="";
 function alarmState(){return MACHINES.filter(m=>isAlarm(view[m.key])).map(m=>m.key).join(",")}
 setInterval(()=>{const k=alarmState();if(k!==alarmKey){alarmKey=k;renderCards()}},5000);
@@ -913,7 +979,7 @@ function renderStations(){
   const helpers=HELPERS.map(h=>{const st=sideState(h.key);const runs=(today().runs||[]).filter(r=>r.m===h.key);
     const sub=st.on?`On the line since ${t12(st.since)}`:runs.length?"Earlier: "+runs.map(r=>t12(r.on)+"–"+t12(r.off)).join(", "):"Not on the line";
     return `<div class="srow helperrow"><span><b class="lbl">${h.name} on the line</b><br><span class="note">${sub}</span></span><button class="toggle${st.on?" on":""}" data-helper="${h.key}" aria-pressed="${st.on}">${st.on?"On":"Off"}</button></div>`}).join("");
-  sheetBody.innerHTML=`<div class="srow crewrow"><span><b class="lbl">Crew on shift today</b><br><span class="note">Packaging staff, not counting the lead hand and yield person. Shared with everyone.</span></span><span class="staff"><button class="big" data-crew="-1" aria-label="One less on shift">−</button><b>${crew==null?"–":crew}</b><button class="big" data-crew="1" aria-label="One more on shift">+</button></span></div>`+helpers+`<h3 class="sub">Other stations</h3>`+OTHER.map(o=>`<div class="srow" data-k="${o.key}"><span>${o.name}</span><span class="staff"><button class="big" data-d="-1" aria-label="Remove a worker from ${o.name}">−</button><b>${other[o.key]}</b><button class="big" data-d="1" aria-label="Add a worker to ${o.name}">+</button></span></div>`).join("")+
+  sheetBody.innerHTML=`<div class="srow crewrow"><span><b class="lbl">Crew on shift today</b><br><span class="note">Packaging staff, not counting the lead hand and yield person. Shared with everyone.</span></span><span class="staff"><button class="big" data-crew="-1" aria-label="One less on shift">−</button><b>${crew==null?"–":crew}</b><button class="big" data-crew="1" aria-label="One more on shift">+</button></span></div>`+helpers+`<p class="note foot">* Crew count doesn't include the lead hand or yield person. When either of them has to work on the line, switch them On above. Their times are logged and shown next to the crew count so management can see the line needed extra hands.</p><h3 class="sub">Other stations</h3>`+OTHER.map(o=>`<div class="srow" data-k="${o.key}"><span>${o.name}</span><span class="staff"><button class="big" data-d="-1" aria-label="Remove a worker from ${o.name}">−</button><b>${other[o.key]}</b><button class="big" data-d="1" aria-label="Add a worker to ${o.name}">+</button></span></div>`).join("")+
     `<div class="srow"><span>Slicer</span><span class="note">${(crews.slicer||[]).length?"1 (no rebox running)":"0 (rebox running)"}</span></div>`;
 }
 document.getElementById("stationsBtn").onclick=()=>{renderStations();sheetEl.hidden=false};
@@ -937,7 +1003,8 @@ cardsEl.addEventListener("click",e=>{if(e.target.closest("[data-sidekey]"))retur
   saveOther();syncFloor();renderCards();
 });
 let placed=false;
-function refresh(){syncFloor();
+function refresh(){syncFloor();updateAlarmBar();
+  if(machinePick&&!sideSheet.hidden)renderMachine();
   if(!placed){placed=true;workers.forEach(w=>{const s=w.spot;w.g.position.set(s[0],0,s[1]);w.path=[];w.state="work"})} // first load: everyone already at their station
   renderCards()}
 
@@ -1114,6 +1181,20 @@ const jackW=newWorker(9.8,11.0);
   box(1.15,0.14,1.0,mats.pallet,0,0.07,0,load);
   [[-0.29,-0.25],[0.29,-0.25],[-0.29,0.25],[0.29,0.25]].forEach(([x,z])=>{box(0.55,0.32,0.46,mats.box,x,0.31,z,load);box(0.55,0.32,0.46,mats.box,x,0.64,z,load)});
   label("Pallet jack",0,2.4,0,.45,w.g);
+})();
+/* ---------- meat rack: one person brings product out of the Debox room ---------- */
+const rackW=newWorker(7.2,-16.5);
+(function(){const w=rackW;w.key="rack";w.role="rack";w.spot=[7.2,-16.5];w.look=[5.0,-16.5];w.timer=10;w.speed=1.15;w.jack=true; // arms forward like pushing
+  const g=new THREE.Group();g.position.set(0,0,0.85);w.g.add(g);
+  const st=M(0xC9D1D6,{metalness:.55,roughness:.3}),blk=M(0x24282c,{roughness:.6});
+  const W=0.95,D=0.75,H=1.85;
+  [[-W/2,-D/2],[W/2,-D/2],[-W/2,D/2],[W/2,D/2]].forEach(([x,z])=>{box(0.04,H,0.04,st,x,0.12+H/2,z,g);const wh=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.04,10),blk);wh.rotation.z=Math.PI/2;wh.position.set(x,0.055,z);g.add(wh)});
+  box(W,0.04,D,st,0,0.14,0,g);box(W,0.04,D,st,0,0.12+H,0,g);           // bottom frame and top
+  const shelves=[0.5,0.85,1.2,1.55];shelves.forEach(y=>{[-0.22,0,0.22].forEach(z=>box(W,0.025,0.025,st,0,y,z,g))}); // hanging bars
+  const meat=new THREE.Group();g.add(meat);w.rackMeat=meat;
+  const sausage=M(0xB4472E,{roughness:.55});
+  shelves.forEach(y=>{[-0.22,0,0.22].forEach(z=>{for(let i=0;i<7;i++){const c=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.3,8),sausage);c.position.set(-W/2+0.1+i*0.125,y-0.17,z);c.castShadow=true;meat.add(c)}})});
+  label("Meat rack",0,2.35,0,.45,w.g);
 })();
 /* ---------- forklift in Warehouse 1 ---------- */
 const FL={g:new THREE.Group(),path:[[14.15,-6.6],[14.15,-18.9],[17.55,-18.9],[17.55,-6.6]],i:1,wait:0,lift:0,loaded:false};
