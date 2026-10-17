@@ -645,7 +645,8 @@ function renderSide(){
   sideBody.innerHTML=`<div class="sheethead"><h2>${s.name}</h2><button class="hbtn" id="sideDone">Done</button></div>
     ${action}<span class="note" id="sideMsg"></span>
     <h3 class="sub">Today</h3>${hist}
-    <p class="note">${s.marel?"Lets everyone see when the Marel finishes cutting. Packaging shift ends at 4:30 pm.":"Shows everyone this machine is running and how many people it takes. Not added to CI Tracker records or PLH."}</p>`;
+    ${s.marel?`<p class="note">Lets everyone see when the Marel finishes cutting. Packaging shift ends at 4:30 pm.</p>`:(()=>{const n=st.on?st.people:(sidePick.people||s.defPeople||1);const who=n===1?"1 operator":n+" operators";
+      return `<p class="note foot">Uses packaging labour hours. Running the ${s.name.toLowerCase()} takes ${who} off a Variovac or another packaging station, so the line runs short-handed while it's on. These hours aren't counted in PLH, but they're logged here.</p>`})()}`;
 }
 sideSheet.addEventListener("click",async e=>{
   if(e.target===sideSheet||e.target.id==="sideDone"){sideSheet.hidden=true;return}
