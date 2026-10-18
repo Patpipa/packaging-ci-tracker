@@ -202,7 +202,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v115 - 2026-10-18 (Floor view simplified: labels show the name only, dot + label border show the status colour; full details on tap; legend adds Break and Idle)';
+const APP_VERSION = 'v116 - 2026-10-18 (Calculation fixes: noon split uses real running time, runs left open overnight close at a set finish time, stop labour uses the headcount at the time, finish-before-start blocked, History edits keep real run time, MAREL cutting green, report wording, crew board No Work + spare; overnight records repaired)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -513,7 +513,10 @@ function localDateStr(d){ d = d || new Date(); const y=d.getFullYear(), m=String
 function todayStr(){ return localDateStr(new Date()); }
 function fmtDate(iso){ const d=new Date(iso+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
 function toMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
-function duration(start,end){ let s=toMin(start), e=toMin(end); if(s==null||e==null) return 0; let d=e-s; if(d<0) d+=1440; return d; }
+/* v116: no wrapping past midnight — the shift never crosses midnight, so a finish earlier than the start is a mistake and counts as 0 (it used to count as ~24 h) */
+function duration(start,end){ let s=toMin(start), e=toMin(end); if(s==null||e==null) return 0; const d=e-s; return d>0 ? d : 0; }
+/* v116: an entry left open on an earlier day is closed at the 4:30 PM shift end (or at its own start if it began after that) — never stretched overnight */
+function pastOpenEnd(start){ return toMin(start) >= 16*60+30 ? start : '16:30'; }
 function fmtDur(min){ min=Math.round(min); const h=Math.floor(min/60), m=min%60; return h>0? `${h}h ${m}m` : `${m}m`; }
 function fmtTime12(t){ if(!t) return '--'; const parts=t.split(':'); let h=Number(parts[0]), m=Number(parts[1]); if(isNaN(h)||isNaN(m)) return '--'; const ap=h>=12?'PM':'AM'; h=h%12; if(h===0)h=12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1600); }
@@ -559,7 +562,7 @@ function totalBreakMinutes(recs){
   const byDate = {};
   recs.filter(r=>r.status==='BREAK').forEach(r=>{
     if(!byDate[r.date]) byDate[r.date]=[];
-    let s=toMin(r.startTime), e=toMin(r.endTime); if(e<s) e+=1440;
+    let s=toMin(r.startTime), e=toMin(r.endTime); if(e<s) e=s;
     byDate[r.date].push({start:s,end:e});
   });
   let total = 0;
@@ -706,7 +709,7 @@ async function deleteOffline(id){ if(!confirm('Delete this entry?')) return; con
 function offlineMinutes(date){
   const d = dayLogFor(date); const out = {}; OFFLINE_ROLES.forEach(r=>out[r]={min:0, where:new Set()});
   if(!d) return out;
-  (d.offline||[]).forEach(o=>{ let a=toMin(o.start), b=toMin(o.end || (date===todayStr()? nowHHMM() : o.start)); if(b<a) b+=1440; const t = out[o.role] || (out[o.role]={min:0, where:new Set()}); t.min += Math.max(0,b-a); t.where.add(o.where); });
+  (d.offline||[]).forEach(o=>{ let a=toMin(o.start), b=toMin(o.end || (date===todayStr()? nowHHMM() : pastOpenEnd(o.start))); if(b<a) b=a; const t = out[o.role] || (out[o.role]={min:0, where:new Set()}); t.min += Math.max(0,b-a); t.where.add(o.where); });
   return out;
 }
 function offlineSummary(date){
@@ -738,6 +741,9 @@ function openSideRuns(date){ const d = dayLogFor(date); return d ? (d.side||[]).
 function lineStaffNow(m){
   const live = Store.liveRuns[m];
   if(!live || !live.segments || !live.segments.length) return {active:false};
+  if(isStaleLive(live)) return {active:false, stale:true}; // v116: left open from an earlier day — not today's staffing
+  const openDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+  if(live.status!=='RUNNING' && openDt && !openDt.end && openDt.status==='NO_WORK') return {active:false, noWork:true}; // v116: No Work Scheduled needs nobody
   const lastSeg = live.segments[live.segments.length-1];
   const n = (live.pendingEmployees!=null && live.status!=='RUNNING') ? live.pendingEmployees : (lastSeg ? lastSeg.employees : null);
   return {active:true, staff: (n==null || isNaN(n)) ? null : Number(n), status: live.status};
@@ -753,7 +759,9 @@ function crewSnapshot(){
   const short = counted.reduce((a,l)=>a+Math.max(0, l.need-l.staff),0);
   const notEntered = lines.filter(l=>l.active && l.staff==null).map(l=>l.m);
   const crew = d && d.crew!=null ? d.crew : null;
-  const spare = crew!=null ? crew - onLines - sidePack : null;
+  // v116: lead hand / yield operator working a line are inside that line's headcount but not in the crew number, so add them back
+  const offOnLines = openOffline(date).filter(o=>MACHINES.includes(o.where)).length;
+  const spare = crew!=null ? crew - (onLines - offOnLines) - sidePack : null;
   return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, notEntered, crew, spare};
 }
 async function saveDayLogNow(){ const ok = await Store.saveDayLog(); if(ok) render(); return ok; }
@@ -815,11 +823,12 @@ const CREW_FOOTNOTE_LINES = [
   'Side machines (Fajita, Slicer, Cutlet) = staff entered when each machine is started.',
   'Packaging staff and trimmer helpers are recorded separately. Only packaging staff count as packaging labour.',
   'Needed = 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running.',
-  'Lines that are not running are not counted.',
+  'Lines that are not running, or are on No Work Scheduled, are not counted.',
   'Short = needed minus packaging staff actually on the lines.',
   'A line with no headcount entered shows "not entered" and is not counted either way.',
   'Lead hand and yield operator are off-line roles. When either steps in to help, it is logged On/Off with where they helped, and shown separately. They are not part of the crew count.',
-  'Line headcounts include whoever is actually working the line, so a line can show as covered only because the lead hand or yield operator stepped in.'
+  'Line headcounts include whoever is actually working the line, so a line can show as covered only because the lead hand or yield operator stepped in.',
+  'Spare = crew minus packaging staff on lines and side machines. A lead hand or yield operator working a line is not taken off the spare count, since they are not part of the crew.'
 ];
 function crewFootnoteHTML(forPdf, noTitle){
   const c = forPdf ? '#888' : 'var(--muted)';
@@ -840,7 +849,7 @@ function renderCrewBoard(){
   subParts.push(`${c.onLines} on lines`);
   subParts.push(`need ${c.needed}`);
   const lineRows = c.lines.map(l=>{
-    if(!l.active) return `<div class="cb-row" style="opacity:.5"><span class="cb-nm">${l.m}</span><span class="cb-mut">not running</span></div>`;
+    if(!l.active) return `<div class="cb-row" style="opacity:.5"><span class="cb-nm">${l.m}</span><span class="cb-mut">${l.stale?'open from an earlier day — close it below':(l.noWork?'no work scheduled':'not running')}</span></div>`;
     if(l.staff==null) return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-mut" style="color:var(--change)">headcount not entered</span></div>`;
     const dots = []; for(let i=0;i<Math.min(l.staff,8);i++) dots.push(personDot('ok')); for(let i=l.staff;i<l.need;i++) dots.push(personDot('miss'));
     return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-ppl">${dots.join('')}</span></div>`;
@@ -894,7 +903,7 @@ function renderSideSetup(sm){
 }
 function sideIntervals(date){
   const d = dayLogFor(date); if(!d) return [];
-  return (d.side||[]).map(s=>{ let a=toMin(s.start), b=toMin(s.end || (date===todayStr()? nowHHMM() : s.start)); if(b<a) b+=1440; return {...s, a, b, min: Math.max(0,b-a)}; });
+  return (d.side||[]).map(s=>{ let a=toMin(s.start), b=toMin(s.end || (date===todayStr()? nowHHMM() : pastOpenEnd(s.start))); if(b<a) b=a; return {...s, a, b, min: Math.max(0,b-a)}; });
 }
 function sideMinutesToday(machine){ return sideIntervals(todayStr()).filter(s=>s.machine===machine && s.pack>0).reduce((t,s)=>t+s.min,0); }
 /* Packaging labour on side machines for a date range. packMin/trimMin are labour minutes (time × people). shortMin = minutes, while packaging staff were on side machines, that a Variovac's logged run had fewer than 2 people — taken from the staffing segments saved with each finished Live Floor run. */
@@ -918,7 +927,7 @@ function computeSideLabour(start, end){
       Store.records.filter(r=>r.date===d && /^Variovac/.test(r.machine) && r.plh && r.plh.segments).forEach(r=>{
         r.plh.segments.forEach(seg=>{
           if(seg.employees==null || seg.employees>=2 || !seg.start || !seg.end) return;
-          let a=toMin(seg.start), b=toMin(seg.end); if(b<a) b+=1440;
+          let a=toMin(seg.start), b=toMin(seg.end); if(b<a) b=a;
           packIv.forEach(p=>{ day.shortMin += Math.max(0, Math.min(b,p.end)-Math.max(a,p.start)); });
         });
       });
@@ -994,11 +1003,13 @@ function renderCrewAlertLine(){
   const parts = [];
   if(c.short>0) parts.push(`Short ${c.short} on lines`);
   if(c.notEntered.length) parts.push(`Crew not entered: ${c.notEntered.join(', ')}`);
+  const staleM = MACHINES.filter(m=>isStaleLive(Store.liveRuns[m]));
+  if(staleM.length) parts.push(`${staleM.join(', ')} still open from an earlier day — close on Live Floor`);
   const offOn = openOffline(todayStr());
   if(offOn.length) parts.push(offOn.map(o=>`${o.role} on ${o.where}`).join(', '));
   if(!parts.length) return '';
   if(c.sidePack>0) parts.push(`${c.sidePack} packaging on side machines (${sideNames.join(', ')})`);
-  const red = c.short>0;
+  const red = c.short>0 || staleM.length>0;
   return `<div onclick="Router.go('live')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:11px 14px;border-radius:12px;border:1.5px solid ${red?'var(--wait)':'var(--change)'};background:${red?'var(--wait-dim)':'var(--change-dim)'};color:${red?'var(--wait)':'var(--change)'};font-size:13px;font-weight:600;line-height:1.4;"><span>⚠ ${parts.join(' · ')}</span><span style="white-space:nowrap;font-size:12px;opacity:.85;">Live Floor ›</span></div>`;
 }
 /* Note added automatically to an Employee Shortage / Reassigned stop when packaging staff are on side machines at that moment. */
@@ -1110,6 +1121,7 @@ function setDashView(v){ try{ localStorage.setItem('pct_dash_view', v); }catch(e
 function lineLiveStatus(m){
   const live = Store.liveRuns[m];
   if(!live) return {color:'var(--nowork)', label:'Idle', alarm:false, mins:null};
+  if(isStaleLive(live)) return {color:'var(--wait)', label:'Open from '+fmtDate(live.date), alarm:true, mins:null, stale:true};
   if(live.status==='RUNNING') return {color:'var(--run)', label:'Running', alarm:false, mins:elapsedMinutesSince(live.startedAt)};
   const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
   const info = lastDt ? statusInfo(lastDt.status) : null;
@@ -1150,7 +1162,7 @@ function spotState(sp){
   if(sp.id==='MAREL'){
     const d = dayLogFor(todayStr()) || {};
     if(waiting.length) return {color:'var(--wait)', alarm:true, sub:`⚠${waiting.length}`};
-    if(d.marelStart && !d.marelEnd) return {color:'var(--brk)', sub:'cutting'};
+    if(d.marelStart && !d.marelEnd) return {color:'var(--run)', sub:'cutting'}; // v116: green = working (blue now means Break)
     if(d.marelEnd) return {color:'var(--nowork)', dim:true, sub:'done'};
     return {color:'var(--nowork)', dim:true, sub:''};
   }
@@ -1723,13 +1735,11 @@ function elapsedMinutesSince(hhmm){
   const d = duration(hhmm, nowHHMM());
   return d;
 }
+/* v116: same gross rule as the finished run (running + stops × staff), so the live figure matches what gets saved */
 function laborHoursSoFar(live){
-  let mins = 0;
-  (live.segments||[]).forEach(seg=>{
-    const end = seg.end || nowHHMM();
-    mins += duration(seg.start, end) * (seg.employees||1);
-  });
-  return (mins/60).toFixed(1);
+  const now = nowHHMM();
+  const lab = runLabourMinutes((live.segments||[]).map(sg=>({...sg, end: sg.end||now})), (live.downtimeSegments||[]).map(d=>({...d, end: d.end||now})));
+  return (lab.gross/60).toFixed(1);
 }
 function machineIdSafe(m){ return m.replace(/\s+/g,'-'); }
 /* ============ ALL-LINE PLANNED STOP (v98) ============
@@ -2132,7 +2142,42 @@ async function confirmStartRun(){
   toast(`${s.machine} — run started`);
   render();
 }
+/* v116: a run (or stop) still open from an earlier day */
+function isStaleLive(live){ return !!(live && live.date && live.date!==todayStr()); }
+function staleLatestStart(live){
+  const starts = [...(live.segments||[]).map(sg=>sg.start), ...(live.downtimeSegments||[]).map(d=>d.start)].filter(Boolean);
+  return starts.reduce((a,b)=> toMin(b)>toMin(a)?b:a, starts[0]||'08:00');
+}
+function renderStaleLiveCard(m, live){
+  const latest = staleLatestStart(live);
+  const def = toMin(latest) > 16*60+30 ? latest : '16:30';
+  return `<div class="live-card downtime" style="border-color:var(--wait);">
+    <h3 style="font-family:'Oswald';font-size:16px;">${m}</h3>
+    <div class="warnbanner" style="background:var(--wait-dim);border-color:var(--wait);color:var(--wait);margin-top:8px;">⚠ Still open from ${fmtDate(live.date)}. Set the time it really finished so the night isn't counted.</div>
+    <div style="font-size:12.5px;color:var(--muted);margin:6px 0;">${live.product?escapeHtml(live.product)+' · ':''}started ${fmtTime12(live.startedAt)} · last change ${fmtTime12(latest)}</div>
+    <div class="field"><label>Finished at (${fmtDate(live.date)})</label><input type="time" id="staleEnd-${machineIdSafe(m)}" value="${def}"></div>
+    <button class="btn btn-primary" onclick="closeStaleRun('${m}')">✅ Close at this time</button>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">Saved to ${fmtDate(live.date)}. Add the weight later from History if it's a finished product.</div>
+    <div style="text-align:center;margin-top:10px;"><span style="color:var(--wait);font-size:12px;cursor:pointer;text-decoration:underline;" onclick="cancelLiveRun('${m}')">Cancel run</span></div>
+  </div>`;
+}
+async function closeStaleRun(m){
+  const live = Store.liveRuns[m]; if(!live) return;
+  const el = document.getElementById('staleEnd-'+machineIdSafe(m));
+  const t = el && el.value;
+  if(!t){ toast('Set the finish time'); return; }
+  const latest = staleLatestStart(live);
+  if(toMin(t) < toMin(latest)){ toast(`Finish can't be before ${fmtTime12(latest)}`); return; }
+  const result = await closeOutLiveRun(m, {endAt: t});
+  if(!result){ toast('Save failed — check connection'); return; }
+  delete Store.liveRuns[m];
+  const okL = await Store.saveLiveRuns();
+  if(!okL){ toast('Save failed — check connection'); return; }
+  toast(`${m} closed at ${fmtTime12(t)} on ${fmtDate(live.date)}`);
+  render();
+}
 function renderLiveActiveCard(m, live){
+  if(isStaleLive(live)) return renderStaleLiveCard(m, live);
   const isRunning = live.status==='RUNNING';
   const hasNoSegmentsYet = live.segments.length===0;
   const lastDt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
@@ -2312,8 +2357,8 @@ async function resumeRun(m){
 }
 function openFinishSetup(m){ liveFinishSetup = {machine:m, quantity:'', weight:'', notes:''}; render(); }
 function overlapMinutes(aStart,aEnd,bStart,bEnd){
-  let s1=toMin(aStart), e1=toMin(aEnd||nowHHMM()); if(e1<s1) e1+=1440;
-  let s2=toMin(bStart), e2=toMin(bEnd||nowHHMM()); if(e2<s2) e2+=1440;
+  let s1=toMin(aStart), e1=toMin(aEnd||nowHHMM()); if(e1<s1) e1=s1;
+  let s2=toMin(bStart), e2=toMin(bEnd||nowHHMM()); if(e2<s2) e2=s2;
   const ovS=Math.max(s1,s2), ovE=Math.min(e1,e2);
   return Math.max(0, ovE-ovS);
 }
@@ -2356,27 +2401,65 @@ async function confirmFinishProduct(){
   }
 }
 /* Closes out the current run's segments/downtime and saves them to History — shared by Finish Product (which stops there) and Switch Product (which immediately starts a new run right after). Quantity/weight/notes are optional; when skipped, the run still saves with full timing/staffing data and can be completed later from History, same as Finish Product's own "add later" path. */
+/* v116: labour for a run. Net = running minutes × staff on each segment. Gross = net + stop minutes (except No Work) × the staff on the line at the moment the stop began (the latest segment that started before it; a stop before the first segment uses the first segment's headcount). */
+function runLabourMinutes(segments, downtimeSegments){
+  const segs = (segments||[]).filter(sg=>sg.start).slice().sort((a,b)=>toMin(a.start)-toMin(b.start));
+  const empAt = t=>{ const tm=toMin(t); let best=null; segs.forEach(sg=>{ if(toMin(sg.start)<=tm) best=sg; }); const sg = best || segs[0]; return sg ? (Number(sg.employees)||0) : 1; };
+  let net=0, gross=0;
+  segs.forEach(sg=>{ net += duration(sg.start, sg.end) * (Number(sg.employees)||0); });
+  gross = net;
+  (downtimeSegments||[]).forEach(d=>{ if(d.status==='NO_WORK') return; gross += duration(d.start, d.end) * empAt(d.start); });
+  return {net, gross};
+}
+/* Same text block the run notes have always carried (Qty · Weight · Labour · PLH · vs Target) */
+function plhNoteExtras(p){
+  const extras = [];
+  if(p.quantity) extras.push(`Qty: ${p.quantity}`);
+  if(p.weightLbs) extras.push(`Weight: ${p.weightLbs} lbs`);
+  if(p.grossPLH!=null){
+    extras.push(`Labour: ${p.grossLaborHours.toFixed(1)}h gross / ${p.netLaborHours.toFixed(1)}h net`);
+    extras.push(`PLH: ${p.grossPLH.toFixed(0)} gross${p.netPLH!=null?' / '+p.netPLH.toFixed(0)+' net':''}`);
+    if(p.targetPLH){ const v=p.grossPLH-p.targetPLH, pct=v/p.targetPLH*100; extras.push(`vs Target ${p.targetPLH}: ${v>=0?'+':''}${v.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
+  } else extras.push('Qty/Weight not entered yet — add later from History');
+  return extras;
+}
+function stripPlhNote(notes){
+  let n = (notes||'').replace('Qty/Weight not entered yet — add later from History', '');
+  return n.replace(/\s*·?\s*(Qty:|Weight:|Labour:).*$/s, '').replace(/ · $/,'').replace(/^ · /,'').trim();
+}
+/* v116: re-works a saved Live Floor run after its start/finish was edited in History — segments and stops are trimmed (or the first/last segment stretched) to the new window, then running minutes, labour and PLH are recalculated */
+function recalcLiveRunRecord(rec, newStart, newEnd){
+  const p = {...rec.plh};
+  const ns=toMin(newStart), ne=toMin(newEnd);
+  let segs = (p.segments||[]).map(sg=>({...sg})).sort((a,b)=>toMin(a.start)-toMin(b.start));
+  if(segs.length){
+    if(ns < toMin(segs[0].start)) segs[0].start = newStart;
+    const last = segs[segs.length-1]; if(ne > toMin(last.end)) last.end = newEnd;
+  }
+  const clip = x=>{ const a=Math.max(toMin(x.start),ns), b=Math.min(toMin(x.end),ne); if(b<=a) return null; const hh=v=>String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); return {...x, start:hh(a), end:hh(b)}; };
+  segs = segs.map(clip).filter(Boolean);
+  const dts = (p.downtimeSegments||[]).map(clip).filter(Boolean);
+  const lab = runLabourMinutes(segs, dts);
+  p.segments = segs; p.downtimeSegments = dts;
+  p.netLaborHours = lab.net/60; p.grossLaborHours = lab.gross/60;
+  p.grossPLH = p.weightLbs>0 && p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null;
+  p.netPLH = p.weightLbs>0 && p.netLaborHours>0 ? p.weightLbs/p.netLaborHours : null;
+  const durationMin = segs.reduce((a,sg)=>a+duration(sg.start,sg.end),0);
+  return {plh:p, durationMin, startTime: segs.length? segs[0].start : newStart, endTime: segs.length? segs[segs.length-1].end : newEnd};
+}
 async function closeOutLiveRun(m, opts){
   opts = opts || {};
   const live = Store.liveRuns[m];
   if(!live) return null;
-  const now = nowHHMM();
+  // v116: a run still open from an earlier day closes at the finish time the user confirmed (opts.endAt), never "now" the next morning
+  const now = opts.endAt || (live.date && live.date!==todayStr() ? '16:30' : nowHHMM());
   const lastSeg = live.segments.length ? live.segments[live.segments.length-1] : null;
   if(lastSeg && !lastSeg.end) lastSeg.end = now;
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt && !lastDt.end) lastDt.end = now;
 
-  let netLaborMin = 0;
-  live.segments.forEach(seg=>{ netLaborMin += duration(seg.start, seg.end) * seg.employees; });
-  let downtimeLaborMin = 0;
-  (live.downtimeSegments||[]).forEach(d=>{
-    if(d.status==='NO_WORK') return;
-    const durMin = duration(d.start, d.end);
-    const precedingSeg = live.segments.find(seg=>seg.end===d.start) || live.segments[live.segments.length-1];
-    const emp = precedingSeg ? precedingSeg.employees : 1;
-    downtimeLaborMin += durMin * emp;
-  });
-  const grossLaborMin = netLaborMin + downtimeLaborMin;
+  const lab = runLabourMinutes(live.segments, live.downtimeSegments);
+  const netLaborMin = lab.net, grossLaborMin = lab.gross;
   const grossLaborHours = grossLaborMin/60, netLaborHours = netLaborMin/60;
   const weightNum = parseFloat(opts.weight)||0;
   const grossPLH = weightNum>0 && grossLaborHours>0 ? weightNum/grossLaborHours : null;
@@ -2581,13 +2664,16 @@ function onStartTimeChanged(){
 }
 function rangesOverlap(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && bStart < aEnd; }
 /* Warns if a record about to be saved overlaps an existing entry for the same machine/date — catches accidental double-logging before it skews a report. Returns true to proceed, false to cancel. */
+/* v116: a Live Floor run only occupies its running segments — its own stops sit in the gaps, so they are not overlaps */
+function busySpans(r){
+  if(r.status==='RUNNING' && r.plh && Array.isArray(r.plh.segments) && r.plh.segments.length) return r.plh.segments.map(sg=>[toMin(sg.start), toMin(sg.end)]);
+  return [[toMin(r.startTime), toMin(r.endTime)]];
+}
 function confirmNoOverlap(newRecords, excludeId){
   const conflicts = [];
   newRecords.forEach(nr=>{
-    const nStart = toMin(nr.startTime), nEnd = toMin(nr.endTime) < nStart ? toMin(nr.endTime)+1440 : toMin(nr.endTime);
     Store.records.filter(r=>r.machine===nr.machine && r.date===nr.date && r.id!==excludeId).forEach(r=>{
-      const eStart = toMin(r.startTime), eEnd = toMin(r.endTime) < eStart ? toMin(r.endTime)+1440 : toMin(r.endTime);
-      if(rangesOverlap(nStart,nEnd,eStart,eEnd)){
+      if(busySpans(nr).some(([a,b])=>busySpans(r).some(([c,d])=>rangesOverlap(a,b,c,d)))){
         conflicts.push(`${nr.machine}: ${fmtTime12(nr.startTime)}–${fmtTime12(nr.endTime)} overlaps existing ${statusInfo(r.status).label} (${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)})`);
       }
     });
@@ -2820,9 +2906,27 @@ saveRecord = async function(){
         if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
         if(draft.status==='PLANNED'){ reasonCategory = 'Planned Stop'; reason = draft.plannedReason==='Other' ? (draft.plannedReasonOther||'Other') : draft.plannedReason; }
         if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
-        const candidate = {date: draft.date||todayStr(), machine:draft.machine, startTime:draft.startTime, endTime:draft.endTime};
-        if(!confirmNoOverlap([candidate], draft._editId)) return;
-        Store.records[idx] = {...Store.records[idx], date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
+        const old = Store.records[idx];
+        let upd = {...old, date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
+        const isLiveRun = old.status==='RUNNING' && old.plh && Array.isArray(old.plh.segments) && old.plh.segments.length;
+        if(isLiveRun && draft.status==='RUNNING'){
+          // v116: a Live Floor run keeps its real running minutes (its stops are separate records). If its start/finish changed, trim/stretch its segments and recalculate labour + PLH.
+          const timesChanged = draft.startTime!==old.startTime || draft.endTime!==old.endTime;
+          const plh = {...old.plh};
+          if(product!==old.product){ plh.product = product; plh.productId = ''; plh.targetPLH = null; }
+          upd.plh = plh; upd.durationMin = old.durationMin;
+          if(timesChanged){
+            const rc = recalcLiveRunRecord({...old, plh}, draft.startTime, draft.endTime);
+            if(rc.durationMin<=0){ toast('No running time left in that window'); return; }
+            upd = {...upd, plh: rc.plh, durationMin: rc.durationMin, startTime: rc.startTime, endTime: rc.endTime};
+            const base = stripPlhNote(upd.notes);
+            upd.notes = [base, ...plhNoteExtras(upd.plh)].filter(Boolean).join(' · ');
+          }
+        } else if(isLiveRun && draft.status!=='RUNNING'){
+          delete upd.plh; // no longer a production run, so it must not feed PLH
+        }
+        if(!confirmNoOverlap([upd], draft._editId)) return;
+        Store.records[idx] = upd;
         await Store.saveRecords();
         toast('Record Updated');
       }
@@ -2859,7 +2963,7 @@ function buildReport(date){
   let observation = 'No production data recorded for this shift.';
   if(bn.length){
     const top = bn[0];
-    observation = `Today's largest source of lost production time was ${top[0].toLowerCase()}, accounting for ${fmtDur(top[1])}${dt.upstream>dt.internal?' of upstream delay':''}.`;
+    observation = `Today's largest source of lost production time was ${top[0].toLowerCase()}, accounting for ${fmtDur(top[1])}${bottleneckMeta[top[0]]==='Upstream / Product'?' of upstream delay':''}.`;
     if(mmw.minutes>0) observation += ` ${mmw.machine} experienced the highest waiting time at ${fmtDur(mmw.minutes)}.`;
   }
   return {date, shiftStart:shiftTimes.start, shiftEnd:shiftTimes.end, generatedAt: Date.now(), totals: dt, perMachine, bottlenecks:bn, bottleneckMeta, bottleneckNotes, machineMostAffected: mmw, observation, ciAction:'', recordCount: recs.length};
@@ -2892,10 +2996,10 @@ function buildRangeReport(startDate, endDate){
   let observation = 'No production data recorded in this date range.';
   if(bn.length){
     const top = bn[0];
-    observation = `Across ${daysWithData} day${daysWithData===1?'':'s'}, the largest recurring source of lost time was ${top[0].toLowerCase()}, totaling ${fmtDur(top[1])}${dt.upstream>dt.internal?' of upstream delay':''}.`;
+    observation = `Across ${daysWithData} day${daysWithData===1?'':'s'}, the largest recurring source of lost time was ${top[0].toLowerCase()}, totaling ${fmtDur(top[1])}${bottleneckMeta[top[0]]==='Upstream / Product'?' of upstream delay':''}.`;
     if(mmw.minutes>0) observation += ` ${mmw.machine} accumulated the most waiting time overall at ${fmtDur(mmw.minutes)}.`;
     const worstDay = dayTrend.slice().sort((a,b)=>b.waiting-a.waiting)[0];
-    if(worstDay && worstDay.waiting>0) observation += ` ${fmtDate(worstDay.date)} was the worst single day for downtime, at ${fmtDur(worstDay.waiting)}.`;
+    if(worstDay && worstDay.waiting>0) observation += ` ${fmtDate(worstDay.date)} was the worst single day for waiting time, at ${fmtDur(worstDay.waiting)}.`;
   }
   return {startDate, endDate, totals:dt, perMachine, bottlenecks:bn, bottleneckMeta, bottleneckNotes, machineMostAffected:mmw, dayTrend, daysWithData, observation, recordCount: recs.length};
 }
@@ -3903,11 +4007,17 @@ function renderUpstreamImpactView(){
 const AMPM_LINES = ['Variovac 1','Variovac 2','Variovac 3'];
 const NOON_MIN = 12*60;
 function fmtShort(min){ min=Math.round(min); if(min<60) return min+'m'; const h=Math.floor(min/60), m=min%60; return h+'h'+(m?String(m).padStart(2,'0'):''); }
-function splitAtNoon(r){
-  let s=toMin(r.startTime), e=toMin(r.endTime);
-  if(s==null||e==null) return [0,0];
-  if(e<s) e+=1440;
+function splitSpanAtNoon(start, end){
+  const s=toMin(start), e=toMin(end);
+  if(s==null||e==null||e<=s) return [0,0];
   return [Math.max(0, Math.min(e,NOON_MIN)-s), Math.max(0, e-Math.max(s,NOON_MIN))];
+}
+/* v116: a Live Floor run is split using its actual running segments, so stops inside the run (waiting, breaks…) are no longer counted as running time */
+function splitAtNoon(r){
+  if(r.status==='RUNNING' && r.plh && Array.isArray(r.plh.segments) && r.plh.segments.length){
+    return r.plh.segments.reduce((acc,seg)=>{ const [a,b]=splitSpanAtNoon(seg.start, seg.end); return [acc[0]+a, acc[1]+b]; }, [0,0]);
+  }
+  return splitSpanAtNoon(r.startTime, r.endTime);
 }
 function computeAmPm(start, end){
   const recs = Store.records.filter(r=>r.date>=start && r.date<=end && AMPM_LINES.includes(r.machine));
@@ -4114,9 +4224,30 @@ async function shareTourLink(){
     await startApp();
   });
 })();
+/* v116: repairs records saved before v116 that were left open overnight (finish earlier than start, e.g. No Work from 4:00 PM closed at 8:33 AM next day → counted 16+ h). The finish is set to the 4:30 PM shift end (or the start, if it began after 4:30). Safe to run on every load — fixed records no longer match. */
+async function repairOvernightRecords(){
+  try{
+    if(!Store.ready) return;
+    let n=0;
+    Store.records.forEach((r,i)=>{
+      const s=toMin(r.startTime), e=toMin(r.endTime);
+      if(s==null||e==null||e>=s) return;
+      const newEnd = pastOpenEnd(r.startTime);
+      let fixed = {...r, endTime:newEnd, durationMin: duration(r.startTime,newEnd), notes: ((r.notes||'')+' [auto-fixed: left open overnight, finish set to '+fmtTime12(newEnd)+']').trim()};
+      if(r.status==='RUNNING' && r.plh && Array.isArray(r.plh.segments)){
+        const plh = {...r.plh, segments: r.plh.segments.map(sg=>toMin(sg.end)<toMin(sg.start)?{...sg,end:pastOpenEnd(sg.start)}:sg), downtimeSegments:(r.plh.downtimeSegments||[]).map(d=>toMin(d.end)<toMin(d.start)?{...d,end:pastOpenEnd(d.start)}:d)};
+        const rc = recalcLiveRunRecord({...r, plh}, r.startTime, newEnd);
+        fixed = {...fixed, plh: rc.plh, durationMin: rc.durationMin};
+      }
+      Store.records[i] = fixed; n++;
+    });
+    if(n){ await Store.saveRecords(); toast(`Fixed ${n} record${n===1?'':'s'} left open overnight`); }
+  }catch(e){ console.error('overnight repair failed', e); }
+}
 async function startApp(){
   await Store.init();
   await migrateReasonLabels();
+  await repairOvernightRecords();
   render();
   if(!safeLocalGet(TOUR_SEEN_KEY)) openTour(true);
   setInterval(updateClock, 30000);
