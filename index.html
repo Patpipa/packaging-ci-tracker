@@ -185,7 +185,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v108 - 2026-10-18 ("Waiting for Beef Slice" merged into "Waiting for Slicer" — old records renamed automatically)';
+const APP_VERSION = 'v110 - 2026-10-18 (Crew Board: Lead Hand / Yield Operator On-line / Off buttons with where they helped; shown on Dashboard alert, Daily Report, Upstream Impact and in the footnote)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -663,6 +663,57 @@ const SIDE_MACHINES = [ {name:'Fajita', max:2}, {name:'Slicer', max:1}, {name:'C
 const LINE_NEED = {'Variovac 1':2, 'Variovac 2':2, 'Variovac 3':2, 'Manual Pack':1};
 const SHIFT_END_MIN = 16*60+30;
 let sideSetup = null;      // {machine, pack, trim, changeId}
+/* v110: Lead hand and yield operator are off-line roles (management wants them off the line). When they step in, it's logged On/Off with where they went — stored in dayLog[date].offline = [{id, role, where, start, end}]. Shown separately; not part of the crew count. */
+const OFFLINE_ROLES = ['Lead Hand','Yield Operator'];
+const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet'];
+let offlineSetup = null;   // {role, where}
+function openOffline(date){ const d = dayLogFor(date); return d ? (d.offline||[]).filter(o=>!o.end) : []; }
+async function startOffline(){
+  const o = offlineSetup;
+  if(!o.where){ toast('Pick where they are helping'); return; }
+  const d = ensureDayLog(todayStr()); d.offline = d.offline || [];
+  d.offline.push({id: uid(), role: o.role, where: o.where, start: nowHHMM(), end: null});
+  offlineSetup = null;
+  await saveDayLogNow();
+  toast(`${o.role} on the line — ${o.where}`);
+}
+async function stopOffline(id){
+  const d = ensureDayLog(todayStr()), cur = (d.offline||[]).find(x=>x.id===id);
+  if(!cur) return;
+  cur.end = nowHHMM();
+  await saveDayLogNow();
+  toast(`${cur.role} back off the line`);
+}
+async function editOfflineTime(id, field, val){ const d = ensureDayLog(todayStr()); const cur = (d.offline||[]).find(x=>x.id===id); if(!cur || !val) return; cur[field] = val; await saveDayLogNow(); }
+async function deleteOffline(id){ if(!confirm('Delete this entry?')) return; const d = ensureDayLog(todayStr()); d.offline = (d.offline||[]).filter(x=>x.id!==id); await saveDayLogNow(); }
+function offlineMinutes(date){
+  const d = dayLogFor(date); const out = {}; OFFLINE_ROLES.forEach(r=>out[r]={min:0, where:new Set()});
+  if(!d) return out;
+  (d.offline||[]).forEach(o=>{ let a=toMin(o.start), b=toMin(o.end || (date===todayStr()? nowHHMM() : o.start)); if(b<a) b+=1440; const t = out[o.role] || (out[o.role]={min:0, where:new Set()}); t.min += Math.max(0,b-a); t.where.add(o.where); });
+  return out;
+}
+function offlineSummary(date){
+  const m = offlineMinutes(date);
+  return OFFLINE_ROLES.filter(r=>m[r].min>0).map(r=>`${r} ${fmtDur(m[r].min)} (${[...m[r].where].join(', ')})`).join(', ');
+}
+function renderOfflineRows(){
+  const open = openOffline(todayStr());
+  const rows = OFFLINE_ROLES.map(role=>{
+    const cur = open.find(o=>o.role===role);
+    if(offlineSetup && offlineSetup.role===role){
+      return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--brk);"><span class="cb-nm">${role} — helping where?</span>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${OFFLINE_WHERE.map(w=>`<button class="cb-btn" style="flex:1 1 30%;font-size:12px;${offlineSetup.where===w?'border-color:var(--brk);color:var(--brk);background:var(--brk-dim);':''}" onclick="offlineSetup.where='${w}';render()">${w}</button>`).join('')}</div>
+        <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="offlineSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="startOffline()">On line</button></div></div>`;
+    }
+    if(cur) return `<div class="cb-row" style="border-color:var(--brk);gap:8px;"><span class="cb-nm">${role} <span class="cb-tag" style="background:var(--brk-dim);color:var(--brk);">ON LINE · ${cur.where} · since ${fmtTime12(cur.start)}</span></span><button class="cb-btn" style="flex:0 0 auto;border-color:var(--brk);color:var(--brk);" onclick="stopOffline('${cur.id}')">Off</button></div>`;
+    return `<div class="cb-row"><span class="cb-nm">${role} <span class="cb-mut">off line</span></span><button class="cb-btn" style="flex:0 0 auto;padding:9px 16px;" onclick="offlineSetup={role:'${role}',where:''};render()">On line</button></div>`;
+  }).join('');
+  const log = (dayLogFor(todayStr())||{}).offline||[];
+  const logHtml = log.length ? `<div style="margin:2px 0 6px;"><span class="cb-link" onclick="offlineLogOpen=!offlineLogOpen;render()">${offlineLogOpen?'▲ Hide':'▼ Show'} today's lead hand / yield log (${log.length})</span>
+    ${offlineLogOpen ? log.map(o=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span>${o.role} · ${o.where}</span><span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${o.start}" onchange="editOfflineTime('${o.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${o.end?`<input type="time" value="${o.end}" onchange="editOfflineTime('${o.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">on line</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteOffline('${o.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
+  return rows + logHtml;
+}
+let offlineLogOpen = false;
 let crewEdit = false, marelEdit = false, sideLogOpen = false;
 function dayLogFor(date){ return (Store.dayLog||{})[date] || null; }
 function ensureDayLog(date){ Store.dayLog = Store.dayLog || {}; return Store.dayLog[date] = Store.dayLog[date] || {crew:null, crewAt:'', marelStart:'', marelEnd:'', side:[]}; }
@@ -738,7 +789,9 @@ const CREW_FOOTNOTE_LINES = [
   'Needed = 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running.',
   'Lines that are not running are not counted.',
   'Short = needed minus packaging staff actually on the lines.',
-  'A line with no headcount entered shows "not entered" and is not counted either way.'
+  'A line with no headcount entered shows "not entered" and is not counted either way.',
+  'Lead hand and yield operator are off-line roles. When either steps in to help, it is logged On/Off with where they helped, and shown separately. They are not part of the crew count.',
+  'Line headcounts include whoever is actually working the line, so a line can show as covered only because the lead hand or yield operator stepped in.'
 ];
 function crewFootnoteHTML(forPdf, noTitle){
   const c = forPdf ? '#888' : 'var(--muted)';
@@ -784,16 +837,19 @@ function renderCrewBoard(){
   const marelRow = `<div class="cb-row" style="flex-wrap:wrap;gap:8px;"><span class="cb-nm">MAREL cutting</span>
       <span class="cb-mut">${d.marelStart?`Start ${fmtTime12(d.marelStart)}`:'Start —'} · ${d.marelEnd?`<span style="${late?'color:var(--wait);font-weight:700;':''}">Finish ${fmtTime12(d.marelEnd)}</span>`:'Finish —'}</span>
       ${marelEdit ? `<div style="display:flex;gap:6px;width:100%;"><input type="time" value="${d.marelStart||''}" onchange="setMarel('marelStart', this.value)" style="padding:8px;"><input type="time" value="${d.marelEnd||''}" onchange="setMarel('marelEnd', this.value)" style="padding:8px;"><button class="cb-btn" onclick="marelEdit=false;render()">Done</button></div>`
-      : `<div style="display:flex;gap:6px;width:100%;">${!d.marelStart?`<span style="display:flex;gap:6px;flex:1;align-items:center;"><span class="cb-mut" style="white-space:nowrap;">Start</span><input type="time" id="marelStartIn" style="padding:8px;flex:1;min-width:0;"><button class="cb-btn" style="flex:0 0 auto;" onclick="saveMarelStart()">Save</button></span>`:''}${d.marelStart && !d.marelEnd?`<button class="cb-btn" onclick="setMarel('marelEnd')">MAREL finished now</button>`:''}${d.marelStart?`<button class="cb-btn" style="flex:0 0 auto;" onclick="marelEdit=true;render()">Edit times</button>`:''}</div>`}
+      : `<div style="display:flex;gap:6px;width:100%;">${!d.marelStart?`<span style="display:flex;gap:6px;flex:1;align-items:center;"><span class="cb-mut" style="white-space:nowrap;">Start</span><input type="time" id="marelStartIn" style="padding:8px;flex:1;min-width:0;"><button class="cb-btn" style="flex:0 0 auto;" onclick="saveMarelStart()">Save</button></span>`:''}</div>
+      ${!d.marelEnd?`<button class="cb-btn" style="width:100%;flex:none;padding:12px;border-color:var(--amber);color:var(--amber);" onclick="setMarel('marelEnd')">■ MAREL finished now</button>`:''}
+      <div style="display:flex;gap:6px;width:100%;">${d.marelStart?`<button class="cb-btn" style="flex:0 0 auto;" onclick="marelEdit=true;render()">Edit times</button>`:''}</div>`}
       ${late?`<div style="font-size:11.5px;color:var(--wait);width:100%;">Finished after packaging shift end (4:30 PM)</div>`:''}</div>`;
   const log = (d.side||[]);
   const logHtml = log.length ? `<div style="margin-top:6px;"><span class="cb-link" onclick="sideLogOpen=!sideLogOpen;render()">${sideLogOpen?'▲ Hide':'▼ Show'} today's side-machine log (${log.length})</span>
     ${sideLogOpen ? log.map(s=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span>${s.machine} · ${s.pack} pkg${s.trim?` + ${s.trim} trim`:''}</span>
       <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
   return `<div class="card cb" style="border-color:${colors[0]};">
-    <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div></div></div>
+    <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}${openOffline(todayStr()).length?` · <span style="color:var(--brk);font-weight:700;">${openOffline(todayStr()).map(o=>o.role+' on '+o.where).join(', ')}</span>`:''}</div></div></div>
     ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
+    <div class="cb-lbl">OFF-LINE ROLES — STEPPING IN</div>${renderOfflineRows()}
     <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}
     <div class="cb-lbl">TODAY</div>${crewRow}${marelRow}
     <div class="cb-legend"><span>${personDot('ok')} on line</span><span>${personDot('miss')} empty spot</span><span>${personDot('side')} packaging on side machine</span><span>${personDot('tr')} trimmer helping</span></div>
@@ -820,7 +876,8 @@ function computeSideLabour(start, end){
   let shortTotal = 0;
   days.forEach(d=>{
     const log = dayLogFor(d), iv = sideIntervals(d);
-    const day = {date:d, crew: log.crew, marelStart: log.marelStart, marelEnd: log.marelEnd, packMin:0, trimMin:0, byMachine:{}, shortMin:0};
+    const om = offlineMinutes(d);
+    const day = {date:d, crew: log.crew, marelStart: log.marelStart, marelEnd: log.marelEnd, packMin:0, trimMin:0, byMachine:{}, shortMin:0, offMin: OFFLINE_ROLES.reduce((a,r)=>a+om[r].min,0), off: om};
     iv.forEach(s=>{
       const pm = perMachine[s.machine] || (perMachine[s.machine]={packMin:0,trimMin:0,runMin:0});
       pm.packMin += s.min*(s.pack||0); pm.trimMin += s.min*(s.trim||0); pm.runMin += s.min;
@@ -842,11 +899,12 @@ function computeSideLabour(start, end){
   });
   const packTotal = Object.values(perMachine).reduce((a,m)=>a+m.packMin,0);
   const trimTotal = Object.values(perMachine).reduce((a,m)=>a+m.trimMin,0);
-  return {perMachine, perDay, packTotal, trimTotal, shortTotal, hasData: perDay.some(x=>x.packMin||x.trimMin||x.crew!=null||x.marelStart||x.marelEnd)};
+  const offTotals = {}; OFFLINE_ROLES.forEach(r=>offTotals[r]=perDay.reduce((a,d)=>a+d.off[r].min,0));
+  return {perMachine, perDay, packTotal, trimTotal, shortTotal, offTotals, hasData: perDay.some(x=>x.packMin||x.trimMin||x.crew!=null||x.marelStart||x.marelEnd||x.offMin)};
 }
 function sideLabourHeadline(x){
   const parts = SIDE_MACHINES.map(m=>`${m.name} ${fmtDur(x.perMachine[m.name].packMin)}`).join(', ');
-  return `Packaging gave ${fmtDur(x.packTotal)} of labour to side machines (${parts}).${x.trimTotal?` Trimmers helped ${fmtDur(x.trimTotal)}.`:''}${x.shortTotal?` While packaging staff were on side machines, Variovac lines ran with fewer than 2 people for ${fmtDur(x.shortTotal)}.`:''}`;
+  return `${x.packTotal?`Packaging gave ${fmtDur(x.packTotal)} of labour to side machines (${parts}).`:'No packaging labour logged on side machines.'}${x.trimTotal?` Trimmers helped ${fmtDur(x.trimTotal)}.`:''}${x.shortTotal?` While packaging staff were on side machines, Variovac lines ran with fewer than 2 people for ${fmtDur(x.shortTotal)}.`:''}${OFFLINE_ROLES.some(r=>x.offTotals[r])?` Off-line roles stepped onto the line: ${OFFLINE_ROLES.filter(r=>x.offTotals[r]).map(r=>`${r} ${fmtDur(x.offTotals[r])}`).join(', ')}.`:''}`;
 }
 function renderSideLabourCard(start, end){
   const x = computeSideLabour(start, end);
@@ -856,8 +914,8 @@ function renderSideLabourCard(start, end){
   return `<div class="card"><h3>Packaging Labour on Side Machines</h3>
     <div style="font-size:13.5px;line-height:1.5;margin-bottom:10px;">${sideLabourHeadline(x)}</div>
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
-      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Crew</th><th style="${th}">MAREL</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trim help</th></tr>
-      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;white-space:nowrap;">${fmtDate(d.date).replace(/, \d{4}$/,'')}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}white-space:nowrap;${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:var(--wait);font-weight:700;':''}">${d.marelStart?fmtTime12(d.marelStart).replace(' ',''):'—'}–${d.marelEnd?fmtTime12(d.marelEnd).replace(' ',''):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td></tr>`).join('')}
+      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Crew</th><th style="${th}">MAREL</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trim help</th><th style="${th}">Lead/Yield on line</th></tr>
+      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;white-space:nowrap;">${fmtDate(d.date).replace(/, \d{4}$/,'')}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}white-space:nowrap;${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:var(--wait);font-weight:700;':''}">${d.marelStart?fmtTime12(d.marelStart).replace(' ',''):'—'}–${d.marelEnd?fmtTime12(d.marelEnd).replace(' ',''):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td><td style="${td}">${d.offMin?fmtShort(d.offMin):'—'}</td></tr>`).join('')}
     </table></div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Side-machine times are labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:8px;">${crewFootnoteHTML(false)}</div></div>`;
 }
@@ -870,8 +928,8 @@ function renderSideLabourPdfHTML(start, end){
     <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Packaging Labour on Side Machines · Crew · MAREL Times</div>
     <div style="font-size:12.5px;color:#333;margin-bottom:10px;line-height:1.5;">${sideLabourHeadline(x)}</div>
     <table style="width:100%;border-collapse:collapse;">
-      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Packaging crew</th><th style="${th}">MAREL start</th><th style="${th}">MAREL finish</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trimmer help</th></tr>
-      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;">${fmtDate(d.date)}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}">${d.marelStart?fmtTime12(d.marelStart):'—'}</td><td style="${td}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:#c0392b;font-weight:700;background:#fdecea;':''}">${d.marelEnd?fmtTime12(d.marelEnd):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td></tr>`).join('')}
+      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Packaging crew</th><th style="${th}">MAREL start</th><th style="${th}">MAREL finish</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trimmer help</th><th style="${th}">Lead hand / yield on line</th></tr>
+      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;">${fmtDate(d.date)}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}">${d.marelStart?fmtTime12(d.marelStart):'—'}</td><td style="${td}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:#c0392b;font-weight:700;background:#fdecea;':''}">${d.marelEnd?fmtTime12(d.marelEnd):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td><td style="${td}">${d.offMin?fmtShort(d.offMin):'—'}</td></tr>`).join('')}
     </table>
     <div style="font-size:10px;color:#888;margin-top:6px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:6px;">${crewFootnoteHTML(true)}</div>
   </div>`;
@@ -885,6 +943,8 @@ function dayLogLine(date){
   if(d.marelStart || d.marelEnd) bits.push(`MAREL cutting ${d.marelStart?fmtTime12(d.marelStart):'—'} – ${d.marelEnd?fmtTime12(d.marelEnd):'—'}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?' (after 4:30 PM shift end)':''}`);
   if(x.packTotal || x.trimTotal) bits.push(`Side machines: ${SIDE_MACHINES.filter(m=>x.perMachine[m.name].packMin).map(m=>`${m.name} ${fmtDur(x.perMachine[m.name].packMin)}`).join(', ')||'0m'} packaging labour${x.trimTotal?` (+ ${fmtDur(x.trimTotal)} trimmer help)`:''}`);
   if(x.shortTotal) bits.push(`Lines under 2 people during that time: ${fmtDur(x.shortTotal)}`);
+  const off = offlineSummary(date);
+  if(off) bits.push(`Off-line roles on the line: ${off}`);
   return bits.join(' · ');
 }
 /* v106: Dashboard shows crew per machine card + a slim alert line (only when something needs attention); the full Crew Board lives on the Live Floor. Same live entries, same rules. */
@@ -905,6 +965,8 @@ function renderCrewAlertLine(){
   const parts = [];
   if(c.short>0) parts.push(`Short ${c.short} on lines`);
   if(c.notEntered.length) parts.push(`Crew not entered: ${c.notEntered.join(', ')}`);
+  const offOn = openOffline(todayStr());
+  if(offOn.length) parts.push(offOn.map(o=>`${o.role} on ${o.where}`).join(', '));
   if(!parts.length) return '';
   if(c.sidePack>0) parts.push(`${c.sidePack} packaging on side machines (${sideNames.join(', ')})`);
   const red = c.short>0;
