@@ -125,7 +125,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 .fp-img{display:block;width:100%;height:auto;border-radius:11px;}
 .fp-spot{position:absolute;transform:translate(-50%,-50%);width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;}
 .fp-dot{width:16px;height:16px;border-radius:50%;background:var(--c);border:2.5px solid #fff;box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent),0 1px 4px rgba(0,0,0,.6);}
-.fp-tag{position:absolute;white-space:nowrap;background:rgba(17,20,23,.86);color:#fff;font-size:10px;line-height:1.2;padding:2px 5px;border-radius:7px;border:1px solid var(--c);font-family:'Inter',sans-serif;pointer-events:none;}
+.fp-tag{position:absolute;white-space:nowrap;background:rgba(17,20,23,.86);color:#fff;font-size:10px;line-height:1.2;padding:2px 6px;border-radius:7px;border:2px solid var(--c);font-family:'Inter',sans-serif;pointer-events:none;}
 .fp-tag b{font-weight:700;}
 .fp-alarm .fp-dot{animation:fpPulse 1s ease-in-out infinite;}
 @keyframes fpPulse{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent);}50%{box-shadow:0 0 0 9px color-mix(in srgb, var(--c) 30%, transparent);}}
@@ -202,7 +202,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v114 - 2026-10-18 (Floor view: Manual Pack, MAREL, Cutlet and Fajita labels moved into open floor space so they no longer cover the machines)';
+const APP_VERSION = 'v115 - 2026-10-18 (Floor view simplified: labels show the name only, dot + label border show the status colour; full details on tap; legend adds Break and Idle)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1161,7 +1161,7 @@ function renderFloorPlan(){
   const spots = FLOOR_SPOTS.map(sp=>{
     const st = spotState(sp);
     const tagPos = {r:'left:calc(100% + 4px);top:50%;transform:translateY(-50%);', l:'right:calc(100% + 4px);top:50%;transform:translateY(-50%);', b:'top:calc(100% + 3px);left:50%;transform:translateX(-50%);', t:'bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);'}[sp.tag||'b'];
-    const tagInner = `<b>${sp.short}</b>${st.sub?` <span style="${st.subRed?'color:#ff8a80;':''}">${st.sub}</span>`:''}`;
+    const tagInner = `<b>${sp.short}</b>`; // v115: name only — colour shows the status, details are in the tap panel
     const open = `onclick="event.stopPropagation();floorSel='${sp.id}';render()"`;
     // v114: some labels sit in open floor space (lx/ly) so they don't cover the machine
     if(sp.lx!=null) return `<div class="fp-spot ${st.alarm?'fp-alarm':''}" style="left:${sp.x}%;top:${sp.y}%;--c:${st.color};${st.dim?'opacity:.75;':''}" ${open}><span class="fp-dot"></span></div>
@@ -1178,7 +1178,7 @@ function renderFloorPlan(){
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:var(--muted);gap:8px;flex-wrap:wrap;">
-      <span><span class="fp-key" style="--c:var(--run)"></span>Running <span class="fp-key" style="--c:var(--wait)"></span>Waiting <span class="fp-key" style="--c:var(--change)"></span>Changeover <span class="fp-key" style="--c:var(--planned)"></span>Planned <span class="fp-key" style="--c:var(--amber)"></span>Side machine on</span>
+      <span style="line-height:1.9;"><span class="fp-key" style="--c:var(--run)"></span>Running <span class="fp-key" style="--c:var(--wait)"></span>Waiting <span class="fp-key" style="--c:var(--change)"></span>Changeover <span class="fp-key" style="--c:var(--brk)"></span>Break <span class="fp-key" style="--c:var(--planned)"></span>Planned <span class="fp-key" style="--c:var(--amber)"></span>Side machine on <span class="fp-key" style="--c:var(--nowork)"></span>Idle</span>
       <span class="cb-link" onclick="floorBig=!floorBig;render()">${floorBig?'⤡ Fit to screen':'⤢ Enlarge'}</span>
     </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:4px;">Tap a machine for details.</div>`;
