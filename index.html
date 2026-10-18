@@ -202,7 +202,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v113 - 2026-10-18 (Dashboard Floor view: floor plan with live markers for Variovac 1-3, Manual Pack, MAREL, Trim table, Band saw, Cutlet, Fajita, Slicer; tap for details; Floor/Cards switch; needs floorplan.jpg uploaded next to index.html)';
+const APP_VERSION = 'v114 - 2026-10-18 (Floor view: Manual Pack, MAREL, Cutlet and Fajita labels moved into open floor space so they no longer cover the machines)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1096,12 +1096,12 @@ const FLOOR_SPOTS = [
   {id:'Variovac 1', short:'V1', type:'line',  x:80.7, y:40,  tag:'b'},
   {id:'Variovac 2', short:'V2', type:'line',  x:70.3, y:40,  tag:'l'},
   {id:'Variovac 3', short:'V3', type:'line',  x:30.6, y:31,  tag:'t'},
-  {id:'Manual Pack', short:'Manual Pack', type:'line', x:75.5, y:16, tag:'b'},
-  {id:'MAREL',      short:'MAREL', type:'dept', dept:'MAREL', x:49.5, y:57, tag:'l'},
+  {id:'Manual Pack', short:'Manual Pack', type:'line', x:75.5, y:16, tag:'b', lx:74.8, ly:8.5},
+  {id:'MAREL',      short:'MAREL', type:'dept', dept:'MAREL', x:49.5, y:57, tag:'l', lx:49.5, ly:71},
   {id:'Trim',       short:'Trim', type:'dept', dept:'Trimmers', x:18.9, y:57, tag:'b'},
   {id:'Band Saw',   short:'Band saw', type:'dept', dept:'Band Saw', x:35.2, y:82, tag:'b'},
-  {id:'Cutlet',     short:'Cutlet', type:'side', x:75.8, y:57.5, tag:'l'},
-  {id:'Fajita',     short:'Fajita', type:'side', x:76.2, y:68, tag:'l'},
+  {id:'Cutlet',     short:'Cutlet', type:'side', x:75.8, y:57.5, tag:'l', lx:89, ly:56},
+  {id:'Fajita',     short:'Fajita', type:'side', x:76.2, y:68, tag:'l', lx:85, ly:79},
   {id:'Slicer',     short:'Slicer', type:'side', x:54,   y:83, tag:'r'}
 ];
 let floorSel = null, floorBig = false, floorImgFailed = false;
@@ -1161,9 +1161,14 @@ function renderFloorPlan(){
   const spots = FLOOR_SPOTS.map(sp=>{
     const st = spotState(sp);
     const tagPos = {r:'left:calc(100% + 4px);top:50%;transform:translateY(-50%);', l:'right:calc(100% + 4px);top:50%;transform:translateY(-50%);', b:'top:calc(100% + 3px);left:50%;transform:translateX(-50%);', t:'bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);'}[sp.tag||'b'];
-    return `<div class="fp-spot ${st.alarm?'fp-alarm':''}" style="left:${sp.x}%;top:${sp.y}%;--c:${st.color};${st.dim?'opacity:.75;':''}" onclick="event.stopPropagation();floorSel='${sp.id}';render()">
+    const tagInner = `<b>${sp.short}</b>${st.sub?` <span style="${st.subRed?'color:#ff8a80;':''}">${st.sub}</span>`:''}`;
+    const open = `onclick="event.stopPropagation();floorSel='${sp.id}';render()"`;
+    // v114: some labels sit in open floor space (lx/ly) so they don't cover the machine
+    if(sp.lx!=null) return `<div class="fp-spot ${st.alarm?'fp-alarm':''}" style="left:${sp.x}%;top:${sp.y}%;--c:${st.color};${st.dim?'opacity:.75;':''}" ${open}><span class="fp-dot"></span></div>
+      <span class="fp-tag" style="left:${sp.lx}%;top:${sp.ly}%;transform:translate(-50%,-50%);--c:${st.color};pointer-events:auto;cursor:pointer;z-index:3;${st.dim?'opacity:.85;':''}" ${open}>${tagInner}</span>`;
+    return `<div class="fp-spot ${st.alarm?'fp-alarm':''}" style="left:${sp.x}%;top:${sp.y}%;--c:${st.color};${st.dim?'opacity:.75;':''}" ${open}>
       <span class="fp-dot"></span>
-      <span class="fp-tag" style="${tagPos}"><b>${sp.short}</b>${st.sub?` <span style="${st.subRed?'color:#ff8a80;':''}">${st.sub}</span>`:''}</span>
+      <span class="fp-tag" style="${tagPos}">${tagInner}</span>
     </div>`;
   }).join('');
   return `<div class="fp-wrap" style="overflow-x:${floorBig?'auto':'hidden'};">
