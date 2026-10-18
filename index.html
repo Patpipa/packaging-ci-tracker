@@ -202,7 +202,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v116 - 2026-10-18 (Calculation fixes: noon split uses real running time, runs left open overnight close at a set finish time, stop labour uses the headcount at the time, finish-before-start blocked, History edits keep real run time, MAREL cutting green, report wording, crew board No Work + spare; overnight records repaired)';
+const APP_VERSION = 'v117 - 2026-10-18 (Dashboard: floor plan and the 4 machine cards shown together — Floor/Cards switch removed)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1239,10 +1239,10 @@ function renderDashboard(){
   return `
     ${renderCrewAlertLine()}
     <div class="card">
-      <h3 style="display:flex;justify-content:space-between;align-items:center;">Today · ${fmtDate(todayStr())}
-        <span style="display:flex;gap:4px;">${floorImgFailed?'':`<span class="fp-switch ${dashView()==='floor'?'on':''}" onclick="setDashView('floor')">Floor</span>`}<span class="fp-switch ${dashView()==='cards'?'on':''}" onclick="setDashView('cards')">Cards</span></span></h3>
-      ${dashView()==='floor' ? renderFloorPlan() : `<div class="grid3" style="grid-template-columns:repeat(2,1fr);">${mcards}</div>`}
-      ${dashView()==='floor' ? renderFloorPanel(recs) : ''}
+      <h3>Today · ${fmtDate(todayStr())}</h3>
+      ${floorImgFailed ? '' : renderFloorPlan()}
+      <div class="grid3" style="grid-template-columns:repeat(2,1fr);${floorImgFailed?'':'margin-top:14px;'}">${mcards}</div>
+      ${floorImgFailed ? '' : renderFloorPanel(recs)}
     </div>
     <div class="card">
       <h3>Shift Totals So Far</h3>
