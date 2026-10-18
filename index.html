@@ -185,7 +185,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v106 - 2026-10-18 (Dashboard: crew badge on each machine card + slim alert line when short; full Crew Board now on Live Floor only)';
+const APP_VERSION = 'v108 - 2026-10-18 ("Waiting for Beef Slice" merged into "Waiting for Slicer" — old records renamed automatically)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -206,7 +206,7 @@ const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change',
 const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk','Metal Detector Test'];
 const METAL_DETECTOR_MACHINES = ['Variovac 1','Variovac 2','Variovac 3']; // v100: one-tap Metal Detector button shows on these lines
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Switching Product','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Beef Slice','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Switching Product','MAREL - Operator on Break','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for Fajita','Waiting for Cutlet','Waiting for Slicer','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Waiting for Management Confirmation/Decision','Label Boxes','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
@@ -251,7 +251,9 @@ const REASON_RENAMES = {
   'Waiting for BYPRODUCT':'Waiting for Byproduct',
   // v97: MAREL wording — speed vs. priority made explicit
   'MAREL - Waiting for It to Cut Meat':'MAREL - Meat Being Cut, Not Ready Yet',
-  'MAREL - Cutting Chicken Muscle':'MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3'
+  'MAREL - Cutting Chicken Muscle':'MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3',
+  // v108: beef slice comes off the Slicer — merged so those waits sit in one place
+  'Waiting for Beef Slice':'Waiting for Slicer'
 };
 /* Replaces any string value that EXACTLY equals an old reason label, anywhere inside a record (incl. PLH downtime segments). Notes and other free text are never touched because they never match exactly. Returns the number of replacements. */
 function renameReasonsDeep(obj){
@@ -3557,6 +3559,7 @@ const UPSTREAM_DEPARTMENTS = [
   {name:'Trimmers', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Byproduct','Waiting for Tenderloin Byproduct','Waiting for End Cut']},
   {name:'Band Saw', reasons:['Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)']},
   {name:'Burger Room', reasons:['Waiting for Burger Room Product']},
+  {name:'Side Machines', reasons:['Waiting for Fajita','Waiting for Cutlet','Waiting for Slicer']}, // v107: Fajita/Cutlet/Slicer are run by packaging staff — grouped so the report ties to the side-machine labour section
   {name:'Warehouse', reasons:['Waiting for Warehouse to Scan In Product']},
   {name:'Production Planning', reasons:['Product Not Thawed/Ready','Production Department Behind Schedule','Product Shortage']}
 ];
