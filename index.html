@@ -185,7 +185,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v103 - 2026-10-17 (new: Crew Board on Dashboard + Live Floor — crew on shift, line staffing vs needed, Fajita/Slicer/Cutlet side-machine labour (packaging vs trimmer help), MAREL start/finish times; shown in Daily Report and Upstream Impact)';
+const APP_VERSION = 'v106 - 2026-10-18 (Dashboard: crew badge on each machine card + slim alert line when short; full Crew Board now on Live Floor only)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -694,6 +694,13 @@ async function setMarel(which, val){
   await saveDayLogNow();
   toast(which==='marelStart' ? `MAREL started cutting ${fmtTime12(d.marelStart)}` : `MAREL finished cutting ${fmtTime12(d.marelEnd)}`);
 }
+/* v104: MAREL usually starts before the 8:00 AM packaging shift, so the start time is typed in manually (the finish keeps its one-tap "now" button). */
+async function saveMarelStart(){
+  const el = document.getElementById('marelStartIn');
+  const v = el && el.value;
+  if(!v){ toast('Enter the time MAREL started cutting'); return; }
+  await setMarel('marelStart', v);
+}
 async function clearMarel(which){ const d = ensureDayLog(todayStr()); d[which] = ''; await saveDayLogNow(); }
 function openSideSetup(machine, changeId){
   const cur = changeId ? (dayLogFor(todayStr()).side||[]).find(s=>s.id===changeId) : null;
@@ -720,7 +727,21 @@ async function stopSide(id){
 }
 async function editSideTime(id, field, val){ const d = ensureDayLog(todayStr()); const cur = d.side.find(x=>x.id===id); if(!cur || !val) return; cur[field] = val; await saveDayLogNow(); }
 async function deleteSide(id){ if(!confirm('Delete this side-machine entry?')) return; const d = ensureDayLog(todayStr()); d.side = d.side.filter(x=>x.id!==id); await saveDayLogNow(); }
-const CREW_FOOTNOTE = 'How this is calculated: all figures come from live entries in the CI Tracker as they are recorded on the floor — nothing is estimated or filled in. Line staffing = the employee count entered for each running line. Side machines (Fajita, Slicer, Cutlet) = staff entered when each machine is started; packaging staff and trimmer helpers are recorded separately and only packaging staff count as packaging labour. Needed = 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running; lines not running are not counted. Short = needed minus packaging staff actually on the lines. A line with no headcount entered shows "not entered" and is not counted either way.';
+/* v105: footnote shown one point per line so it's easy to read. */
+const CREW_FOOTNOTE_LINES = [
+  'All figures come from live entries in the CI Tracker as they are recorded on the floor. Nothing is estimated or filled in.',
+  'Line staffing = the employee count entered for each running line.',
+  'Side machines (Fajita, Slicer, Cutlet) = staff entered when each machine is started.',
+  'Packaging staff and trimmer helpers are recorded separately. Only packaging staff count as packaging labour.',
+  'Needed = 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running.',
+  'Lines that are not running are not counted.',
+  'Short = needed minus packaging staff actually on the lines.',
+  'A line with no headcount entered shows "not entered" and is not counted either way.'
+];
+function crewFootnoteHTML(forPdf, noTitle){
+  const c = forPdf ? '#888' : 'var(--muted)';
+  return `<div style="font-size:${forPdf?'10':'11.5'}px;color:${c};line-height:1.5;">${noTitle?'':'<div style="font-weight:700;margin-bottom:2px;">How this is calculated</div>'}<ul style="margin:0;padding-left:16px;">${CREW_FOOTNOTE_LINES.map(l=>`<li>${escapeHtml(l)}</li>`).join('')}</ul></div>`;
+}
 function personDot(cls){ return `<span class="cb-p ${cls}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>`; }
 function renderCrewBoard(){
   const c = crewSnapshot(), d = c.d || {};
@@ -761,7 +782,7 @@ function renderCrewBoard(){
   const marelRow = `<div class="cb-row" style="flex-wrap:wrap;gap:8px;"><span class="cb-nm">MAREL cutting</span>
       <span class="cb-mut">${d.marelStart?`Start ${fmtTime12(d.marelStart)}`:'Start —'} · ${d.marelEnd?`<span style="${late?'color:var(--wait);font-weight:700;':''}">Finish ${fmtTime12(d.marelEnd)}</span>`:'Finish —'}</span>
       ${marelEdit ? `<div style="display:flex;gap:6px;width:100%;"><input type="time" value="${d.marelStart||''}" onchange="setMarel('marelStart', this.value)" style="padding:8px;"><input type="time" value="${d.marelEnd||''}" onchange="setMarel('marelEnd', this.value)" style="padding:8px;"><button class="cb-btn" onclick="marelEdit=false;render()">Done</button></div>`
-      : `<div style="display:flex;gap:6px;width:100%;">${!d.marelStart?`<button class="cb-btn" onclick="setMarel('marelStart')">MAREL started now</button>`:''}${d.marelStart && !d.marelEnd?`<button class="cb-btn" onclick="setMarel('marelEnd')">MAREL finished now</button>`:''}<button class="cb-btn" style="flex:0 0 auto;" onclick="marelEdit=true;render()">Edit times</button></div>`}
+      : `<div style="display:flex;gap:6px;width:100%;">${!d.marelStart?`<span style="display:flex;gap:6px;flex:1;align-items:center;"><span class="cb-mut" style="white-space:nowrap;">Start</span><input type="time" id="marelStartIn" style="padding:8px;flex:1;min-width:0;"><button class="cb-btn" style="flex:0 0 auto;" onclick="saveMarelStart()">Save</button></span>`:''}${d.marelStart && !d.marelEnd?`<button class="cb-btn" onclick="setMarel('marelEnd')">MAREL finished now</button>`:''}${d.marelStart?`<button class="cb-btn" style="flex:0 0 auto;" onclick="marelEdit=true;render()">Edit times</button>`:''}</div>`}
       ${late?`<div style="font-size:11.5px;color:var(--wait);width:100%;">Finished after packaging shift end (4:30 PM)</div>`:''}</div>`;
   const log = (d.side||[]);
   const logHtml = log.length ? `<div style="margin-top:6px;"><span class="cb-link" onclick="sideLogOpen=!sideLogOpen;render()">${sideLogOpen?'▲ Hide':'▼ Show'} today's side-machine log (${log.length})</span>
@@ -774,7 +795,7 @@ function renderCrewBoard(){
     <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}
     <div class="cb-lbl">TODAY</div>${crewRow}${marelRow}
     <div class="cb-legend"><span>${personDot('ok')} on line</span><span>${personDot('miss')} empty spot</span><span>${personDot('side')} packaging on side machine</span><span>${personDot('tr')} trimmer helping</span></div>
-    <details style="margin-top:8px;"><summary class="cb-link">How this is calculated</summary><div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px;">${CREW_FOOTNOTE}</div></details>
+    <details style="margin-top:8px;"><summary class="cb-link">How this is calculated</summary><div style="margin-top:6px;">${crewFootnoteHTML(false, true)}</div></details>
   </div>`;
 }
 function renderSideSetup(sm){
@@ -836,7 +857,7 @@ function renderSideLabourCard(start, end){
       <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Crew</th><th style="${th}">MAREL</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trim help</th></tr>
       ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;white-space:nowrap;">${fmtDate(d.date).replace(/, \d{4}$/,'')}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}white-space:nowrap;${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:var(--wait);font-weight:700;':''}">${d.marelStart?fmtTime12(d.marelStart).replace(' ',''):'—'}–${d.marelEnd?fmtTime12(d.marelEnd).replace(' ',''):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td></tr>`).join('')}
     </table></div>
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Side-machine times are labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM). ${CREW_FOOTNOTE}</div></div>`;
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Side-machine times are labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:8px;">${crewFootnoteHTML(false)}</div></div>`;
 }
 function renderSideLabourPdfHTML(start, end){
   const x = computeSideLabour(start, end);
@@ -850,7 +871,7 @@ function renderSideLabourPdfHTML(start, end){
       <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Packaging crew</th><th style="${th}">MAREL start</th><th style="${th}">MAREL finish</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trimmer help</th></tr>
       ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;">${fmtDate(d.date)}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}">${d.marelStart?fmtTime12(d.marelStart):'—'}</td><td style="${td}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:#c0392b;font-weight:700;background:#fdecea;':''}">${d.marelEnd?fmtTime12(d.marelEnd):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td></tr>`).join('')}
     </table>
-    <div style="font-size:10px;color:#888;margin-top:6px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM). ${CREW_FOOTNOTE}</div>
+    <div style="font-size:10px;color:#888;margin-top:6px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:6px;">${crewFootnoteHTML(true)}</div>
   </div>`;
 }
 /* One-line day summary for the Daily Report: crew, MAREL times, side-machine labour. */
@@ -863,6 +884,29 @@ function dayLogLine(date){
   if(x.packTotal || x.trimTotal) bits.push(`Side machines: ${SIDE_MACHINES.filter(m=>x.perMachine[m.name].packMin).map(m=>`${m.name} ${fmtDur(x.perMachine[m.name].packMin)}`).join(', ')||'0m'} packaging labour${x.trimTotal?` (+ ${fmtDur(x.trimTotal)} trimmer help)`:''}`);
   if(x.shortTotal) bits.push(`Lines under 2 people during that time: ${fmtDur(x.shortTotal)}`);
   return bits.join(' · ');
+}
+/* v106: Dashboard shows crew per machine card + a slim alert line (only when something needs attention); the full Crew Board lives on the Live Floor. Same live entries, same rules. */
+function crewBadge(m){
+  const l = lineStaffNow(m);
+  if(!l.active) return '';
+  const need = LINE_NEED[m]||0;
+  let color, dim, text;
+  if(l.staff==null){ color='var(--change)'; dim='var(--change-dim)'; text='crew not entered'; }
+  else if(l.staff < need){ color='var(--wait)'; dim='var(--wait-dim)'; text=`${l.staff} crew · need ${need}`; }
+  else { color='var(--run)'; dim='var(--run-dim)'; text=`${l.staff} crew`; }
+  return `<div style="display:flex;justify-content:flex-end;margin-top:8px;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:${dim};color:${color};"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>${text}</span></div>`;
+}
+function renderCrewAlertLine(){
+  const c = crewSnapshot();
+  const sidePack = c.side.filter(s=>s.pack>0);
+  const sideNames = [...new Set(sidePack.map(s=>s.machine))];
+  const parts = [];
+  if(c.short>0) parts.push(`Short ${c.short} on lines`);
+  if(c.notEntered.length) parts.push(`Crew not entered: ${c.notEntered.join(', ')}`);
+  if(!parts.length) return '';
+  if(c.sidePack>0) parts.push(`${c.sidePack} packaging on side machines (${sideNames.join(', ')})`);
+  const red = c.short>0;
+  return `<div onclick="Router.go('live')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:11px 14px;border-radius:12px;border:1.5px solid ${red?'var(--wait)':'var(--change)'};background:${red?'var(--wait-dim)':'var(--change-dim)'};color:${red?'var(--wait)':'var(--change)'};font-size:13px;font-weight:600;line-height:1.4;"><span>⚠ ${parts.join(' · ')}</span><span style="white-space:nowrap;font-size:12px;opacity:.85;">Live Floor ›</span></div>`;
 }
 /* Note added automatically to an Employee Shortage / Reassigned stop when packaging staff are on side machines at that moment. */
 function sideShortageNote(){
@@ -955,6 +999,7 @@ function renderDashboard(){
       ${rowsHtml ? `<div style="margin-top:8px;">${rowsHtml}</div>` : '<span style="color:var(--muted2);font-size:11px;">No records</span>'}
       ${liveBadge}
       ${liveDetail}
+      ${crewBadge(m)}
     </div>`;
   }).join('');
 
@@ -964,7 +1009,7 @@ function renderDashboard(){
   }).join('') : '<div class="empty">No bottlenecks logged yet today.</div>';
 
   return `
-    ${renderCrewBoard()}
+    ${renderCrewAlertLine()}
     <div class="card">
       <h3>Today · ${fmtDate(todayStr())}</h3>
       <div class="grid3" style="grid-template-columns:repeat(2,1fr);">${mcards}</div>
