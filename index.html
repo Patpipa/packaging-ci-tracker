@@ -100,12 +100,6 @@ nav.tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border
 nav.tabbar .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;color:var(--muted2);font-size:10px;letter-spacing:0.04em;text-transform:uppercase;font-family:'Oswald';}
 nav.tabbar .tab.active{color:var(--amber);}
 nav.tabbar .tab .ic{font-size:18px;}
-/* v103: Live Floor List | 3D switch. The 3D floor lives in floor.html; delete that file and the switch disappears. */
-.viewswitch{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:12px;}
-.viewswitch button{flex:1;border:0;background:transparent;color:var(--muted);font-family:'Oswald';font-size:14px;letter-spacing:0.05em;text-transform:uppercase;padding:9px 0;border-radius:8px;cursor:pointer;}
-.viewswitch button.on{background:var(--amber);color:#1b1408;font-weight:600;}
-.floor3d-slot{border-radius:12px;background:var(--panel);border:1px solid var(--line);}
-#floor3dFrame{position:fixed;border:0;border-radius:12px;z-index:25;display:none;background:var(--panel);}
 .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--run);color:#08150C;padding:10px 20px;border-radius:30px;font-weight:600;font-size:14px;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,0.4);opacity:0;transition:opacity .25s, transform .25s;pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 .hist-item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
@@ -126,6 +120,26 @@ nav.tabbar .tab .ic{font-size:18px;}
 .rank-bar-fill{height:100%;background:var(--amber);}
 .rank-min{font-family:'IBM Plex Mono';font-size:12px;color:var(--muted);width:52px;text-align:right;}
 .hidden{display:none !important;}
+.cb-hd{border:1.5px solid;border-radius:12px;padding:12px 14px;margin-bottom:10px;}
+.cb-big{font-family:'Oswald',sans-serif;font-size:22px;letter-spacing:0.02em;text-transform:uppercase;line-height:1.1;}
+.cb-sub{font-size:12.5px;color:var(--muted);margin-top:4px;}
+.cb-lbl{font-size:10.5px;color:var(--muted);letter-spacing:0.1em;margin:10px 2px 6px;font-weight:600;}
+.cb-row{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px;}
+.cb-nm{font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:0.03em;}
+.cb-mut{font-size:12px;color:var(--muted);}
+.cb-ppl{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+.cb-p{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;}
+.cb-p.ok{background:var(--run-dim);color:var(--run);}
+.cb-p.miss{border:1.5px dashed var(--wait);color:var(--wait);}
+.cb-p.side{background:var(--amber-dim);color:var(--amber);}
+.cb-p.tr{background:rgba(199,125,214,0.15);color:var(--up);}
+.cb-tag{font-family:'Inter',sans-serif;font-size:10.5px;padding:2px 8px;border-radius:20px;background:var(--amber-dim);color:var(--amber);margin-left:4px;letter-spacing:0;}
+.cb-btn{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 8px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.03em;text-transform:uppercase;cursor:pointer;}
+.cb-btn:active{transform:scale(0.97);}
+.cb-link{font-size:12px;color:var(--brk);cursor:pointer;text-decoration:underline;}
+.cb-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:10px;}
+.cb-legend .cb-p{width:16px;height:16px;}
+.cb-legend .cb-p svg{width:9px;height:9px;}
 .warnbanner{background:var(--wait-dim);border:1px solid var(--wait);color:var(--wait);padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:12px;font-weight:600;}
 .live-card{background:var(--panel);border:2px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
 .live-card.running{border-color:var(--run);}
@@ -171,7 +185,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v103 - 2026-10-15 (Live Floor: List | 3D switch shows the 3D packaging floor from floor.html; the switch hides itself if floor.html is removed)';
+const APP_VERSION = 'v103 - 2026-10-17 (new: Crew Board on Dashboard + Live Floor — crew on shift, line staffing vs needed, Fajita/Slicer/Cutlet side-machine labour (packaging vs trimmer help), MAREL start/finish times; shown in Daily Report and Upstream Impact)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -302,7 +316,7 @@ async function signOutApp(){
   location.reload();
 }
 const Store = {
-  ready:false, records:[], dailyReports:[], liveRuns:{}, productLibrary:[], settings:{downtimeAlarmMinutes:30}, persisted:true, db:null, _initialLoadDone:false,
+  ready:false, records:[], dailyReports:[], liveRuns:{}, productLibrary:[], dayLog:{}, settings:{downtimeAlarmMinutes:30}, persisted:true, db:null, _initialLoadDone:false,
   async init(){
     try{
       this.db = firebase.firestore();
@@ -313,6 +327,7 @@ const Store = {
       const liveRef = this.db.collection('tracker').doc('liveRuns');
       const prodRef = this.db.collection('tracker').doc('productLibrary');
       const settRef = this.db.collection('tracker').doc('settings');
+      const dayRef = this.db.collection('tracker').doc('dayLog');
 
       const recSnap = await recRef.get();
       this.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
@@ -334,6 +349,7 @@ const Store = {
       const prodSnap = await prodRef.get();
       this.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
 
+      try{ const daySnap = await dayRef.get(); this.dayLog = (daySnap.exists && daySnap.data().data) ? JSON.parse(daySnap.data().data) : {}; }catch(e){ this.dayLog = {}; }
       const settSnap = await settRef.get();
       this.settings = (settSnap.exists && settSnap.data().data) ? {...this.settings, ...JSON.parse(settSnap.data().data)} : this.settings;
 
@@ -378,6 +394,13 @@ const Store = {
           if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='products')) render();
         }
       }, err=>{ console.error('productLibrary listener error', err); });
+      dayRef.onSnapshot(snap=>{
+        if(!this._initialLoadDone) return;
+        if(snap.exists && snap.data().data){
+          this.dayLog = JSON.parse(snap.data().data);
+          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='dashboard')) render();
+        }
+      }, err=>{ console.error('dayLog listener error', err); });
       settRef.onSnapshot(snap=>{
         if(!this._initialLoadDone) return;
         if(snap.exists && snap.data().data){
@@ -419,6 +442,12 @@ const Store = {
       await this.db.collection('tracker').doc('productLibrary').set({data: JSON.stringify(this.productLibrary), updatedAt: Date.now()});
       return true;
     }catch(e){ console.error('save productLibrary failed', e); toast('Save failed — check connection'); return false; }
+  },
+  async saveDayLog(){
+    try{
+      await this.db.collection('tracker').doc('dayLog').set({data: JSON.stringify(this.dayLog||{}), updatedAt: Date.now()});
+      return true;
+    }catch(e){ console.error('save dayLog failed', e); toast('Save failed — check connection'); return false; }
   },
   async saveSettings(){
     try{
@@ -620,6 +649,229 @@ function render(){
 }
 function updateClock(){ const d=new Date(); document.getElementById('shiftClock').textContent = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' · ' + fmtDate(todayStr()).toUpperCase(); }
 
+/* ============ CREW BOARD + SIDE MACHINES + MAREL TIMES (v103) ============
+Purpose: make packaging's real staffing visible. Everything shown is taken ONLY from what is entered live — nothing is estimated or filled in.
+- Crew on shift: entered once at the start of the shift.
+- Line staffing: the employee count entered on each Live Floor run (Start Run / Change Staff). A running line with no count shows "not entered" and is not counted either way.
+- Side machines (Fajita, Slicer, Cutlet): logged on/off with who's on them — packaging staff and trimmer helpers are recorded separately; only packaging staff count as packaging labour. Logged separately from line records, so efficiency/PLH/downtime are untouched.
+- Needed: 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running.
+- MAREL start / finish cutting time for the day.
+Stored in Firestore doc tracker/dayLog as { 'YYYY-MM-DD': {crew, crewAt, marelStart, marelEnd, side:[{id, machine, start, end, pack, trim}]} }. */
+const SIDE_MACHINES = [ {name:'Fajita', max:2}, {name:'Slicer', max:1}, {name:'Cutlet', max:1} ];
+const LINE_NEED = {'Variovac 1':2, 'Variovac 2':2, 'Variovac 3':2, 'Manual Pack':1};
+const SHIFT_END_MIN = 16*60+30;
+let sideSetup = null;      // {machine, pack, trim, changeId}
+let crewEdit = false, marelEdit = false, sideLogOpen = false;
+function dayLogFor(date){ return (Store.dayLog||{})[date] || null; }
+function ensureDayLog(date){ Store.dayLog = Store.dayLog || {}; return Store.dayLog[date] = Store.dayLog[date] || {crew:null, crewAt:'', marelStart:'', marelEnd:'', side:[]}; }
+function openSideRuns(date){ const d = dayLogFor(date); return d ? (d.side||[]).filter(s=>!s.end) : []; }
+function lineStaffNow(m){
+  const live = Store.liveRuns[m];
+  if(!live || !live.segments || !live.segments.length) return {active:false};
+  const lastSeg = live.segments[live.segments.length-1];
+  const n = (live.pendingEmployees!=null && live.status!=='RUNNING') ? live.pendingEmployees : (lastSeg ? lastSeg.employees : null);
+  return {active:true, staff: (n==null || isNaN(n)) ? null : Number(n), status: live.status};
+}
+function crewSnapshot(){
+  const date = todayStr(), d = dayLogFor(date);
+  const lines = MACHINES.map(m=>{ const s = lineStaffNow(m); return {m, ...s, need: s.active ? (LINE_NEED[m]||0) : 0}; });
+  const side = openSideRuns(date);
+  const sidePack = side.reduce((a,s)=>a+(s.pack||0),0), sideTrim = side.reduce((a,s)=>a+(s.trim||0),0);
+  const counted = lines.filter(l=>l.active && l.staff!=null);
+  const onLines = counted.reduce((a,l)=>a+l.staff,0);
+  const needed = counted.reduce((a,l)=>a+l.need,0);
+  const short = counted.reduce((a,l)=>a+Math.max(0, l.need-l.staff),0);
+  const notEntered = lines.filter(l=>l.active && l.staff==null).map(l=>l.m);
+  const crew = d && d.crew!=null ? d.crew : null;
+  const spare = crew!=null ? crew - onLines - sidePack : null;
+  return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, notEntered, crew, spare};
+}
+async function saveDayLogNow(){ const ok = await Store.saveDayLog(); if(ok) render(); return ok; }
+async function setCrew(n){ const d = ensureDayLog(todayStr()); d.crew = n; d.crewAt = nowHHMM(); crewEdit = false; await saveDayLogNow(); toast(`Packaging crew today: ${n}`); }
+async function setMarel(which, val){
+  const d = ensureDayLog(todayStr());
+  d[which] = val || nowHHMM();
+  await saveDayLogNow();
+  toast(which==='marelStart' ? `MAREL started cutting ${fmtTime12(d.marelStart)}` : `MAREL finished cutting ${fmtTime12(d.marelEnd)}`);
+}
+async function clearMarel(which){ const d = ensureDayLog(todayStr()); d[which] = ''; await saveDayLogNow(); }
+function openSideSetup(machine, changeId){
+  const cur = changeId ? (dayLogFor(todayStr()).side||[]).find(s=>s.id===changeId) : null;
+  sideSetup = {machine, pack: cur ? cur.pack : 1, trim: cur ? cur.trim : 0, changeId: changeId||null};
+  render();
+}
+async function confirmSide(){
+  const s = sideSetup, max = (SIDE_MACHINES.find(x=>x.name===s.machine)||{max:1}).max;
+  if(s.pack + s.trim < 1){ toast('Pick at least 1 person'); return; }
+  if(s.pack + s.trim > max){ toast(`${s.machine} takes up to ${max} ${max===1?'person':'people'}`); return; }
+  const d = ensureDayLog(todayStr()), now = nowHHMM();
+  if(s.changeId){ const cur = d.side.find(x=>x.id===s.changeId); if(cur && !cur.end) cur.end = now; } // crew change = close the old entry, open a new one, so hours split exactly at the change
+  d.side.push({id: uid(), machine: s.machine, start: now, end: null, pack: s.pack, trim: s.trim});
+  sideSetup = null;
+  await saveDayLogNow();
+  toast(`${s.machine} started — ${s.pack} packaging${s.trim?` + ${s.trim} trimmer`:''}`);
+}
+async function stopSide(id){
+  const d = ensureDayLog(todayStr()), cur = d.side.find(x=>x.id===id);
+  if(!cur) return;
+  cur.end = nowHHMM();
+  await saveDayLogNow();
+  toast(`${cur.machine} stopped`);
+}
+async function editSideTime(id, field, val){ const d = ensureDayLog(todayStr()); const cur = d.side.find(x=>x.id===id); if(!cur || !val) return; cur[field] = val; await saveDayLogNow(); }
+async function deleteSide(id){ if(!confirm('Delete this side-machine entry?')) return; const d = ensureDayLog(todayStr()); d.side = d.side.filter(x=>x.id!==id); await saveDayLogNow(); }
+const CREW_FOOTNOTE = 'How this is calculated: all figures come from live entries in the CI Tracker as they are recorded on the floor — nothing is estimated or filled in. Line staffing = the employee count entered for each running line. Side machines (Fajita, Slicer, Cutlet) = staff entered when each machine is started; packaging staff and trimmer helpers are recorded separately and only packaging staff count as packaging labour. Needed = 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running; lines not running are not counted. Short = needed minus packaging staff actually on the lines. A line with no headcount entered shows "not entered" and is not counted either way.';
+function personDot(cls){ return `<span class="cb-p ${cls}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>`; }
+function renderCrewBoard(){
+  const c = crewSnapshot(), d = c.d || {};
+  let state, title;
+  if(c.short>0){ state='red'; title=`Short ${c.short} on lines`; }
+  else if(c.needed===0 && !c.side.length){ state='idle'; title='No lines running'; }
+  else if(c.spare!=null && c.spare<=0){ state='amber'; title='All lines covered — no spare'; }
+  else { state='green'; title='All lines covered'; }
+  const colors = {red:['var(--wait)','var(--wait-dim)'], amber:['var(--change)','var(--change-dim)'], green:['var(--run)','var(--run-dim)'], idle:['var(--nowork)','var(--nowork-dim)']}[state];
+  const subParts = [];
+  subParts.push(c.crew!=null ? `Crew ${c.crew}` : 'Crew not entered');
+  subParts.push(`${c.sidePack} on side machines`);
+  subParts.push(`${c.onLines} on lines`);
+  subParts.push(`need ${c.needed}`);
+  const lineRows = c.lines.map(l=>{
+    if(!l.active) return `<div class="cb-row" style="opacity:.5"><span class="cb-nm">${l.m}</span><span class="cb-mut">not running</span></div>`;
+    if(l.staff==null) return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-mut" style="color:var(--change)">headcount not entered</span></div>`;
+    const dots = []; for(let i=0;i<Math.min(l.staff,8);i++) dots.push(personDot('ok')); for(let i=l.staff;i<l.need;i++) dots.push(personDot('miss'));
+    return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-ppl">${dots.join('')}</span></div>`;
+  }).join('');
+  const sideRows = SIDE_MACHINES.map(sm=>{
+    const run = c.side.find(s=>s.machine===sm.name);
+    const todayMin = sideMinutesToday(sm.name);
+    const tag = todayMin>0 ? `<span class="cb-tag">${fmtShort(todayMin)} today</span>` : '';
+    if(sideSetup && sideSetup.machine===sm.name) return renderSideSetup(sm);
+    if(run){
+      const dots = []; for(let i=0;i<run.pack;i++) dots.push(personDot('side')); for(let i=0;i<run.trim;i++) dots.push(personDot('tr'));
+      return `<div class="cb-row" style="border-color:var(--amber);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
+        <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">Change crew</button><button class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="stopSide('${run.id}')">■ Stop</button></div></div>`;
+    }
+    return `<div class="cb-row"><span class="cb-nm">${sm.name} ${tag}</span><button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></div>`;
+  }).join('');
+  const crewRow = (c.crew==null || crewEdit) ? `
+    <div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--amber);"><span class="cb-nm">Packaging crew today</span>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${[3,4,5,6,7,8,9,10].map(n=>`<button class="cb-btn" style="flex:1;min-width:34px;${c.crew===n?'border-color:var(--amber);color:var(--amber);':''}" onclick="setCrew(${n})">${n}</button>`).join('')}</div></div>`
+    : `<div class="cb-row" style="gap:10px;"><span class="cb-nm">Packaging crew today</span><span style="display:flex;align-items:center;gap:8px;"><b class="mono" style="font-size:18px;">${c.crew}</b> <span class="cb-mut">since ${fmtTime12(d.crewAt)}</span> <button class="cb-btn" style="flex:0 0 auto;" onclick="crewEdit=true;render()">Edit</button></span></div>`;
+  const late = d.marelEnd && toMin(d.marelEnd) > SHIFT_END_MIN;
+  const marelRow = `<div class="cb-row" style="flex-wrap:wrap;gap:8px;"><span class="cb-nm">MAREL cutting</span>
+      <span class="cb-mut">${d.marelStart?`Start ${fmtTime12(d.marelStart)}`:'Start —'} · ${d.marelEnd?`<span style="${late?'color:var(--wait);font-weight:700;':''}">Finish ${fmtTime12(d.marelEnd)}</span>`:'Finish —'}</span>
+      ${marelEdit ? `<div style="display:flex;gap:6px;width:100%;"><input type="time" value="${d.marelStart||''}" onchange="setMarel('marelStart', this.value)" style="padding:8px;"><input type="time" value="${d.marelEnd||''}" onchange="setMarel('marelEnd', this.value)" style="padding:8px;"><button class="cb-btn" onclick="marelEdit=false;render()">Done</button></div>`
+      : `<div style="display:flex;gap:6px;width:100%;">${!d.marelStart?`<button class="cb-btn" onclick="setMarel('marelStart')">MAREL started now</button>`:''}${d.marelStart && !d.marelEnd?`<button class="cb-btn" onclick="setMarel('marelEnd')">MAREL finished now</button>`:''}<button class="cb-btn" style="flex:0 0 auto;" onclick="marelEdit=true;render()">Edit times</button></div>`}
+      ${late?`<div style="font-size:11.5px;color:var(--wait);width:100%;">Finished after packaging shift end (4:30 PM)</div>`:''}</div>`;
+  const log = (d.side||[]);
+  const logHtml = log.length ? `<div style="margin-top:6px;"><span class="cb-link" onclick="sideLogOpen=!sideLogOpen;render()">${sideLogOpen?'▲ Hide':'▼ Show'} today's side-machine log (${log.length})</span>
+    ${sideLogOpen ? log.map(s=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span>${s.machine} · ${s.pack} pkg${s.trim?` + ${s.trim} trim`:''}</span>
+      <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
+  return `<div class="card cb" style="border-color:${colors[0]};">
+    <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div></div></div>
+    ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
+    <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
+    <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}
+    <div class="cb-lbl">TODAY</div>${crewRow}${marelRow}
+    <div class="cb-legend"><span>${personDot('ok')} on line</span><span>${personDot('miss')} empty spot</span><span>${personDot('side')} packaging on side machine</span><span>${personDot('tr')} trimmer helping</span></div>
+    <details style="margin-top:8px;"><summary class="cb-link">How this is calculated</summary><div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px;">${CREW_FOOTNOTE}</div></details>
+  </div>`;
+}
+function renderSideSetup(sm){
+  const s = sideSetup;
+  const opts = (key, label)=>`<div style="display:flex;align-items:center;gap:8px;width:100%;"><span class="cb-mut" style="width:78px;">${label}</span>${Array.from({length:sm.max+1},(_,n)=>`<button class="cb-btn" style="flex:1;${s[key]===n?'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);':''}" onclick="sideSetup.${key}=${n};render()">${n}</button>`).join('')}</div>`;
+  return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--amber);"><span class="cb-nm">${s.changeId?'Change crew — ':''}${sm.name} <span class="cb-mut">(up to ${sm.max})</span></span>
+    ${opts('pack','Packaging')}${opts('trim','Trimmers')}
+    <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="confirmSide()">${s.changeId?'Save change':'▶ Start'}</button></div></div>`;
+}
+function sideIntervals(date){
+  const d = dayLogFor(date); if(!d) return [];
+  return (d.side||[]).map(s=>{ let a=toMin(s.start), b=toMin(s.end || (date===todayStr()? nowHHMM() : s.start)); if(b<a) b+=1440; return {...s, a, b, min: Math.max(0,b-a)}; });
+}
+function sideMinutesToday(machine){ return sideIntervals(todayStr()).filter(s=>s.machine===machine && s.pack>0).reduce((t,s)=>t+s.min,0); }
+/* Packaging labour on side machines for a date range. packMin/trimMin are labour minutes (time × people). shortMin = minutes, while packaging staff were on side machines, that a Variovac's logged run had fewer than 2 people — taken from the staffing segments saved with each finished Live Floor run. */
+function computeSideLabour(start, end){
+  const days = Object.keys(Store.dayLog||{}).filter(d=>d>=start && d<=end).sort();
+  const perMachine = {}; SIDE_MACHINES.forEach(m=>perMachine[m.name]={packMin:0, trimMin:0, runMin:0});
+  const perDay = [];
+  let shortTotal = 0;
+  days.forEach(d=>{
+    const log = dayLogFor(d), iv = sideIntervals(d);
+    const day = {date:d, crew: log.crew, marelStart: log.marelStart, marelEnd: log.marelEnd, packMin:0, trimMin:0, byMachine:{}, shortMin:0};
+    iv.forEach(s=>{
+      const pm = perMachine[s.machine] || (perMachine[s.machine]={packMin:0,trimMin:0,runMin:0});
+      pm.packMin += s.min*(s.pack||0); pm.trimMin += s.min*(s.trim||0); pm.runMin += s.min;
+      day.packMin += s.min*(s.pack||0); day.trimMin += s.min*(s.trim||0);
+      day.byMachine[s.machine] = (day.byMachine[s.machine]||0) + s.min*(s.pack||0);
+    });
+    const packIv = mergeIntervals(iv.filter(s=>s.pack>0).map(s=>({start:s.a, end:s.b})));
+    if(packIv.length){
+      Store.records.filter(r=>r.date===d && /^Variovac/.test(r.machine) && r.plh && r.plh.segments).forEach(r=>{
+        r.plh.segments.forEach(seg=>{
+          if(seg.employees==null || seg.employees>=2 || !seg.start || !seg.end) return;
+          let a=toMin(seg.start), b=toMin(seg.end); if(b<a) b+=1440;
+          packIv.forEach(p=>{ day.shortMin += Math.max(0, Math.min(b,p.end)-Math.max(a,p.start)); });
+        });
+      });
+    }
+    shortTotal += day.shortMin;
+    perDay.push(day);
+  });
+  const packTotal = Object.values(perMachine).reduce((a,m)=>a+m.packMin,0);
+  const trimTotal = Object.values(perMachine).reduce((a,m)=>a+m.trimMin,0);
+  return {perMachine, perDay, packTotal, trimTotal, shortTotal, hasData: perDay.some(x=>x.packMin||x.trimMin||x.crew!=null||x.marelStart||x.marelEnd)};
+}
+function sideLabourHeadline(x){
+  const parts = SIDE_MACHINES.map(m=>`${m.name} ${fmtDur(x.perMachine[m.name].packMin)}`).join(', ');
+  return `Packaging gave ${fmtDur(x.packTotal)} of labour to side machines (${parts}).${x.trimTotal?` Trimmers helped ${fmtDur(x.trimTotal)}.`:''}${x.shortTotal?` While packaging staff were on side machines, Variovac lines ran with fewer than 2 people for ${fmtDur(x.shortTotal)}.`:''}`;
+}
+function renderSideLabourCard(start, end){
+  const x = computeSideLabour(start, end);
+  if(!x.hasData) return '';
+  const th = 'text-align:center;font-size:10px;color:var(--muted);padding:4px 2px;font-weight:600;';
+  const td = 'text-align:center;font-size:11.5px;padding:5px 2px;border-top:1px solid var(--line);';
+  return `<div class="card"><h3>Packaging Labour on Side Machines</h3>
+    <div style="font-size:13.5px;line-height:1.5;margin-bottom:10px;">${sideLabourHeadline(x)}</div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Crew</th><th style="${th}">MAREL</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trim help</th></tr>
+      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;white-space:nowrap;">${fmtDate(d.date).replace(/, \d{4}$/,'')}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}white-space:nowrap;${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:var(--wait);font-weight:700;':''}">${d.marelStart?fmtTime12(d.marelStart).replace(' ',''):'—'}–${d.marelEnd?fmtTime12(d.marelEnd).replace(' ',''):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td></tr>`).join('')}
+    </table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Side-machine times are labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM). ${CREW_FOOTNOTE}</div></div>`;
+}
+function renderSideLabourPdfHTML(start, end){
+  const x = computeSideLabour(start, end);
+  if(!x.hasData) return '';
+  const th = 'font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.04em;padding:5px 6px;border-bottom:2px solid #1e3a5f;text-align:center;';
+  const td = 'font-size:11.5px;color:#1a1a2e;padding:6px;border-bottom:1px solid #e6e6e6;text-align:center;';
+  return `<div style="page-break-inside:avoid;break-inside:avoid;margin-bottom:20px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Packaging Labour on Side Machines · Crew · MAREL Times</div>
+    <div style="font-size:12.5px;color:#333;margin-bottom:10px;line-height:1.5;">${sideLabourHeadline(x)}</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Packaging crew</th><th style="${th}">MAREL start</th><th style="${th}">MAREL finish</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trimmer help</th></tr>
+      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;">${fmtDate(d.date)}</td><td style="${td}">${d.crew??'—'}</td><td style="${td}">${d.marelStart?fmtTime12(d.marelStart):'—'}</td><td style="${td}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:#c0392b;font-weight:700;background:#fdecea;':''}">${d.marelEnd?fmtTime12(d.marelEnd):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td></tr>`).join('')}
+    </table>
+    <div style="font-size:10px;color:#888;margin-top:6px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM). ${CREW_FOOTNOTE}</div>
+  </div>`;
+}
+/* One-line day summary for the Daily Report: crew, MAREL times, side-machine labour. */
+function dayLogLine(date){
+  const d = dayLogFor(date); if(!d) return '';
+  const x = computeSideLabour(date, date);
+  const bits = [];
+  if(d.crew!=null) bits.push(`Packaging crew: ${d.crew}`);
+  if(d.marelStart || d.marelEnd) bits.push(`MAREL cutting ${d.marelStart?fmtTime12(d.marelStart):'—'} – ${d.marelEnd?fmtTime12(d.marelEnd):'—'}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?' (after 4:30 PM shift end)':''}`);
+  if(x.packTotal || x.trimTotal) bits.push(`Side machines: ${SIDE_MACHINES.filter(m=>x.perMachine[m.name].packMin).map(m=>`${m.name} ${fmtDur(x.perMachine[m.name].packMin)}`).join(', ')||'0m'} packaging labour${x.trimTotal?` (+ ${fmtDur(x.trimTotal)} trimmer help)`:''}`);
+  if(x.shortTotal) bits.push(`Lines under 2 people during that time: ${fmtDur(x.shortTotal)}`);
+  return bits.join(' · ');
+}
+/* Note added automatically to an Employee Shortage / Reassigned stop when packaging staff are on side machines at that moment. */
+function sideShortageNote(){
+  const open = openSideRuns(todayStr()).filter(s=>s.pack>0);
+  if(!open.length) return '';
+  const n = open.reduce((a,s)=>a+s.pack,0);
+  return `(${n} packaging staff on ${[...new Set(open.map(s=>s.machine))].join('/')})`;
+}
+
 /* ============ DASHBOARD ============ */
 function renderDashboard(){
   const recs = recordsForDate(todayStr());
@@ -712,6 +964,7 @@ function renderDashboard(){
   }).join('') : '<div class="empty">No bottlenecks logged yet today.</div>';
 
   return `
+    ${renderCrewBoard()}
     <div class="card">
       <h3>Today · ${fmtDate(todayStr())}</h3>
       <div class="grid3" style="grid-template-columns:repeat(2,1fr);">${mcards}</div>
@@ -1374,38 +1627,7 @@ async function resumeAllLineStop(gid){
   } finally { allLineBusy = false; }
 }
 
-/* ---- v103: 3D floor view (floor.html) ---- */
-let floor3DAvailable = false;
-let liveView = 'list';
-try{ liveView = localStorage.getItem('pct_live_view')==='3d' ? '3d' : 'list'; }catch(e){}
-fetch('floor.html',{method:'HEAD',cache:'no-store'}).then(r=>{ floor3DAvailable = r.ok; if(Router.current==='live') render(); }).catch(()=>{ floor3DAvailable = false; });
-function setLiveView(v){ liveView = v; try{ localStorage.setItem('pct_live_view', v); }catch(e){} render(); }
-function renderLiveViewSwitch(){
-  if(!floor3DAvailable) return '';
-  return `<div class="viewswitch"><button class="${liveView==='list'?'on':''}" onclick="setLiveView('list')">List</button><button class="${liveView==='3d'?'on':''}" onclick="setLiveView('3d')">3D Floor</button></div>`;
-}
-function syncFloor3D(){
-  const slot = document.getElementById('floor3dSlot');
-  let f = document.getElementById('floor3dFrame');
-  if(!slot){
-    if(f && f.style.display!=='none'){ f.style.display='none'; try{ f.contentWindow.postMessage({floor:'pause'}, location.origin); }catch(e){} }
-    return;
-  }
-  if(!f){ f = document.createElement('iframe'); f.id='floor3dFrame'; f.title='3D packaging floor'; f.src='floor.html?embed=1'; document.body.appendChild(f); }
-  const nav = document.querySelector('nav.tabbar');
-  const navH = nav ? nav.getBoundingClientRect().height : 70;
-  const top = slot.getBoundingClientRect().top;
-  slot.style.height = Math.max(320, window.innerHeight - top - navH - 10) + 'px';
-  const r = slot.getBoundingClientRect();
-  Object.assign(f.style,{display:'block',top:r.top+'px',left:r.left+'px',width:r.width+'px',height:r.height+'px'});
-  try{ f.contentWindow.postMessage({floor:'resume'}, location.origin); }catch(e){}
-}
-window.addEventListener('resize', ()=>syncFloor3D());
-window.addEventListener('scroll', ()=>{ if(document.getElementById('floor3dSlot')) syncFloor3D(); }, {passive:true});
 function renderLive(){
-  if(floor3DAvailable && liveView==='3d'){
-    return renderLiveViewSwitch() + `<div id="floor3dSlot" class="floor3d-slot"></div>`;
-  }
   const cards = MACHINES.map(m=>{
     let cardHtml;
     const live = Store.liveRuns[m];
@@ -1421,10 +1643,11 @@ function renderLive(){
     else { cardHtml = renderLiveActiveCard(m, live); }
     return `<div id="live-card-${machineIdSafe(m)}">${cardHtml}</div>`;
   }).join('');
-  return renderLiveViewSwitch() + `
+  return `
   <div class="card" style="margin-bottom:16px;">
     <div style="color:var(--muted);font-size:13px;">Tap a machine to start tracking a run live — set the product now or later. Finishing a product writes it straight into History, same as manual entries.</div>
   </div>
+  ${renderCrewBoard()}
   ${renderAllLineBanners()}
   ${allLineSetup ? renderAllLineSetupCard() : `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--planned);color:var(--planned);" onclick="openAllLineSetup()">⏸ All-Line Planned Stop</button>`}
   ${cards}`;
@@ -1790,7 +2013,9 @@ async function confirmDowntime(){
     const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
     if(lastDt && !lastDt.end) lastDt.end = now;
   }
-  live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:s.notes});
+  let dtNotes = s.notes||'';
+  if(s.status==='WAITING' && (reason==='Employee Shortage' || reason==='Employee Reassigned')){ const sn = sideShortageNote(); if(sn) dtNotes = (dtNotes ? dtNotes+' ' : '') + sn; }
+  live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:dtNotes});
   live.status = 'DOWNTIME';
   liveDowntimeSetup = null;
   const ok = await Store.saveLiveRuns();
@@ -2829,6 +3054,7 @@ function renderReportView(date){
     <h3>Continuous Improvement Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
+  ${(()=>{ const l=dayLogLine(rep.date); return l ? `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3><div style="font-size:13.5px;line-height:1.55;">${l}</div></div>` : ''; })()}
   ${(()=>{ const h=plhHeadline(rep.date); return `<div class="card" style="border-left:3px solid var(--brk);"><div style="font-size:14px;line-height:1.5;"><b style="color:var(--brk);">${h.main}</b>${h.note?` <span style="color:var(--muted);font-style:italic;">${h.note}</span>`:''}</div></div>`; })()}
   <div class="card">
     <h3>Action for Tomorrow</h3>
@@ -2927,8 +3153,9 @@ function summaryText(date){
   const rep = getReportForView(date);
   const t = rep.totals;
   const plhH = plhHeadline(rep.date);
+  const dl = dayLogLine(rep.date);
   const plhBlock = `
-${plhH.main}${plhH.note?' '+plhH.note:''}
+${dl?dl+'\n':''}${plhH.main}${plhH.note?' '+plhH.note:''}
 `;
   return `PACKAGING CI DAILY REPORT
 Date: ${fmtDate(rep.date)}
@@ -3041,6 +3268,8 @@ function exportReportPDF(date){
   doc.text(obsLines, 46, y); y += obsLines.length*14+10;
 
   {
+    const dl = dayLogLine(rep.date);
+    if(dl){ ensure(70); y+=6; section('CREW · MAREL · SIDE MACHINES'); const dlL = doc.splitTextToSize(dl, 520); doc.text(dlL, 46, y); y += dlL.length*14+6; }
     const h = plhHeadline(rep.date);
     ensure(60); y+=6; section('PLH');
     doc.setFont('helvetica','bold'); const ln = doc.splitTextToSize(h.main, 520); doc.text(ln, 46, y); y += ln.length*14;
@@ -3265,7 +3494,6 @@ function goToLiveMachine(m){
   Router.go('live');
 }
 function afterRender(){
-  syncFloor3D(); // v103: show/hide the 3D floor frame
   if(Router.current==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); }
   if(Router.current==='live' && liveScrollTarget){
     const el = document.getElementById('live-card-'+machineIdSafe(liveScrollTarget));
@@ -3382,6 +3610,7 @@ function renderUpstreamImpactView(){
     ${u.list.map((d,i)=>`<div class="rank-item"><div class="rank-bar-wrap"><div class="rank-name">${i+1}. ${escapeHtml(d.name)} <span style="color:var(--muted);font-size:12px;">· ${Math.round(d.share)}%</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.round(d.totalMin/maxMin*100)}%;background:var(--up);"></div></div></div><div class="mono" style="font-size:13px;white-space:nowrap;">${fmtDur(d.totalMin)}</div></div>`).join('')}
   </div>
   ${renderAmPmCard(start, end)}
+  ${renderSideLabourCard(start, end)}
   ${u.list.map(d=>{
     const t = upstreamTrend(d.totalMin, d.prevMin, u.prevHasData);
     return `<div class="card">
@@ -3535,6 +3764,7 @@ function renderUpstreamReportHTML(start, end){
         </table>
       </div>
       ${renderAmPmPdfHTML(start, end)}
+      ${renderSideLabourPdfHTML(start, end)}
       <div style="page-break-inside:avoid;break-inside:avoid;">
         <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Top Reasons per Department</div>
         ${detailBlocks[0]||''}
