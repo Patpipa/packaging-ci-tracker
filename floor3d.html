@@ -1952,6 +1952,7 @@ const FIREBASE_CONFIG={
   storageBucket:"packaging-ci-tracker.firebasestorage.app",messagingSenderId:"929311010987",appId:"1:929311010987:web:e66eacb5ab03d85f2987ee"
 };
 function parseDoc(snap,fallback){try{return (snap.exists&&snap.data().data)?JSON.parse(snap.data().data):fallback}catch(e){return fallback}}
+let greetedMandy=false;
 function startLive(){
   firebase.initializeApp(FIREBASE_CONFIG);
   const loginEl=document.getElementById("login");let unsub=[];
@@ -1963,6 +1964,7 @@ function startLive(){
     unsub.push(col.doc("dayLog").onSnapshot(snap=>{floorLog=floorFromDayLog(parseDoc(snap,{}));afterLogChange()},err=>console.error(err)));
     unsub.push(col.doc("liveRuns").onSnapshot({includeMetadataChanges:true},snap=>{
       liveRuns=parseDoc(snap,{});refresh();
+      if(!greetedMandy){greetedMandy=true;const tryMandy=n=>{if(MANDY&&MANDY.host)meetMandy(8000);else if(n>0)setTimeout(()=>tryMandy(n-1),1000)};setTimeout(()=>tryMandy(8),1800)}  // every time the 3D floor opens: close-up on Mandy first, then back to the Variovacs
       setConn(snap.metadata.fromCache?"off":"live",snap.metadata.fromCache?"Offline · last known":"Live · "+hhmmss());
     },err=>{setConn("off","Can't reach tracker");console.error(err)}));
     unsub.push(col.doc("settings").onSnapshot(snap=>{const st=parseDoc(snap,{});const n=Number(st.downtimeAlarmMinutes);alarmMin=n>0?n:30;renderCards()},err=>console.error(err)));
