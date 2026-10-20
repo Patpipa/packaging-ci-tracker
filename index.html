@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v119 - 2026-10-19 (Crew: changes logged with time + reason, Lead Hand / Yield in or off today, Manual Pack requires 2, clearer Crew Board wording; Daily Report and Upstream side-machine section line by line; entries left on stop counting at 4:30 PM)';
+const APP_VERSION = 'v120 - 2026-10-19 (Dashboard floor: Photo | 3D switch. 3D shows the animated Live Factory floor (floor3d.html) inside the Today card, read-only from the same live data; it only loads when 3D is picked and pauses on other tabs)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1310,6 +1310,44 @@ function spotState(sp){
   if(waiting.length) return {color:'var(--wait)', alarm:true, sub:`⚠${waiting.length}`};
   return {color:'var(--nowork)', dim:true, sub:''};
 }
+/* v120: Photo | 3D switch for the Dashboard floor. 3D = floor3d.html?embed=1 (the animated Live Factory floor, same Firebase sign-in, read-only).
+   The 3D page sits in ONE iframe that lives outside #main (so re-renders never reload it) and is laid over a placeholder slot in the Today card.
+   It is only created when 3D is picked, paused on other tabs, and removed when switching back to Photo to free the phone's memory. */
+function floorMode(){ let v=null; try{ v=localStorage.getItem('pct_floor_mode'); }catch(e){} return v==='3d' ? '3d' : 'photo'; }
+function setFloorMode(v){ try{ localStorage.setItem('pct_floor_mode', v); }catch(e){} floorSel=null; if(v!=='3d') removeFloor3D(); render(); }
+function renderFloorSwitch(){
+  const m=floorMode(), b=(v,l)=>`<button onclick="setFloorMode('${v}')" style="flex:1;padding:7px 10px;border:0;border-radius:8px;font:700 12px Oswald,'Arial Narrow',sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;background:${m===v?'var(--amber)':'transparent'};color:${m===v?'#1A1500':'var(--muted)'};">${l}</button>`;
+  return `<div style="display:flex;gap:4px;padding:3px;margin-bottom:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);max-width:220px;">${b('photo','Photo')}${b('3d','3D')}</div>`;
+}
+function renderFloor3DSlot(){
+  return `<div class="fp-3dslot" style="position:relative;height:min(62vh,560px);min-height:300px;border-radius:12px;border:1px solid var(--line);background:#0D1A2D;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:12px;">Loading 3D floor…</div>
+    <div style="font-size:11px;color:var(--muted2);margin-top:6px;">Live from the tracker · drag to turn, pinch to zoom · tap a machine for details.</div>`;
+}
+let floor3DEl = null, floor3DShown = false;
+function placeFloor3D(){
+  const slot = document.querySelector('.fp-3dslot');
+  if(!slot){
+    if(floor3DEl && floor3DShown){ floor3DEl.style.visibility='hidden'; floor3DEl.style.pointerEvents='none'; floor3DShown=false;
+      try{ floor3DEl.contentWindow.postMessage({floor:'pause'}, location.origin); }catch(e){} }
+    return;
+  }
+  if(!floor3DEl){
+    const f = document.createElement('iframe');
+    f.src = 'floor3d.html?embed=1'; f.title = '3D packaging floor';
+    f.style.cssText = 'position:absolute;border:0;border-radius:12px;z-index:2;background:#0D1A2D;';
+    f.addEventListener('load', ()=>{ const s=document.querySelector('.fp-3dslot'); if(s) s.textContent=''; });
+    document.body.appendChild(f); floor3DEl = f;
+  }
+  const r = slot.getBoundingClientRect();
+  floor3DEl.style.left = (r.left + window.scrollX) + 'px'; floor3DEl.style.top = (r.top + window.scrollY) + 'px';
+  floor3DEl.style.width = r.width + 'px'; floor3DEl.style.height = r.height + 'px';
+  if(!floor3DShown){ floor3DEl.style.visibility='visible'; floor3DEl.style.pointerEvents='auto'; floor3DShown=true;
+    try{ floor3DEl.contentWindow.postMessage({floor:'resume'}, location.origin); }catch(e){} }
+}
+function removeFloor3D(){ if(floor3DEl){ floor3DEl.src='about:blank'; floor3DEl.remove(); floor3DEl=null; floor3DShown=false; } }
+window.addEventListener('resize', ()=>placeFloor3D());
+(function(){ try{ const ro = new ResizeObserver(()=>placeFloor3D()); const go=()=>{ const m=document.getElementById('main'); if(m) ro.observe(m); else setTimeout(go,300); }; go(); }catch(e){} })();
+document.addEventListener('visibilitychange', ()=>{ if(floor3DEl) try{ floor3DEl.contentWindow.postMessage({floor: document.hidden?'pause':'resume'}, location.origin); }catch(e){} });
 function renderFloorPlan(){
   const spots = FLOOR_SPOTS.map(sp=>{
     const st = spotState(sp);
@@ -1382,9 +1420,10 @@ function renderDashboard(){
     ${renderCrewAlertLine()}
     <div class="card">
       <h3>Today · ${fmtDate(todayStr())}</h3>
-      ${floorImgFailed ? '' : renderFloorPlan()}
-      <div class="grid3" style="grid-template-columns:repeat(2,1fr);${floorImgFailed?'':'margin-top:14px;'}">${mcards}</div>
-      ${floorImgFailed ? '' : renderFloorPanel(recs)}
+      ${renderFloorSwitch()}
+      ${floorMode()==='3d' ? renderFloor3DSlot() : (floorImgFailed ? '' : renderFloorPlan())}
+      <div class="grid3" style="grid-template-columns:repeat(2,1fr);${floorImgFailed && floorMode()!=='3d'?'':'margin-top:14px;'}">${mcards}</div>
+      ${floorImgFailed || floorMode()==='3d' ? '' : renderFloorPanel(recs)}
     </div>
     <div class="card">
       <h3>Shift Totals So Far</h3>
@@ -4037,6 +4076,7 @@ function attachFloorVideo(){
 }
 function afterRender(){
   attachFloorVideo();
+  placeFloor3D();
   if(Router.current==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); }
   if(Router.current==='live' && liveScrollTarget){
     const el = document.getElementById('live-card-'+machineIdSafe(liveScrollTarget));
