@@ -796,6 +796,19 @@ label("Meat out",PX(378,910)[0],2.3,PX(378,910)[1],.55);label("Meat out",PX(698,
 [[378,860],[378,940],[698,850],[698,930]].forEach(([a,b],i)=>{const p=PX(a,b);box(0.65,0.45,0.75,mats.blueTray,p[0],1.18,p[1]);if(i%2===0)box(0.5,0.12,0.6,mats.meat,p[0],1.42,p[1])});
 const marelMeat=[];for(let i=0;i<8;i++){const b=box(0.42,0.14,0.32,mats.meat,marel.x,1.05,0);marelMeat.push({b,z:marel.z-marel.d/2+0.5+i*0.9,side:i%2?1:-1})}
 const marelTbl=tablePx(445,1070,645,1105);
+// status beacon on the Marel, same as the Variovacs: green cutting, red blinking when a line waits on MAREL, grey when not cutting
+const MBEACON=(function(){const x=marel.x+marel.w/2-0.35,z=marel.z-marel.d/2+0.35;
+  box(0.08,1.5,0.08,mats.steel,x,1.65,z);
+  const mat=new THREE.MeshStandardMaterial({color:0x1f9d55,emissive:0x1f9d55,emissiveIntensity:1});
+  const b=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.32,16),mat);b.position.set(x,2.55,z);scene.add(b);
+  const l=new THREE.PointLight(0x1f9d55,0.9,6);l.position.set(x,2.55,z);scene.add(l);return {mat,l}})();
+function updateMarelBeacon(t){const s=SIDE.find(x=>x.marel);if(!s)return;const {tone}=sideLine(s,sideState(s.key));const c=TONE[tone];
+  MBEACON.mat.color.setHex(c);MBEACON.mat.emissive.setHex(c);MBEACON.l.color.setHex(c);
+  const mw=marelWaitingNow(),al=mw.some(w=>w.mins>=alarmMin);
+  if(tone==="wait"){const on=Math.sin(t*(al?12:6))>0;MBEACON.mat.emissiveIntensity=on?(al?1.8:1.4):0.12;MBEACON.l.intensity=on?(al?1.4:0.9):0}
+  else if(tone==="run"){MBEACON.mat.emissiveIntensity=1;MBEACON.l.intensity=0.6}
+  else if(tone==="change"){MBEACON.mat.emissiveIntensity=0.55+0.45*Math.sin(t*5);MBEACON.l.intensity=0.5}
+  else{MBEACON.mat.emissiveIntensity=0.2;MBEACON.l.intensity=0}}
 // MAREL painted flat on top of its front hood, same style as the Variovac name plates
 (function(){const w=marel.w*0.7*0.94,h=0.9*0.9,c=document.createElement("canvas");c.width=Math.round(300*w);c.height=Math.round(300*h);const t=new THREE.CanvasTexture(c);t.anisotropy=8;
   function draw(){const g=c.getContext("2d"),W=c.width,H=c.height,st=Math.max(10,H*.08);g.fillStyle="#0F2A4A";g.fillRect(0,0,W,H);g.fillStyle="#F2C21B";g.fillRect(0,0,W,st);g.fillRect(0,H-st,W,st);
@@ -1120,8 +1133,21 @@ SIDE.forEach(s=>{const [x1,z1,x2,z2]=s.rect,cx=(x1+x2)/2,cz=(z1+z2)/2,w=x2-x1,d=
 });
 // the old plain labels for these three are replaced by the status tags
 LABELS.forEach(L=>{if(/^(Fajita machine|Cutlet machine|Marel)$/.test(L.text))L.s.visible=false;});
+/* MAREL details, same rules as the CI Tracker's floor panel: a line counts as waiting on MAREL when its open
+   Waiting reason starts with "MAREL - "; today's total = saved Waiting records + downtime inside runs still open. */
+const isMarelReason=r=>/^MAREL - /.test((typeof REASON_RENAMES!=="undefined"&&REASON_RENAMES[r])||r||"");
+function hmDiff(a,b){const f=x=>{const[h,m]=String(x||"").split(":").map(Number);return h*60+m};const d=f(b)-f(a);return d>0?d:0}
+function marelWaitingNow(){const out=[];MACHINES.forEach(m=>{const live=liveRuns[m.name];if(!live||live.status==="RUNNING")return;
+  const d=(live.downtimeSegments||[])[(live.downtimeSegments||[]).length-1];
+  if(d&&!d.end&&d.status==="WAITING"&&isMarelReason(d.reason))out.push({m:m.name,reason:(typeof REASON_RENAMES!=="undefined"&&REASON_RENAMES[d.reason])||d.reason,mins:minsSince(d.start)||0})});return out}
+function marelWaitToday(){const td=localDate();let min=(records||[]).filter(r=>r.date===td&&r.status==="WAITING"&&isMarelReason(r.reason)).reduce((a,r)=>a+(r.durationMin||0),0);
+  MACHINES.forEach(m=>{const live=liveRuns[m.name];if(!live||(live.date&&live.date!==td))return;
+    (live.downtimeSegments||[]).forEach(d=>{if(d.status==="WAITING"&&isMarelReason(d.reason))min+=d.end?hmDiff(d.start,d.end):(minsSince(d.start)||0)})});return min}
+const fmtHM=m=>{m=Math.round(m||0);const h=Math.floor(m/60);return h?h+"h "+(m%60)+"m":(m%60)+"m"};
 function sideLine(s,st){
   if(s.marel){
+    const mw=marelWaitingNow();
+    if(mw.length)return {tone:"wait",line:"⚠ "+mw.length+(mw.length===1?" line":" lines")+" waiting on MAREL"};
     if(st.on){const late=st.since&&nowHM()>="16:00";return {tone:late?"change":"run",line:(late?"⚠ Still cutting · ":"Cutting since ")+(late?"shift ends 4:30":t12(st.since))}}
     if(st.last)return {tone:st.last.off>SHIFT_END?"wait":"nowork",line:"Done cutting at "+t12(st.last.off)};
     return {tone:"nowork",line:"Not cutting yet"};
@@ -1183,10 +1209,23 @@ function renderSide(){
     ${s.maxPeople>1?`<div class="ppl"><span>People on it</span>${Array.from({length:s.maxPeople},(_,i)=>`<button class="pp${sidePick.people===i+1?" on":""}" data-pp="${i+1}">${i+1}</button>`).join("")}</div>`:""}
     ${s.marel?`<div class="timerow"><label for="marelStart">Marel started cutting at</label><input type="time" id="marelStart" value="${sidePick.start||"06:00"}"></div>`:""}
     <button class="bigact go" data-side="start">${s.marel?"Save start time":"Start "+s.name.toLowerCase()}</button>`;
+  if(s.marel){
+    const r=runs[runs.length-1]||{},start=r.on||"",end=r.off||"",late=end&&end>SHIFT_END,mw=marelWaitingNow();
+    sideBody.innerHTML=`<div class="sheethead"><h2>MAREL</h2><button class="hbtn" id="sideDone">Done</button></div>
+      <div class="runlist">
+        <div><span>Started cutting</span><b>${start?t12(start):"—"}</b></div>
+        <div><span>Finished cutting</span><b style="${late?"color:var(--wait)":""}">${end?t12(end)+(late?" (after 4:30)":""):"—"}</b></div>
+      </div>
+      <h3 class="sub">Lines waiting on MAREL now</h3>
+      <div class="runlist">${mw.length?mw.map(w=>`<div><span>${esc(w.m)}<br><span class="note">${esc(w.reason)}</span></span><b style="color:var(--wait)">${fmtHM(w.mins)}</b></div>`).join(""):`<div><span class="note">None right now.</span></div>`}</div>
+      <div class="runlist" style="margin-top:6px"><div><span>Total waiting on MAREL today</span><b>${fmtHM(marelWaitToday())}</b></div></div>
+      <p class="note">Entered on the CI Tracker → Live Floor → Crew Board, so this screen and the reports always match.</p>`;
+    return;
+  }
   sideBody.innerHTML=`<div class="sheethead"><h2>${s.name}</h2><button class="hbtn" id="sideDone">Done</button></div>
     ${action}<span class="note" id="sideMsg"></span>
     <h3 class="sub">Today</h3>${hist}
-    ${s.marel?`<p class="note">Lets everyone see when the Marel finishes cutting. Packaging shift ends at 4:30 pm.</p>`:(()=>{const n=st.on?st.people:(sidePick.people||s.defPeople||1);const who=n===1?"1 operator":n+" operators";
+    ${s.marel?"":(()=>{const n=st.on?st.people:(sidePick.people||s.defPeople||1);const who=n===1?"1 operator":n+" operators";
       return `<p class="note foot">Uses packaging labour hours. Running the ${s.name.toLowerCase()} takes ${who} off a Variovac or another packaging station, so the line runs short-handed while it's on. These hours aren't counted in PLH, but they're logged here.</p>`})()}`;
 }
 sideSheet.addEventListener("click",async e=>{
@@ -2138,7 +2177,7 @@ function loopFrame(now){
   if(paused)return;
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
   ["v1","v2","v3","mp"].forEach(k=>{updateMachineVis(k,dt,t);drawTag(k,view[k])});
-  updateSideVis(t);
+  updateSideVis(t);updateMarelBeacon(t);
   updateLabelVisibility();updateForklift(dt);
   const ms=marelStopped();
   const mz0=marel.z-marel.d/2+0.5,mz1=marel.z+0.6;
