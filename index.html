@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v120 - 2026-10-19 (Dashboard floor: Photo | 3D switch. 3D shows the animated Live Factory floor (floor3d.html) inside the Today card, read-only from the same live data; it only loads when 3D is picked and pauses on other tabs)';
+const APP_VERSION = 'v121 - 2026-10-20 (Vacuum Sealer added as a side machine for big sealing orders. Crew bar: shows the breakdown, e.g. 6 on lines · 1 Fajita · no spare; takes the colour of a line that is Waiting / Changeover / Planned / Break, with the live reason and how many people are free to help; spare says where it comes from, e.g. 2 spare (Variovac 2 not running))';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -676,17 +676,17 @@ function updateClock(){ const d=new Date(); document.getElementById('shiftClock'
 Purpose: make packaging's real staffing visible. Everything shown is taken ONLY from what is entered live — nothing is estimated or filled in.
 - Crew on shift: entered once at the start of the shift.
 - Line staffing: the employee count entered on each Live Floor run (Start Run / Change Staff). A running line with no count shows "not entered" and is not counted either way.
-- Side machines (Fajita, Slicer, Cutlet): logged on/off with who's on them — packaging staff and trimmer helpers are recorded separately; only packaging staff count as packaging labour. Logged separately from line records, so efficiency/PLH/downtime are untouched.
+- Side machines (Fajita, Slicer, Cutlet, Vacuum Sealer): logged on/off with who's on them — packaging staff and trimmer helpers are recorded separately; only packaging staff count as packaging labour. Logged separately from line records, so efficiency/PLH/downtime are untouched.
 - Needed: 2 per running Variovac (one loading, one boxing + labelling) + 1 if Manual Pack is running.
 - MAREL start / finish cutting time for the day.
 Stored in Firestore doc tracker/dayLog as { 'YYYY-MM-DD': {crew, crewAt, marelStart, marelEnd, side:[{id, machine, start, end, pack, trim}]} }. */
-const SIDE_MACHINES = [ {name:'Fajita', max:2}, {name:'Slicer', max:1}, {name:'Cutlet', max:1} ];
+const SIDE_MACHINES = [ {name:'Fajita', max:2}, {name:'Slicer', max:1}, {name:'Cutlet', max:1}, {name:'Vacuum Sealer', max:2} ];
 const LINE_NEED = {'Variovac 1':2, 'Variovac 2':2, 'Variovac 3':2, 'Manual Pack':2}; // v119: Manual Pack needs 2 — one can step to a side machine while one stays for reboxes
 const SHIFT_END_MIN = 16*60+30;
 let sideSetup = null;      // {machine, pack, trim, changeId}
 /* v110: Lead hand and yield operator are off-line roles (management wants them off the line). When they step in, it's logged On/Off with where they went — stored in dayLog[date].offline = [{id, role, where, start, end}]. Shown separately; not part of the crew count. */
 const OFFLINE_ROLES = ['Lead Hand','Yield Operator'];
-const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet'];
+const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer'];
 let offlineSetup = null;   // {role, where}
 function openOffline(date){ const d = dayLogFor(date); return d ? (d.offline||[]).filter(o=>!o.end) : []; }
 async function startOffline(){
@@ -884,10 +884,12 @@ async function deleteSide(id){ if(!confirm('Delete this side-machine entry?')) r
 const CREW_FOOTNOTE_LINES = [
   'All figures come from live entries in the CI Tracker as they are recorded on the floor. Nothing is estimated or filled in.',
   'Line staffing = the employee count entered for each running line.',
-  'Side machines (Fajita, Slicer, Cutlet) = staff entered when each machine is started.',
+  'Side machines (Fajita, Slicer, Cutlet, Vacuum Sealer) = staff entered when each machine is started. Vacuum Sealer is only used for big sealing orders: start it when crew go there.',
   'Packaging staff and trimmer helpers are recorded separately. Only packaging staff count as packaging labour.',
   'Required = 2 per running line: each Variovac (one loading, one boxing + labelling) and Manual Pack (so one can step to a side machine while one stays for reboxes).',
   'Lines that are not running, or are on No Work Scheduled, are not counted.',
+  'Crew bar colour: green when everything is running and covered; it takes the status colour of any line that is stopped right now (Waiting red, Changeover orange, Planned, Break), with the reason entered on the Live Floor. People on a stopped line still count on that line, shown as free to help.',
+  'Spare = crew minus people on lines and side machines. When there is spare, the bar says why, e.g. a line not running or on No Work Scheduled.',
   'Short = each line on its own: required minus packaging staff actually on that line. An extra person on one line does not cover a missing person on another.',
   'Packaging crew changes during the day (someone goes home, arrives late) are logged with the time, so the reports show e.g. 6 from 8:00 AM → 5 from 10:15 AM.',
   'A line with no headcount entered shows "not entered" and is not counted either way.',
@@ -901,21 +903,52 @@ function crewFootnoteHTML(forPdf, noTitle){
   return `<div style="font-size:${forPdf?'10':'11.5'}px;color:${c};line-height:1.5;">${noTitle?'':'<div style="font-weight:700;margin-bottom:2px;">How this is calculated</div>'}<ul style="margin:0;padding-left:16px;">${CREW_FOOTNOTE_LINES.map(l=>`<li>${escapeHtml(l)}</li>`).join('')}</ul></div>`;
 }
 function personDot(cls){ return `<span class="cb-p ${cls}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>`; }
+/* v121: what a line on the Live Floor is doing right now when it is not running: status (with its colour), live reason, minutes so far */
+function lineStopNow(m){
+  const live = Store.liveRuns[m];
+  if(!live || live.status==='RUNNING') return {};
+  const dts = live.downtimeSegments||[], o = dts[dts.length-1];
+  const open = o && !o.end ? o : null;
+  const st = STATUSES.find(x=>x.key===((open&&open.status)||live.status));
+  if(!st) return {};
+  let mins = null;
+  if(open && open.start){ mins = toMin(nowHHMM()) - toMin(open.start); if(mins<0) mins += 1440; }
+  return {st, reason: (open&&open.reason)||'', mins};
+}
 function renderCrewBoard(){
   const c = crewSnapshot(), d = c.d || {};
   let state, title;
   const pp = n=>`${n} ${n===1?'person':'people'}`;
+  /* v121: lines that are on the Live Floor but not running right now (Waiting, Changeover, Planned, Break), with the live reason */
+  const stops = c.lines.filter(l=>l.active && l.status && l.status!=='RUNNING').map(l=>({...l, ...lineStopNow(l.m)})).filter(l=>l.st);
+  const STOP_RANK = {WAITING:4, CHANGEOVER:3, PLANNED:2, BREAK:1};
+  const topStop = stops.slice().sort((a,b)=>(STOP_RANK[b.st.key]||0)-(STOP_RANK[a.st.key]||0))[0];
+  /* v121: breakdown: "6 on lines · 1 Fajita · no spare" */
+  const bySide = {}; c.side.forEach(s=>{ if(s.pack>0) bySide[s.machine]=(bySide[s.machine]||0)+s.pack; });
+  const sideTxt = Object.keys(bySide).map(k=>`${bySide[k]} ${k}`);
+  const inactive = c.lines.filter(l=>!l.active);
+  let spareTxt = '', spareWhy = '';
+  if(c.spare!=null){
+    if(c.spare<=0) spareTxt = 'no spare';
+    else {
+      const from = inactive.filter(l=>!l.stale).map(l=>`${l.m} ${l.noWork?'no work scheduled':'not running'}`);
+      spareTxt = `${c.spare} spare`; spareWhy = `${c.spare} spare: ${from.length?`from ${from.join(', ')}`:'not on a line or side machine'}`;
+    }
+  }
+  const breakdown = [`${c.onLines} on lines`, ...sideTxt, ...(spareTxt?[spareTxt]:[])].join(' · ');
   if(c.short>0){ state='red'; title = c.shortLines.length===1 ? `${c.shortLines[0].m} short ${pp(c.shortLines[0].d)}` : `Short ${pp(c.short)}: ${c.shortLines.map(x=>`${x.m} (${x.d})`).join(', ')}`; }
   else if(c.needed===0 && !c.side.length){ state='idle'; title='No lines running'; }
-  else if(c.spare!=null && c.spare<=0){ state='amber'; title='All lines covered: no spare'; }
-  else if(c.spare!=null){ state='green'; title=`All lines covered: ${c.spare} spare`; }
-  else { state='green'; title='All lines covered'; }
-  const colors = {red:['var(--wait)','var(--wait-dim)'], amber:['var(--change)','var(--change-dim)'], green:['var(--run)','var(--run-dim)'], idle:['var(--nowork)','var(--nowork-dim)']}[state];
+  else { state = topStop ? 'stop' : (c.spare!=null && c.spare<0 ? 'amber' : 'green'); title = breakdown; }
+  const colors = state==='stop' ? [topStop.st.color, topStop.st.dim] : {red:['var(--wait)','var(--wait-dim)'], amber:['var(--change)','var(--change-dim)'], green:['var(--run)','var(--run-dim)'], idle:['var(--nowork)','var(--nowork-dim)']}[state];
   const rl = rolesLabel(todayStr());
-  const subLine1 = `${c.crew!=null ? `Crew ${c.crew}` : 'Crew not entered'}${rl?` + ${rl}`:''}`;
-  const subParts = [`${c.onLines} on lines`, `${c.sidePack} on side machines`];
-  if(c.spare!=null) subParts.push(`${Math.max(0,c.spare)} spare`);
-  subParts.push(`running lines require ${c.needed}`);
+  const subLine1 = `${c.crew!=null ? `Crew ${c.crew}` : 'Crew not entered'}${rl?` + ${rl}`:''}${state!=='red'&&state!=='idle'?` · all ${c.needed?'running lines covered':'side machines staffed'}`:''}`;
+  const subParts = state==='red' ? [breakdown, `running lines require ${c.needed}`] : [`running lines require ${c.needed}`];
+  if(spareWhy) subParts.push(spareWhy);
+  if(c.spare!=null && c.spare<0) subParts.push(`${-c.spare} more on lines than the crew number — lead hand / yield helping, or the crew number needs updating`);
+  const stopHtml = stops.map(l=>{
+    const free = l.staff ? ` · ${pp(l.staff)} free to help` : '';
+    return `<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:${l.st.color};margin-top:4px;line-height:1.35;"><span style="width:9px;height:9px;border-radius:50%;background:${l.st.color};flex:none;"></span><span>${l.m} · ${l.st.label}${l.reason&&l.reason!==l.st.label?`: ${l.reason}`:''}${l.mins!=null?` · ${fmtShort(l.mins)}`:''}${l.st.key==='BREAK'?'':free}</span></div>`;
+  }).join('');
   const lineRows = c.lines.map(l=>{
     if(!l.active) return `<div class="cb-row" style="opacity:.5"><span class="cb-nm">${l.m}</span><span class="cb-mut">${l.stale?'open from an earlier day — close it below':(l.noWork?'no work scheduled':'not running')}</span></div>`;
     if(l.staff==null) return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-mut" style="color:var(--change)">headcount not entered</span></div>`;
@@ -968,7 +1001,7 @@ function renderCrewBoard(){
     ${sideLogOpen ? log.map(s=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span>${s.machine} · ${s.pack} pkg${s.trim?` + ${s.trim} trim`:''}</span>
       <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
   return `<div class="card cb" style="border-color:${colors[0]};">
-    <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub" style="font-weight:600;color:var(--text);">${subLine1}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div></div></div>
+    <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub" style="font-weight:600;color:var(--text);">${subLine1}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div>${stopHtml}</div></div>
     ${openAfterShift().length?`<div style="font-size:12px;color:var(--wait);margin:-4px 0 8px;line-height:1.4;">⚠ Still on after 4:30 PM: ${openAfterShift().join(', ')}. Counting stopped at 4:30 PM — tap Off, or fix the time in the log.</div>`:''}
     ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
