@@ -16,7 +16,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v6 · CI Tracker</title>
+<title>3D Floor · v10 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -356,9 +356,9 @@ body{overflow-x:hidden;overflow-y:auto}
 .embed .mainarea{grid-template-columns:minmax(0,1fr)!important}
 @media (min-width:1000px){
   .sidebar3d{display:flex;position:absolute;z-index:5;left:160px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));gap:6px;flex-wrap:nowrap;align-items:flex-end;pointer-events:none}
-  .stile{pointer-events:auto;display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;background:rgba(11,22,40,.86);backdrop-filter:blur(4px);
+  .stile{pointer-events:auto;display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;background:#0d1a2e;box-shadow:0 2px 10px rgba(0,0,0,.35);
     border:1px solid var(--line);border-left:4px solid var(--st);border-radius:10px;padding:7px 10px;color:var(--text);font:inherit;cursor:pointer;text-align:left}
-  .stile:hover{background:rgba(21,39,68,.92)}
+  .stile:hover{background:#16294a}
   .stile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .stile .sn{font-family:var(--display);font-size:13.5px;flex:none;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
   .stile{flex-direction:column;align-items:stretch!important;gap:3px!important}
@@ -368,6 +368,17 @@ body{overflow-x:hidden;overflow-y:auto}
   .stile .sl{font-size:12px;color:var(--st);white-space:nowrap;font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .stile .sl.off{color:var(--muted);font-weight:500}
 }
+/* v9: camera pad for TVs / remotes — laptop, desktop, TV only */
+.campad{display:none}
+@media (min-width:1000px){
+  .campad{display:grid;position:absolute;z-index:6;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));
+    grid-template-columns:repeat(3,46px) 12px 46px;grid-template-rows:repeat(3,46px);gap:6px;pointer-events:none}
+  .campad button{pointer-events:auto;width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(11,22,40,.9);color:var(--text);
+    font:700 18px var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);touch-action:none;user-select:none;-webkit-user-select:none}
+  .campad button:hover,.campad button.on{background:rgba(59,167,230,.35);border-color:var(--accent)}
+  .campad button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+}
+.embed .campad{display:none!important}
 .rhead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 2px 0}
 .rhead b{font-family:var(--display);font-size:16px;letter-spacing:.06em;text-transform:uppercase}
 .rhead span{font-family:var(--mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -417,6 +428,11 @@ html,body{height:100%;overflow:hidden}
     <a class="backbtn" href="index.html" onclick="return backToTracker()" aria-label="Back to the CI Tracker">← CI Tracker</a>
     <span class="pill conn3d" id="conn3d" data-s="wait"><i></i><span>Connecting…</span></span>
     <div class="sidebar3d" id="sideBar" aria-label="Side machines"></div>
+    <div class="campad" id="camPad" aria-label="Move the view">
+      <span></span><button data-cam="up" aria-label="Tilt up" title="Tilt (▲)" style="grid-column:2;grid-row:1">▲</button><span></span><span></span><button data-cam="in" aria-label="Zoom in" title="Zoom in (+)" style="grid-column:5;grid-row:1">+</button>
+      <button data-cam="left" aria-label="Turn left" title="Turn left (◀)" style="grid-column:1;grid-row:2">◀</button><button data-cam="home" aria-label="Back to the starting view" title="Starting view" style="grid-column:2;grid-row:2;font-size:17px">⟲</button><button data-cam="right" aria-label="Turn right" title="Turn right (▶)" style="grid-column:3;grid-row:2">▶</button>
+      <button data-cam="down" aria-label="Tilt down" title="Tilt (▼)" style="grid-column:2;grid-row:3">▼</button><button data-cam="out" aria-label="Zoom out" title="Zoom out (−)" style="grid-column:5;grid-row:3">−</button>
+    </div>
     <button class="railtoggle" id="railToggle" aria-label="Hide the info panel" title="Hide / show the info panel">▸</button>
     <button class="alarmbar" id="alarmBar" hidden></button>
     <button class="tourchip" id="tourExit">Display mode · tap to stop</button>
@@ -479,6 +495,8 @@ const HOME={pos:new THREE.Vector3(2,54,38),target:new THREE.Vector3(0,0,1)};
 // default view: the Variovac section (V3 at the top, V2 and V1 below, Manual Pack on the right)
 const VVIEW={pos:new THREE.Vector3(3,24,20),target:new THREE.Vector3(3,0,6.5)};
 camera.position.copy(VVIEW.pos);controls.target.copy(VVIEW.target);
+// laptop/desktop/TV: pull the start view in so the Variovac section fills the screen (phones and the dashboard copy keep VVIEW as is)
+const VDIR=[0,24,13.5];let camTouched=false;controls.addEventListener("start",()=>{camTouched=true});
 
 function sceneBg(){const c=getComputedStyle(document.documentElement).getPropertyValue("--scene").trim()||"#cfd8de";scene.background=new THREE.Color(c);scene.fog=new THREE.Fog(c,70,140)}
 sceneBg();
@@ -966,12 +984,14 @@ cutletModel(solidPx(387,1298,457,1338));label("Cutlet machine",PX(422,1318)[0],2
 const trimBig=tablePx(435,255,635,625);label("Trim table (main)",trimBig.x,2.3,trimBig.z,.8);
 const trimMid=tablePx(280,245,365,610);label("Trim table",trimMid.x,2.3,trimMid.z,.7);
 // slim trim table squeezed in between band saw 2 and the vacuum sealer
-const trimSmall={x:-18.1,z:-10.05,w:0.75,d:1.6}; // v6: longer, fills the space up to the vacuum sealertable(trimSmall.w,trimSmall.d,trimSmall.x,trimSmall.z);
-OBST.push([trimSmall.x-0.3,trimSmall.z-0.53,trimSmall.x+0.3,trimSmall.z+0.53]);label("Trim table 3",trimSmall.x,2.3,trimSmall.z,.65);
+// v7: full trim table on the open spot between band saw 2 and the vacuum sealer, so the corner looks worked
+const trimSmall={x:-17.85,z:-8.9,w:1.0,d:2.2};
+table(trimSmall.w,trimSmall.d,trimSmall.x,trimSmall.z);
+OBST.push([trimSmall.x-trimSmall.w/2,trimSmall.z-trimSmall.d/2,trimSmall.x+trimSmall.w/2,trimSmall.z+trimSmall.d/2]);label("Trim table 3",trimSmall.x,2.3,trimSmall.z,.65);
 (function(){const r=solidPx(10,480,85,565);bandsawModel(r.x,r.z,1,1.05);label("Band saw 2",r.x,3.5,r.z,.65)})();
 // v6: vacuum sealer and slicer drawn at the size of the Fajita / Cutlet machines, and placed side by side
-(function(){const r=solidPx(20,625,85,705);sealerModel(r.x,r.z,1).scale.setScalar(1.4)})();
-(function(){const r=solidPx(25,745,95,825);slicerModel(r.x,r.z,1).scale.setScalar(1.4)})();
+(function(){const r=solidPx(20,728,85,792);sealerModel(r.x,r.z,1).scale.setScalar(1.4)})();   // v7: centre z -6.0
+(function(){const r=solidPx(25,888,95,952);slicerModel(r.x,r.z,1).scale.setScalar(1.4)})();   // v7: centre z -2.0
 
 // rooms and passages
 // Warehouse 1, Debox Room and Burger Room names are on their wall signs
@@ -1122,8 +1142,8 @@ const SIDE=[
   {key:"fajita",name:"Fajita machine",maxPeople:2,defPeople:2,rect:[-13.9,7.33,-11.9,8.58]},
   {key:"cutlet",name:"Cutlet machine",maxPeople:1,defPeople:1,rect:[-9.08,7.45,-7.33,8.45]},
   {key:"marel",name:"Marel",marel:true,rect:[-8.75,-7.5,-2.25,1.0]},
-  {key:"slicer",name:"Slicer",maxPeople:1,defPeople:1,rect:[-18.05,-6.2,-16.45,-4.55]},
-  {key:"vacuum",name:"Vacuum sealer",maxPeople:2,defPeople:2,rect:[-18.25,-9.2,-16.65,-7.55]}
+  {key:"slicer",name:"Slicer",maxPeople:1,defPeople:1,tag:3.5,rect:[-18.05,-2.85,-16.45,-1.15]},
+  {key:"vacuum",name:"Vacuum sealer",maxPeople:2,defPeople:2,tag:3.5,rect:[-18.25,-6.85,-16.65,-5.15]}
 ];
 let floorLog={days:{}};
 let fsCol=null;                         // set once signed in
@@ -1179,7 +1199,7 @@ SIDE.forEach(s=>{const [x1,z1,x2,z2]=s.rect,cx=(x1+x2)/2,cz=(z1+z2)/2,w=x2-x1,d=
   const p=new THREE.Mesh(new THREE.PlaneGeometry(w+3,d+3),mat);p.rotation.x=-Math.PI/2;p.position.set(cx,0.031,cz);scene.add(p);
   const hit=new THREE.Mesh(new THREE.BoxGeometry(w+0.6,2.4,d+0.6),new THREE.MeshBasicMaterial({visible:false}));hit.position.set(cx,1.2,cz);hit.userData.side=s.key;scene.add(hit);
   const c=document.createElement("canvas");c.width=512;c.height=190;const t=new THREE.CanvasTexture(c);t.anisotropy=4;
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false,transparent:true}));sp.position.set(cx,s.marel?4.2:3.3,cz);sp.scale.set(s.marel?5.2:4.4,(s.marel?5.2:4.4)*190/512,1);scene.add(sp);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false,transparent:true}));sp.position.set(cx,s.marel?4.2:3.3,cz);const ts=s.tag||(s.marel?5.2:4.4);sp.scale.set(ts,ts*190/512,1);scene.add(sp);
   SIDE_RIG[s.key]={glow:mat,hit,c,t,sp,key:"",cx,cz};
 });
 // the old plain labels for these three are replaced by the status tags
@@ -1336,12 +1356,12 @@ const SPOTS={
   marel:[[-10.5,-2.4,-9.3,-2.4],[-0.2,-2.6,-1.3,-2.6]],
   trimmer:[[-8.6,-17.0,-5.4,-17.0],[-8.6,-14.0,-5.4,-14.0],[-8.6,-11.0,-5.4,-11.0],[-2.2,-16.0,-5.4,-16.0],[-2.2,-12.5,-5.4,-12.5],[-2.2,-10.2,-5.4,-10.2]],
   trim:[[-12.5,-14.3,-10.7,-14.3],[-12.5,-11.5,-10.7,-11.5]],
-  trim3:[[-17.1,-10.25,-18.15,-10.25]],
+  trim3:[[-16.95,-9.45,-17.85,-9.45],[-16.95,-8.35,-17.85,-8.35]],
   bs1:[[7.8,-5.75,9.4,-5.75],[9.4,-4.2,9.4,-5.75]],
   bs2:[[-15.7,-12.0,-17.5,-12.0],[-15.7,-10.6,-17.5,-11.6]],
   dicer:[[8.4,-8.6,10.0,-8.6],[8.4,-11.2,9.9,-11.2]],
-  slicer:[[-15.5,-5.4,-17.2,-5.4]],
-  vacuum:[[-15.7,-8.85,-17.4,-8.85],[-15.7,-7.9,-17.4,-7.9]],
+  slicer:[[-15.5,-2.0,-17.2,-2.0]],
+  vacuum:[[-15.7,-6.45,-17.4,-6.45],[-15.7,-5.5,-17.4,-5.5]],
   maint:[[7.3,-7.2,6.4,-7.2]]
 };
 const MAINT_SPOT={v1:[0.2,16.2,0.2,18.6],v2:[0.2,10.3,0.2,7.95],v3:[7.3,-7.2,6.4,-7.2]};
@@ -1352,11 +1372,11 @@ function routeTo(x,z,from){return findPath(from||DOOR,[x,z])}
 /* ---------- the floor model: what each station should have ---------- */
 const MACHINE_KEYS={"Variovac 1":"v1","Variovac 2":"v2","Variovac 3":"v3","Manual Pack":"mp"};
 const MACHINES=[{key:"v1",name:"Variovac 1"},{key:"v2",name:"Variovac 2"},{key:"v3",name:"Variovac 3"},{key:"mp",name:"Manual Pack",sub:"Rebox table"}];
-const OTHER=[{key:"marel",name:"Marel",def:2},{key:"trimmer",name:"Trim table (main)",def:5},{key:"trim",name:"Trim table",def:1},{key:"trim3",name:"Trim table 3",def:0},
+const OTHER=[{key:"marel",name:"Marel",def:2},{key:"trimmer",name:"Trim table (main)",def:5},{key:"trim",name:"Trim table",def:1},{key:"trim3",name:"Trim table 3",def:2},
   {key:"bs1",name:"Band saw 1",def:1},{key:"bs2",name:"Band saw 2",def:1},{key:"dicer",name:"Dicer / Grinder",def:1}];
 let other={};OTHER.forEach(o=>other[o.key]=o.def);
-try{const saved=JSON.parse(localStorage.getItem("floor_other_stations")||"null");if(saved)OTHER.forEach(o=>{if(typeof saved[o.key]==="number")other[o.key]=saved[o.key]})}catch(e){}
-function saveOther(){try{localStorage.setItem("floor_other_stations",JSON.stringify(other))}catch(e){}}
+try{const saved=JSON.parse(localStorage.getItem("floor_other_stations_v7")||"null");if(saved)OTHER.forEach(o=>{if(typeof saved[o.key]==="number")other[o.key]=saved[o.key]})}catch(e){}
+function saveOther(){try{localStorage.setItem("floor_other_stations_v7",JSON.stringify(other))}catch(e){}} // v7: fresh key so the new defaults (2 at trim table 3) apply
 
 let liveRuns={},records=[];
 const view={}; // per machine key: {state, staff, product, reason, category, since, live}
@@ -1390,6 +1410,10 @@ function wanted(){
   // Fajita / Cutlet crews come from the on/off panel
   ["fajita","cutlet"].forEach(k=>{const st=sideState(k);n[k]=st.on?Math.min(SPOTS[k].length,(st.people||0)+(st.trim||0)):0});
   if(trimBreak())TRIM_KEYS.forEach(k=>n[k]=0);   // trimmers' break: every trim table empties
+  // v8: end of the trimmers' day (device clock): from 2:30 PM only 2 stay at the main trim table, at 3:00 PM they leave too
+  {const m=nowMins();if(m>=15*60)TRIM_KEYS.forEach(k=>n[k]=0);else if(m>=14*60+30){n.trimmer=Math.min(n.trimmer||0,2);n.trim=0;n.trim3=0}
+  // MAREL: from 2:30 PM the operator + 1 helper stay until the MAREL finish time is entered on the Crew Board; then they leave
+   const mr=sideState("marel");if(mr.last&&!mr.on)n.marel=0;else if(m>=14*60+30)n.marel=2}
   return n;
 }
 /* ---------- trimmers' breaks: 9:00-9:30 and 12:00-12:30 every day (this device's clock) ----------
@@ -1410,7 +1434,7 @@ function roleFor(key,i){
   return null;
 }
 function assign(w,key,i,fromDoor){
-  const sp=spotFor(key,i);
+  const sp=spotFor(key,i);w.gather=false;
   w.key=key;w.slot=i;w.role=roleFor(key,i);w.spot=[sp[0],sp[1]];w.look=[sp[2],sp[3]];
   w.leaving=false;w.carry.visible=false;w.drop=false;w.onDrop=null;w.state="walk";
   w.path=findPath(fromDoor?DOOR:[w.g.position.x,w.g.position.z],[sp[0],sp[1]]);
@@ -1431,7 +1455,40 @@ function syncFloor(){
   pool.concat(leave).forEach(w=>{w.path=findPath([w.g.position.x,w.g.position.z],DOOR).concat([OUT]);w.leaving=true;w.key=null;w.carry.visible=false;w.drop=false;w.state="walk"});
   brk.forEach(w=>{w.path=findPath([w.g.position.x,w.g.position.z],BREAK_EXIT).concat([BREAK_OUT]);w.leaving=true;w.key=null;w.carry.visible=false;w.drop=false;w.state="walk"});
   placeMandy();
+  if(gatherOn)sendGather(); // anyone new on the floor joins the stretching
 }
+
+/* ---------- v8: Scheduled Stretching — everyone gathers in the most open area near the lines and stretches together ----------
+   Starts when a line on the Live Floor is on the planned stop "Scheduled Stretching"; when the lines come off it, everyone goes back. */
+let gatherOn=false,GATHER=null;
+function stretchNow(){return MACHINES.some(m=>{const v=view[m.key];return v&&v.state==="down"&&v.label==="Planned stop"&&/stretch/i.test(v.reason||"")})}
+function gatherPlace(){if(GATHER)return GATHER;
+  // largest fully open patch (5 m square), preferring one close to the packaging lines
+  const R=5,nx=G.nx,nz=G.nz,S=new Int32Array((nx+1)*(nz+1));
+  for(let j=0;j<nz;j++)for(let i=0;i<nx;i++)S[(j+1)*(nx+1)+i+1]=G.blk[j*nx+i]+S[j*(nx+1)+i+1]+S[(j+1)*(nx+1)+i]-S[j*(nx+1)+i];
+  const sum=(i1,j1,i2,j2)=>S[(j2+1)*(nx+1)+i2+1]-S[j1*(nx+1)+i2+1]-S[(j2+1)*(nx+1)+i1]+S[j1*(nx+1)+i1];
+  let best=null,bs=1e9;
+  for(let j=R;j<nz-R;j++)for(let i=R;i<nx-R;i++){const b=sum(i-R,j-R,i+R,j+R);const [x,z]=ctr(i,j);const sc=b*40+Math.hypot(x-3,z-6);if(sc<bs){bs=sc;best=[x,z]}}
+  const c=best||[3,6],spots=[];
+  for(let r=0;r<9&&spots.length<40;r++)for(let a=-r;a<=r;a++)for(let b=-r;b<=r;b++){if(Math.max(Math.abs(a),Math.abs(b))!==r)continue;
+    const x=c[0]+a*1.1,z=c[1]+b*1.25,[ci,cj]=cellOf(x,z);if(!G.blk[cj*nx+ci])spots.push([x,z])}
+  GATHER={c,spots,look:[c[0],c[1]+8]};return GATHER}
+function crewList(){const out=[];Object.values(crews).forEach(l=>(l||[]).forEach(w=>{if(w&&!w.leaving)out.push(w)}));return out}
+function sendGather(){const g=gatherPlace();const used=new Set(crewList().filter(w=>w.gather).map(w=>w.gSpot));
+  crewList().filter(w=>!w.gather).sort((a,b)=>Math.hypot(a.g.position.x-g.c[0],a.g.position.z-g.c[1])-Math.hypot(b.g.position.x-g.c[0],b.g.position.z-g.c[1])).forEach(w=>{
+    const k=g.spots.findIndex((s,i)=>!used.has(i));if(k<0)return;used.add(k);
+    w.gather=true;w.gSpot=k;w.carry.visible=false;w.drop=false;w.onDrop=null;w.state="walk";w.path=findPath([w.g.position.x,w.g.position.z],g.spots[k])})}
+function endGather(){crewList().forEach(w=>{if(!w.gather)return;w.gather=false;if(w.spot){w.state="walk";w.path=findPath([w.g.position.x,w.g.position.z],w.spot)}})}
+function updateGather(){const on=stretchNow();if(on===gatherOn)return;gatherOn=on;if(on)sendGather();else endGather()}
+// stretching routine, everyone in time: arms up · lean left · lean right · arms out with a small squat
+function exercise(w,t,L,legs,knees,arms,elb,tor,hd,dt){const ph=(t%8)/8,q=dt*3.5;
+  if(ph<0.25){arms.forEach((a,i)=>{L(a,"x",-2.9,q);L(a,"z",(i?-1:1)*0.12,q)});elb.forEach(e=>L(e,"x",-0.1,q));if(tor)L(tor,"z",0,q)}
+  else if(ph<0.5){arms.forEach((a,i)=>{L(a,"x",-2.9,q);L(a,"z",(i?-1:1)*0.12,q)});if(tor)L(tor,"z",0.32,q)}
+  else if(ph<0.75){arms.forEach((a,i)=>{L(a,"x",-2.9,q);L(a,"z",(i?-1:1)*0.12,q)});if(tor)L(tor,"z",-0.32,q)}
+  else{arms.forEach((a,i)=>{L(a,"x",0,q);L(a,"z",(i?-1:1)*1.45,q)});elb.forEach(e=>L(e,"x",0,q));if(tor)L(tor,"z",0,q)}
+  const sq=ph>=0.75?Math.max(0,Math.sin((ph-0.75)/0.25*Math.PI)):0;
+  legs.forEach(l=>L(l,"x",-0.35*sq,q));knees.forEach(n=>L(n,"x",0.7*sq,q));if(tor){L(tor,"x",0.08*sq,q);tor.position.y=0.9-0.12*sq}
+  if(hd){L(hd,"x",0,q);L(hd,"y",0,q)}}
 
 /* ---------- skids: one at the end of the centre conveyor, one beside Variovac 3 ---------- */
 function makeSkid(x,z,start,name){const k={g:new THREE.Group(),count:0,boxes:[],x,z};k.g.position.set(x,0,z);scene.add(k.g);
@@ -1485,6 +1542,7 @@ function updateWorker(w,dt,t){dressFor(w);
     p.y=Math.abs(s)*0.045*amp;return;
   }
   w.v=0;p.y*=0.8;
+  if(w.gather){const g=gatherPlace();faceTo(w,g.look[0],g.look[1],dt);exercise(w,t,L,legs,knees,arms,elb,tor,hd,dt);return}
   faceTo(w,w.look[0],w.look[1],dt);
   const busy=isBusy(w);
   // breathing and a little weight shift while standing
@@ -1996,9 +2054,38 @@ function setPhotoMode(on){photoMode=on;const st=document.getElementById("stage")
   try{localStorage.setItem("factory_mode",on?"photo":"3d")}catch(e){}}
 document.getElementById("modeBtn").addEventListener("click",()=>setPhotoMode(!photoMode));
 let PREVIEW=false;
+/* v9: turn / tilt / zoom from on-screen buttons or a TV remote's arrow keys. One press = a small step, holding = smooth movement. */
+const camHold={dir:null,raf:0,last:0};
+function camStep(dir,amt){
+  if(tour.on)setTour(false);fly=null;
+  const off=new THREE.Vector3().subVectors(camera.position,controls.target);const sph=new THREE.Spherical().setFromVector3(off);
+  if(dir==="left")sph.theta-=0.06*amt;if(dir==="right")sph.theta+=0.06*amt;
+  if(dir==="up")sph.phi-=0.045*amt;if(dir==="down")sph.phi+=0.045*amt;
+  if(dir==="in")sph.radius*=Math.pow(0.94,amt);if(dir==="out")sph.radius*=Math.pow(1/0.94,amt);
+  sph.phi=Math.max(0.12,Math.min(controls.maxPolarAngle,sph.phi));sph.radius=Math.max(controls.minDistance,Math.min(controls.maxDistance,sph.radius));
+  off.setFromSpherical(sph);camera.position.copy(controls.target).add(off);controls.update();
+}
+function camHome(){if(tour.on)setTour(false);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:HOME.pos.clone(),toT:HOME.target.clone(),t:0}}
+function camHoldTick(now){if(!camHold.dir)return;const dt=Math.min(0.05,(now-camHold.last)/1000)||0.016;camHold.last=now;camStep(camHold.dir,dt*12);camHold.raf=requestAnimationFrame(camHoldTick)}
+function camStart(dir,btn){camStop();if(dir==="home"){camHome();return}camStep(dir,1);camHold.dir=dir;camHold.btn=btn;if(btn)btn.classList.add("on");
+  camHold.timer=setTimeout(()=>{camHold.last=performance.now();camHold.raf=requestAnimationFrame(camHoldTick)},280)}
+function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf);if(camHold.btn)camHold.btn.classList.remove("on");camHold.dir=null;camHold.btn=null}
+(function(){const pad=document.getElementById("camPad");if(!pad)return;
+  pad.addEventListener("pointerdown",e=>{const b=e.target.closest("[data-cam]");if(!b)return;e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch(x){}camStart(b.dataset.cam,b)});
+  ["pointerup","pointercancel","pointerleave"].forEach(ev=>pad.addEventListener(ev,camStop));
+  // remote / keyboard "OK" on a focused button
+  pad.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset.cam){e.preventDefault();if(!camHold.dir)camStart(e.target.dataset.cam,e.target)}});
+  pad.addEventListener("keyup",e=>{if(e.key==="Enter"||e.key===" ")camStop()});
+  // arrow keys, + / − and channel up / down on a remote move the view directly
+  const KEY={ArrowLeft:"left",ArrowRight:"right",ArrowUp:"up",ArrowDown:"down","+":"in","=":"in","-":"out","_":"out",PageUp:"in",PageDown:"out",ChannelUp:"in",ChannelDown:"out",MediaFastForward:"in",MediaRewind:"out"};
+  document.addEventListener("keydown",e=>{const t=e.target;if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"))return;
+    if(t&&t.closest&&t.closest("#camPad"))return;const d=KEY[e.key];if(!d)return;e.preventDefault();if(camHold.dir!==d)camStart(d,null)});
+  document.addEventListener("keyup",e=>{if(KEY[e.key])camStop()});
+  window.addEventListener("blur",camStop);
+})();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v6";
+const FLOOR3D_VERSION="v10";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
@@ -2016,16 +2103,17 @@ document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{if(
   if(typeof firebase!=="undefined"){location.href="index.html#"+String(t.dataset.name||"").toLowerCase();return} // hosted next to the CI Tracker: open that tab
   const b=document.getElementById("banner");b.hidden=false;b.textContent=t.dataset.name+" opens the CI Tracker's "+t.dataset.name+" tab once this view is connected. In this sample it stays on the Factory View."}));
 
+let lastSched=null;setInterval(()=>{const m=nowMins();const b=(m>=15*60?2:m>=14*60+30?1:0);if(b!==lastSched){const first=lastSched===null;lastSched=b;if(!first)syncFloor()}},10000);
 let lastTrimBreak=null;setInterval(()=>{const b=trimBreak();if(b!==lastTrimBreak){const first=lastTrimBreak===null;lastTrimBreak=b;if(!first)syncFloor()}},10000);
 let placed=false;
-function refresh(){syncFloor();updateAlarmBar();
+function refresh(){syncFloor();updateGather();updateAlarmBar();
   if(machinePick&&!sideSheet.hidden)renderMachine();
   if(!placed){placed=true;workers.forEach(w=>{const s=w.spot;w.g.position.set(s[0],0,s[1]);w.path=[];w.state="work"})} // first load: everyone already at their station
   renderCards()}
 
 /* ---------- camera ---------- */
 let fly=null;
-const FOCUS={v1:[0.0,18.6],v2:[0.0,7.95],v3:[5.25,-7.1],mp:[13.1,10.4],fajita:[-12.9,7.96],cutlet:[-8.2,7.95],slicer:[-17.25,-5.4],vacuum:[-17.45,-8.4],marel:[-5.5,-3.25]};
+const FOCUS={v1:[0.0,18.6],v2:[0.0,7.95],v3:[5.25,-7.1],mp:[13.1,10.4],fajita:[-12.9,7.96],cutlet:[-8.2,7.95],slicer:[-17.25,-2.0],vacuum:[-17.45,-6.0],marel:[-5.5,-3.25]};
 function flyTo(key){highlight[key]=performance.now()/1000;const g=FOCUS[key];const tgt=new THREE.Vector3(g[0],0.8,g[1]);
   fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+7,11,g[1]+13),toT:tgt,t:0}}
 document.getElementById("resetCam").onclick=()=>{fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:HOME.pos.clone(),toT:HOME.target.clone(),t:0}};
@@ -2140,7 +2228,13 @@ function startPreview(){
 /* ---------- loop ---------- */
 function resize(){const r=stage.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/Math.max(1,r.height);
   camera.fov=r.width<520?46:40;camera.updateProjectionMatrix()}
-new ResizeObserver(resize).observe(stage);resize();
+function fitStartView(){try{
+  const r=stage.getBoundingClientRect();if(EMBED||r.width<1000||r.height<300)return;
+  const asp=r.width/r.height,k=asp>=1.35?0.85:(asp>=1.15?0.92:1); // wide screens (TV) start closer so the floor fills it
+  VVIEW.target.set(3,0,6.5);VVIEW.pos.set(3,VDIR[1]*k,6.5+VDIR[2]*k);window.__fit={k,asp};
+  if(!camTouched&&!fly&&!tour.on){camera.position.copy(VVIEW.pos);controls.target.copy(VVIEW.target)}
+}catch(e){}}
+new ResizeObserver(()=>{resize();fitStartView()}).observe(stage);resize();fitStartView();
 /* ---------- Mandy: one of the longest-serving people in packaging ----------
    Short dark bob, glasses, and her name on the helmet. She takes the first spot on the busiest line that's running. */
 var MANDY=null;

@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v125 - 2026-10-21 (Lead Hand / Yield Operator: Move to another station without Off and On again; 3D floor v6: Slicer and Vacuum Sealer get banners like Fajita / Cutlet, bigger and closer together)';
+const APP_VERSION = 'v129 - 2026-10-21 (Loads 3D floor v10: arrow pad and TV remote keys, solid machine tiles, closer start view on wide screens)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1442,7 +1442,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v6';
+const FLOOR3D_REV = 'v10';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
