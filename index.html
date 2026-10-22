@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v122 - 2026-10-21 (Side machines pause automatically when every Variovac goes on Break, and restart with the same crew when the Variovacs come back from break. Paused machines show on the Crew Board with Don\'t restart / Restart now)';
+const APP_VERSION = 'v123 - 2026-10-21 (Dashboard floor: Enlarge removed; "Open full screen" opens the 3D floor with its info panel in its own window sized to the screen on laptops / desktops / TVs)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1425,8 +1425,26 @@ function renderFloorSwitch(){
 }
 function renderFloor3DSlot(){
   return `<div class="fp-3dslot" style="position:relative;height:min(62vh,560px);min-height:300px;border-radius:12px;border:1px solid var(--line);background:#0D1A2D;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:12px;">Loading 3D floor…</div>
-    <div style="font-size:11px;color:var(--muted2);margin-top:6px;">Live from the tracker · drag to turn, pinch to zoom · tap a machine for details.</div>`;
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted2);margin-top:6px;"><span>Live from the tracker · drag to turn, pinch to zoom · tap a machine for details.</span>${fullFloorLink()}</div>`;
 }
+/* v123: "Open full screen" — the 3D floor with the info panel (floor3d.html) in its own window, sized to the screen.
+   Laptop / desktop / TV only (shown when the browser window is at least 900 px wide). Clicking again brings the same window to the front. */
+function fullFloorLink(){
+  if(window.innerWidth < 900) return '';
+  return `<a class="cb-link" href="floor3d.html" target="ciFloor3d" rel="opener" onclick="return openFullFloor(event)" style="font-size:12.5px;white-space:nowrap;">Open full screen ↗</a>`;
+}
+let fullFloorWin = null;
+function openFullFloor(e){
+  try{
+    if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
+    const W = screen.availWidth, H = screen.availHeight, L = screen.availLeft||0, T = screen.availTop||0;
+    const w = window.open('floor3d.html', 'ciFloor3d', `popup=yes,width=${W},height=${H},left=${L},top=${T}`);
+    if(w){ fullFloorWin = w; try{ w.focus(); }catch(err){} return false; }
+  }catch(err){}
+  return true; // pop-up blocked: the link opens it in a new tab instead
+}
+let fullFloorWide = window.innerWidth >= 900;
+window.addEventListener('resize', ()=>{ const w = window.innerWidth >= 900; if(w!==fullFloorWide){ fullFloorWide = w; if(Router.current==='dashboard') render(); } });
 let floor3DEl = null, floor3DShown = false;
 function placeFloor3D(){
   const slot = document.querySelector('.fp-3dslot');
@@ -1475,7 +1493,7 @@ function renderFloorPlan(){
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:var(--muted);gap:8px;flex-wrap:wrap;">
       <span style="line-height:1.9;"><span class="fp-key" style="--c:var(--run)"></span>Running <span class="fp-key" style="--c:var(--wait)"></span>Waiting <span class="fp-key" style="--c:var(--change)"></span>Changeover <span class="fp-key" style="--c:var(--brk)"></span>Break <span class="fp-key" style="--c:var(--planned)"></span>Planned <span class="fp-key" style="--c:var(--amber)"></span>Side machine on <span class="fp-key" style="--c:var(--nowork)"></span>Idle</span>
-      <span class="cb-link" onclick="floorBig=!floorBig;render()">${floorBig?'⤡ Fit to screen':'⤢ Enlarge'}</span>
+      ${fullFloorLink()}
     </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:4px;">Tap a machine for details.</div>`;
 }
