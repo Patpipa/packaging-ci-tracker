@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v123 - 2026-10-21 (Dashboard floor: Enlarge removed; "Open full screen" opens the 3D floor with its info panel in its own window sized to the screen on laptops / desktops / TVs)';
+const APP_VERSION = 'v124 - 2026-10-21 (3D floor is always loaded fresh (version tag v5), so a new floor3d.html upload shows straight away on every device)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1431,14 +1431,16 @@ function renderFloor3DSlot(){
    Laptop / desktop / TV only (shown when the browser window is at least 900 px wide). Clicking again brings the same window to the front. */
 function fullFloorLink(){
   if(window.innerWidth < 900) return '';
-  return `<a class="cb-link" href="floor3d.html" target="ciFloor3d" rel="opener" onclick="return openFullFloor(event)" style="font-size:12.5px;white-space:nowrap;">Open full screen ↗</a>`;
+  return `<a class="cb-link" href="floor3d.html?v=${FLOOR3D_REV}" target="ciFloor3d" rel="opener" onclick="return openFullFloor(event)" style="font-size:12.5px;white-space:nowrap;">Open full screen ↗</a>`;
 }
 let fullFloorWin = null;
+/* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
+const FLOOR3D_REV = 'v5';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
     const W = screen.availWidth, H = screen.availHeight, L = screen.availLeft||0, T = screen.availTop||0;
-    const w = window.open('floor3d.html', 'ciFloor3d', `popup=yes,width=${W},height=${H},left=${L},top=${T}`);
+    const w = window.open('floor3d.html?v='+FLOOR3D_REV, 'ciFloor3d', `popup=yes,width=${W},height=${H},left=${L},top=${T}`);
     if(w){ fullFloorWin = w; try{ w.focus(); }catch(err){} return false; }
   }catch(err){}
   return true; // pop-up blocked: the link opens it in a new tab instead
@@ -1455,7 +1457,7 @@ function placeFloor3D(){
   }
   if(!floor3DEl){
     const f = document.createElement('iframe');
-    f.src = 'floor3d.html?embed=1'; f.title = '3D packaging floor';
+    f.src = 'floor3d.html?embed=1&v='+FLOOR3D_REV; f.title = '3D packaging floor';
     f.style.cssText = 'position:absolute;border:0;border-radius:12px;z-index:2;background:#0D1A2D;';
     f.addEventListener('load', ()=>{ const s=document.querySelector('.fp-3dslot'); if(s) s.textContent=''; });
     document.body.appendChild(f); floor3DEl = f;
