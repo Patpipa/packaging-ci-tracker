@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v121 - 2026-10-20 (Vacuum Sealer added as a side machine for big sealing orders. Crew bar: shows the breakdown, e.g. 6 on lines · 1 Fajita · no spare; takes the colour of a line that is Waiting / Changeover / Planned / Break, with the live reason and how many people are free to help; spare says where it comes from, e.g. 2 spare (Variovac 2 not running))';
+const APP_VERSION = 'v122 - 2026-10-21 (Side machines pause automatically when every Variovac goes on Break, and restart with the same crew when the Variovacs come back from break. Paused machines show on the Crew Board with Don\'t restart / Restart now)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -890,6 +890,7 @@ const CREW_FOOTNOTE_LINES = [
   'Lines that are not running, or are on No Work Scheduled, are not counted.',
   'Crew bar colour: green when everything is running and covered; it takes the status colour of any line that is stopped right now (Waiting red, Changeover orange, Planned, Break), with the reason entered on the Live Floor. People on a stopped line still count on that line, shown as free to help.',
   'Spare = crew minus people on lines and side machines. When there is spare, the bar says why, e.g. a line not running or on No Work Scheduled.',
+  'Break: when every Variovac on the Live Floor is on Break, side machines that are on pause at the time the last Variovac went on break, and restart with the same crew when the first Variovac comes back. Break minutes are not counted as side-machine time. Tap Don\'t restart if the job finished.',
   'Short = each line on its own: required minus packaging staff actually on that line. An extra person on one line does not cover a missing person on another.',
   'Packaging crew changes during the day (someone goes home, arrives late) are logged with the time, so the reports show e.g. 6 from 8:00 AM → 5 from 10:15 AM.',
   'A line with no headcount entered shows "not entered" and is not counted either way.',
@@ -903,6 +904,69 @@ function crewFootnoteHTML(forPdf, noTitle){
   return `<div style="font-size:${forPdf?'10':'11.5'}px;color:${c};line-height:1.5;">${noTitle?'':'<div style="font-weight:700;margin-bottom:2px;">How this is calculated</div>'}<ul style="margin:0;padding-left:16px;">${CREW_FOOTNOTE_LINES.map(l=>`<li>${escapeHtml(l)}</li>`).join('')}</ul></div>`;
 }
 function personDot(cls){ return `<span class="cb-p ${cls}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>`; }
+/* v122: side machines follow the Variovac break. When every Variovac on the Live Floor is on Break, any side machine that is on
+   pauses at the time the last Variovac went on break; when the first Variovac comes back from Break, it restarts with the same crew
+   at that time. Times come from the Live Floor entries, so whichever device opens the tracker next fixes it, at the right times. */
+const VARIOVACS = ['Variovac 1','Variovac 2','Variovac 3'];
+function variovacBreakState(){
+  const act = VARIOVACS.map(m=>({m, live:Store.liveRuns[m]})).filter(x=>x.live && !isStaleLive(x.live) && lineStaffNow(x.m).active);
+  if(!act.length) return {any:false};
+  const open = act.map(x=>{ const dts = x.live.downtimeSegments||[], o = dts[dts.length-1]; return (x.live.status!=='RUNNING' && o && !o.end && o.status==='BREAK') ? o : null; });
+  const all = open.every(Boolean);
+  return {any:true, all, start: all ? open.map(o=>o.start).sort().pop() : null};
+}
+function breakEndAfter(t){
+  const ends = [];
+  VARIOVACS.forEach(m=>{ const live = Store.liveRuns[m]; if(!live) return; (live.downtimeSegments||[]).forEach(o=>{ if(o.status==='BREAK' && o.end && o.end>=t) ends.push(o.end); }); });
+  return ends.sort()[0] || nowHHMM();
+}
+let sideBreakBusy = false;
+async function syncSideBreaks(){
+  if(sideBreakBusy || !Store.ready) return;
+  const date = todayStr(), d = dayLogFor(date);
+  if(!d) return;
+  const b = variovacBreakState();
+  let changed = false, msg = '';
+  if(b.any && b.all && !d.breakPause){
+    const runs = (d.side||[]).filter(x=>!x.end && x.start < b.start);
+    if(runs.length){
+      runs.forEach(x=>{ x.end = b.start; x.breakPaused = true; });
+      d.breakPause = {start: b.start, ids: runs.map(x=>x.id)};
+      changed = true; msg = `${runs.map(x=>x.machine).join(', ')} paused for break`;
+    }
+  } else if(d.breakPause && b.any && !b.all){
+    const at = breakEndAfter(d.breakPause.start), back = [];
+    (d.side||[]).filter(x=>d.breakPause.ids.includes(x.id)).forEach(x=>{
+      if((d.side||[]).some(y=>y.machine===x.machine && !y.end)) return; // already restarted by hand
+      d.side.push({id: uid(), machine: x.machine, start: at, end: null, pack: x.pack, trim: x.trim, afterBreak: true});
+      back.push(x.machine);
+    });
+    d.breakPause = null;
+    changed = true; if(back.length) msg = `${back.join(', ')} restarted after break`;
+  }
+  if(!changed) return;
+  sideBreakBusy = true;
+  try{ const ok = await saveDayLogNow(); if(ok && msg) toast(msg); } finally { sideBreakBusy = false; }
+}
+function breakPausedRun(date, machine){
+  const d = dayLogFor(date);
+  if(!d || !d.breakPause) return null;
+  return (d.side||[]).find(x=>x.machine===machine && d.breakPause.ids.includes(x.id)) || null;
+}
+async function dontRestartSide(id){
+  const d = ensureDayLog(todayStr());
+  if(!d.breakPause) return;
+  d.breakPause.ids = d.breakPause.ids.filter(x=>x!==id);
+  if(!d.breakPause.ids.length) d.breakPause = null;
+  await saveDayLogNow(); toast('Will stay off after break');
+}
+async function restartSideNow(id){
+  const d = ensureDayLog(todayStr()), x = (d.side||[]).find(y=>y.id===id);
+  if(!x) return;
+  d.side.push({id: uid(), machine: x.machine, start: nowHHMM(), end: null, pack: x.pack, trim: x.trim});
+  if(d.breakPause){ d.breakPause.ids = d.breakPause.ids.filter(y=>y!==id); if(!d.breakPause.ids.length) d.breakPause = null; }
+  await saveDayLogNow(); toast(`${x.machine} restarted`);
+}
 /* v121: what a line on the Live Floor is doing right now when it is not running: status (with its colour), live reason, minutes so far */
 function lineStopNow(m){
   const live = Store.liveRuns[m];
@@ -962,6 +1026,13 @@ function renderCrewBoard(){
     const todayMin = sideMinutesToday(sm.name);
     const tag = todayMin>0 ? `<span class="cb-tag">${fmtShort(todayMin)} today</span>` : '';
     if(sideSetup && sideSetup.machine===sm.name) return renderSideSetup(sm);
+    const bp = !run && breakPausedRun(todayStr(), sm.name);
+    if(bp){
+      const ppl = `${bp.pack} packaging${bp.trim?` + ${bp.trim} trimmer`:''}`;
+      return `<div class="cb-row" style="border-color:var(--brk);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">⏸ Paused for break since ${fmtTime12(bp.end)}</span>
+        <div class="cb-mut" style="width:100%;">Restarts with ${ppl} when the Variovacs come back from break.</div>
+        <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="dontRestartSide('${bp.id}')">Don't restart</button><button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="restartSideNow('${bp.id}')">▶ Restart now</button></div></div>`;
+    }
     if(run){
       const dots = []; for(let i=0;i<run.pack;i++) dots.push(personDot('side')); for(let i=0;i<run.trim;i++) dots.push(personDot('tr'));
       return `<div class="cb-row" style="border-color:var(--amber);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
@@ -4109,6 +4180,7 @@ function attachFloorVideo(){
 }
 function afterRender(){
   attachFloorVideo();
+  setTimeout(syncSideBreaks, 0);
   placeFloor3D();
   if(Router.current==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); }
   if(Router.current==='live' && liveScrollTarget){
