@@ -16,7 +16,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v5 · CI Tracker</title>
+<title>3D Floor · v6 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -966,11 +966,12 @@ cutletModel(solidPx(387,1298,457,1338));label("Cutlet machine",PX(422,1318)[0],2
 const trimBig=tablePx(435,255,635,625);label("Trim table (main)",trimBig.x,2.3,trimBig.z,.8);
 const trimMid=tablePx(280,245,365,610);label("Trim table",trimMid.x,2.3,trimMid.z,.7);
 // slim trim table squeezed in between band saw 2 and the vacuum sealer
-const trimSmall={x:-18.15,z:-10.25,w:0.6,d:1.05};table(trimSmall.w,trimSmall.d,trimSmall.x,trimSmall.z);
+const trimSmall={x:-18.1,z:-10.05,w:0.75,d:1.6}; // v6: longer, fills the space up to the vacuum sealertable(trimSmall.w,trimSmall.d,trimSmall.x,trimSmall.z);
 OBST.push([trimSmall.x-0.3,trimSmall.z-0.53,trimSmall.x+0.3,trimSmall.z+0.53]);label("Trim table 3",trimSmall.x,2.3,trimSmall.z,.65);
 (function(){const r=solidPx(10,480,85,565);bandsawModel(r.x,r.z,1,1.05);label("Band saw 2",r.x,3.5,r.z,.65)})();
-(function(){const r=solidPx(15,615,90,755);sealerModel(r.x,r.z,1);label("Vacuum sealer",r.x,2.8,r.z,.7)})();
-(function(){const r=solidPx(30,805,105,975);slicerModel(r.x,r.z,1);label("Slicer",r.x,3.0,r.z,.6)})();
+// v6: vacuum sealer and slicer drawn at the size of the Fajita / Cutlet machines, and placed side by side
+(function(){const r=solidPx(20,625,85,705);sealerModel(r.x,r.z,1).scale.setScalar(1.4)})();
+(function(){const r=solidPx(25,745,95,825);slicerModel(r.x,r.z,1).scale.setScalar(1.4)})();
 
 // rooms and passages
 // Warehouse 1, Debox Room and Burger Room names are on their wall signs
@@ -1120,7 +1121,9 @@ const SHIFT_END="16:30";
 const SIDE=[
   {key:"fajita",name:"Fajita machine",maxPeople:2,defPeople:2,rect:[-13.9,7.33,-11.9,8.58]},
   {key:"cutlet",name:"Cutlet machine",maxPeople:1,defPeople:1,rect:[-9.08,7.45,-7.33,8.45]},
-  {key:"marel",name:"Marel",marel:true,rect:[-8.75,-7.5,-2.25,1.0]}
+  {key:"marel",name:"Marel",marel:true,rect:[-8.75,-7.5,-2.25,1.0]},
+  {key:"slicer",name:"Slicer",maxPeople:1,defPeople:1,rect:[-18.05,-6.2,-16.45,-4.55]},
+  {key:"vacuum",name:"Vacuum sealer",maxPeople:2,defPeople:2,rect:[-18.25,-9.2,-16.65,-7.55]}
 ];
 let floorLog={days:{}};
 let fsCol=null;                         // set once signed in
@@ -1337,7 +1340,8 @@ const SPOTS={
   bs1:[[7.8,-5.75,9.4,-5.75],[9.4,-4.2,9.4,-5.75]],
   bs2:[[-15.7,-12.0,-17.5,-12.0],[-15.7,-10.6,-17.5,-11.6]],
   dicer:[[8.4,-8.6,10.0,-8.6],[8.4,-11.2,9.9,-11.2]],
-  slicer:[[-15.3,-2.8,-17.0,-2.8]],
+  slicer:[[-15.5,-5.4,-17.2,-5.4]],
+  vacuum:[[-15.7,-8.85,-17.4,-8.85],[-15.7,-7.9,-17.4,-7.9]],
   maint:[[7.3,-7.2,6.4,-7.2]]
 };
 const MAINT_SPOT={v1:[0.2,16.2,0.2,18.6],v2:[0.2,10.3,0.2,7.95],v3:[7.3,-7.2,6.4,-7.2]};
@@ -1378,8 +1382,8 @@ function wanted(){
   const n={};
   MACHINES.forEach(m=>{view[m.key]=readMachine(m.name);n[m.key]=Math.min(8,view[m.key].staff||0)});
   OTHER.forEach(o=>n[o.key]=Math.min(SPOTS[o.key].length,other[o.key]));
-  // the slicer is staffed only when it's switched on in the tracker's Crew Board
-  {const st=sideState("slicer");n.slicer=st.on?Math.min(SPOTS.slicer.length,(st.people||0)+(st.trim||0)):0}
+  // the slicer and vacuum sealer are staffed only when switched on in the tracker's Crew Board
+  ["slicer","vacuum"].forEach(k=>{const st=sideState(k);n[k]=st.on?Math.min(SPOTS[k].length,(st.people||0)+(st.trim||0)):0});
   // maintenance comes out for a Machine / Equipment problem
   const broken=MACHINES.find(m=>m.key!=="mp"&&view[m.key].state==="down"&&/machine|equipment/i.test(view[m.key].category||""));
   n.maint=broken?1:0;maintFor=broken?broken.key:null;
@@ -1488,7 +1492,7 @@ function updateWorker(w,dt,t){dressFor(w);
   if(tor){tor.position.y=0.9+br*0.007;L(tor,"z",Math.sin(t*0.45+w.id)*0.025,0.05)}
   legs.forEach((l,i)=>L(l,"x",i===((w.id+Math.floor(t/7))%2)?0.04:-0.02));knees.forEach((n,i)=>L(n,"x",i===((w.id+Math.floor(t/7))%2)?0.1:0.03));
   if(busy){
-    const kk=w.key||"",task=/^(trimmer|trim|trim3)$/.test(kk)?"cut":kk==="marel"?"load":/^(fajita|cutlet|slicer|bs1|bs2|dicer)$/.test(kk)?"feed":"pack";
+    const kk=w.key||"",task=/^(trimmer|trim|trim3)$/.test(kk)?"cut":kk==="marel"?"load":/^(fajita|cutlet|slicer|vacuum|bs1|bs2|dicer)$/.test(kk)?"feed":"pack";
     if(task==="cut"){w.phase+=dt*6.5;const st=Math.sin(w.phase*1.3);                 // knife hand saws, other hand holds the meat
       L(arms[1],"x",-0.85+st*0.22);L(arms[1],"z",-0.12);L(elb[1],"x",-1.05+Math.sin(w.phase*1.3+1.1)*0.35);
       L(arms[0],"x",-0.75);L(arms[0],"z",0.18);L(elb[0],"x",-0.95+Math.sin(w.phase*0.4)*0.05);
@@ -1587,7 +1591,6 @@ function renderCards(){
   const sideCard=`<div class="card sidecard" data-tone="nowork">
       <div class="ctop"><span class="cname">Side machines</span>${td.crew?`<span class="chip crewchip">${td.crew} on shift</span>`:""}</div>
       ${SIDE.map(s=>{const st=sideState(s.key),l=sideLine(s,st);return `<button class="srow sidebtn" data-sidekey="${s.key}" style="--st:${TONE_CSS[l.tone]}"><span><i class="dot"></i>${s.name}</span><span class="sline">${esc(l.line)}</span></button>`}).join("")}
-      ${sideState("slicer").on?`<div class="srow helperline"><span><i class="dot"></i>Slicer</span><span class="sline">${sideState("slicer").people||0} people · since ${t12(sideState("slicer").since)}</span></div>`:""}
       ${HELPERS.filter(h=>sideState(h.key).on).map(h=>`<div class="srow helperline"><span><i class="dot"></i>${h.name}</span><span class="sline">on ${esc(sideState(h.key).where||"the line")} since ${t12(sideState(h.key).since)}</span></div>`).join("")}
     </div>`;
   cardsEl.innerHTML=html+sideCard;
@@ -1877,7 +1880,7 @@ function renderPanels(){
   // team: staff per line from the Live Floor runs, side machines and off-line helpers from the floor log
   const staffOf=v=>!v?0:(v.state==="run"||v.state==="down")?(v.staff||0):(v.state==="break"?(v.crew||0):0);
   const teamRows=MACHINES.map(m=>{const n=staffOf(view[m.key]);return `<div class="row"><span class="lbl">${m.name}</span><span class="val">${n} staff</span></div>`}).join("")+
-    SIDE.filter(s=>s.key!=="marel").concat([{key:"slicer",name:"Slicer"}]).map(s=>{const st=sideState(s.key);return `<div class="row"><span class="lbl">${s.name}</span><span class="val">${st.on?(st.people||0)+" staff"+(st.trim?" + "+st.trim+" trim":""):'<span style="color:var(--muted2)">off</span>'}</span></div>`}).join("")+
+    SIDE.filter(s=>s.key!=="marel").map(s=>{const st=sideState(s.key);return `<div class="row"><span class="lbl">${s.name}</span><span class="val">${st.on?(st.people||0)+" staff"+(st.trim?" + "+st.trim+" trim":""):'<span style="color:var(--muted2)">off</span>'}</span></div>`}).join("")+
     HELPERS.map(h=>{const st=sideState(h.key);return `<div class="row"><span class="lbl">${h.name}</span><span class="val">${roleOff(h.key)?'<span style="color:var(--muted2)">off today</span>':st.on?"on "+esc(st.where||"line"):'<span style="color:var(--muted2)">off line</span>'}</span></div>`}).join("");
 
   // machine most affected (most waiting today) — same rule as the tracker
@@ -1995,7 +1998,7 @@ document.getElementById("modeBtn").addEventListener("click",()=>setPhotoMode(!ph
 let PREVIEW=false;
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v5";
+const FLOOR3D_VERSION="v6";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
@@ -2022,7 +2025,7 @@ function refresh(){syncFloor();updateAlarmBar();
 
 /* ---------- camera ---------- */
 let fly=null;
-const FOCUS={v1:[0.0,18.6],v2:[0.0,7.95],v3:[5.25,-7.1],mp:[13.1,10.4],fajita:[-12.9,7.96],cutlet:[-8.2,7.95],slicer:[-15.3,-2.8],marel:[-5.5,-3.25]};
+const FOCUS={v1:[0.0,18.6],v2:[0.0,7.95],v3:[5.25,-7.1],mp:[13.1,10.4],fajita:[-12.9,7.96],cutlet:[-8.2,7.95],slicer:[-17.25,-5.4],vacuum:[-17.45,-8.4],marel:[-5.5,-3.25]};
 function flyTo(key){highlight[key]=performance.now()/1000;const g=FOCUS[key];const tgt=new THREE.Vector3(g[0],0.8,g[1]);
   fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+7,11,g[1]+13),toT:tgt,t:0}}
 document.getElementById("resetCam").onclick=()=>{fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:HOME.pos.clone(),toT:HOME.target.clone(),t:0}};

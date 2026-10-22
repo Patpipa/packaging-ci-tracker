@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v124 - 2026-10-21 (3D floor is always loaded fresh (version tag v5), so a new floor3d.html upload shows straight away on every device)';
+const APP_VERSION = 'v125 - 2026-10-21 (Lead Hand / Yield Operator: Move to another station without Off and On again; 3D floor v6: Slicer and Vacuum Sealer get banners like Fajita / Cutlet, bigger and closer together)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -693,10 +693,17 @@ async function startOffline(){
   const o = offlineSetup;
   if(!o.where){ toast('Pick where they are helping'); return; }
   const d = ensureDayLog(todayStr()); d.offline = d.offline || [];
-  d.offline.push({id: uid(), role: o.role, where: o.where, start: nowHHMM(), end: null});
+  const now = nowHHMM();
+  // v125: moving to another station — close the current entry at this time and start the new one, no Off / On needed
+  if(o.moveId){
+    const cur = d.offline.find(x=>x.id===o.moveId && !x.end);
+    if(cur && cur.where===o.where){ offlineSetup = null; render(); toast(`${o.role} is already on ${o.where}`); return; }
+    if(cur) cur.end = now;
+  }
+  d.offline.push({id: uid(), role: o.role, where: o.where, start: now, end: null});
   offlineSetup = null;
   await saveDayLogNow();
-  toast(`${o.role} on the line — ${o.where}`);
+  toast(o.moveId ? `${o.role} moved to ${o.where}` : `${o.role} on the line — ${o.where}`);
 }
 async function stopOffline(id){
   const d = ensureDayLog(todayStr()), cur = (d.offline||[]).find(x=>x.id===id);
@@ -723,11 +730,11 @@ function renderOfflineRows(){
     if(!roleIn(todayStr(), role)) return `<div class="cb-row" style="opacity:.6;"><span class="cb-nm">${role} <span class="cb-mut">off today</span></span><button class="cb-btn" style="flex:0 0 auto;padding:9px 14px;" onclick="setRoleIn('${role}',true)">In today</button></div>`;
     const cur = open.find(o=>o.role===role);
     if(offlineSetup && offlineSetup.role===role){
-      return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--brk);"><span class="cb-nm">${role} — helping where?</span>
+      return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--brk);"><span class="cb-nm">${role} — ${offlineSetup.moveId?'move to which station?':'helping where?'}</span>
         <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${OFFLINE_WHERE.map(w=>`<button class="cb-btn" style="flex:1 1 30%;font-size:12px;${offlineSetup.where===w?'border-color:var(--brk);color:var(--brk);background:var(--brk-dim);':''}" onclick="offlineSetup.where='${w}';render()">${w}</button>`).join('')}</div>
-        <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="offlineSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="startOffline()">On line</button></div></div>`;
+        <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="offlineSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="startOffline()">${offlineSetup.moveId?'Move here':'On line'}</button></div></div>`;
     }
-    if(cur) return `<div class="cb-row" style="border-color:var(--brk);gap:8px;"><span class="cb-nm">${role} <span class="cb-tag" style="background:var(--brk-dim);color:var(--brk);">ON LINE · ${cur.where} · since ${fmtTime12(cur.start)}</span></span><button class="cb-btn" style="flex:0 0 auto;border-color:var(--brk);color:var(--brk);" onclick="stopOffline('${cur.id}')">Off</button></div>`;
+    if(cur) return `<div class="cb-row" style="border-color:var(--brk);gap:8px;"><span class="cb-nm">${role} <span class="cb-tag" style="background:var(--brk-dim);color:var(--brk);">ON LINE · ${cur.where} · since ${fmtTime12(cur.start)}</span></span><span style="display:flex;gap:6px;flex:0 0 auto;"><button class="cb-btn" style="flex:0 0 auto;" onclick="offlineSetup={role:'${role}',where:'',moveId:'${cur.id}'};render()">Move</button><button class="cb-btn" style="flex:0 0 auto;border-color:var(--brk);color:var(--brk);" onclick="stopOffline('${cur.id}')">Off</button></span></div>`;
     return `<div class="cb-row"><span class="cb-nm">${role} <span class="cb-mut">in today · off line</span><div><span class="cb-link" style="font-family:Inter,sans-serif;font-size:11.5px;color:var(--muted);" onclick="setRoleIn('${role}',false)">mark off today</span></div></span><button class="cb-btn" style="flex:0 0 auto;padding:9px 16px;" onclick="offlineSetup={role:'${role}',where:''};render()">On line</button></div>`;
   }).join('');
   const log = (dayLogFor(todayStr())||{}).offline||[];
@@ -1435,7 +1442,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v5';
+const FLOOR3D_REV = 'v6';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
