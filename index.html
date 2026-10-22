@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v130 - 2026-10-21 (Loads 3D floor v11: colour legend in the full-screen view)';
+const APP_VERSION = 'v132 - 2026-10-21 (Upstream Impact: Crew · MAREL · Side Machines now laid out exactly like the Daily Report, whole period then each day)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1171,16 +1171,26 @@ function dayLogSections(date){
 }
 /* Upstream Impact: side-machine summary for the whole range */
 function sideLabourSections(x){
+  /* v132: same layout and order as the Daily Report (CREW · MAREL · SIDE MACHINES), totalled for the range */
+  const out = [];
+  const crew = OFFLINE_ROLES.map(r=>({k:r, v: x.offTotals[r] ? `on the line ${fmtDur(x.offTotals[r])} in total` : 'stayed off the line'}));
+  out.push({title:'CREW', rows:crew});
+  const md = x.perDay.filter(d=>d.marelEnd), late = md.filter(d=>toMin(d.marelEnd) > SHIFT_END_MIN);
+  if(md.length) out.push({title:'MAREL', rows:[{k:'Finished after 4:30 PM', v: late.length ? `${late.length} of ${md.length} day${md.length>1?'s':''}` : `none (0 of ${md.length} day${md.length>1?'s':''})`, red: late.length>0}]});
+  const side = [];
   const used = SIDE_MACHINES.filter(m=>x.perMachine[m.name].runMin>0);
-  const sm = used.map(m=>({k:m.name, v: fmtDur(x.perMachine[m.name].packMin)}));
+  used.forEach(m=>{ const pm = x.perMachine[m.name]; side.push({k:m.name, v:`${fmtDur(pm.packMin)} packaging labour${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}`}); });
   const unused = SIDE_MACHINES.filter(m=>!used.includes(m)).map(m=>m.name);
-  if(unused.length) sm.push({k: unused.join(' / '), v:'not used'});
-  sm.push({k:'Trimmer help', v: x.trimTotal ? fmtDur(x.trimTotal) : 'none'});
-  return [
-    {title:'SIDE MACHINES (PACKAGING LABOUR)', rows: sm},
-    {title:'STAFFING IMPACT', rows:[{k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0}]},
-    {title:'OFF-LINE ROLES ON THE LINE', rows: OFFLINE_ROLES.map(r=>({k:r, v: x.offTotals[r] ? fmtDur(x.offTotals[r]) : 'none'}))}
-  ];
+  if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
+  if(used.length) side.push({k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0});
+  out.push({title:'SIDE MACHINES', rows:side});
+  return out;
+}
+/* v132: each day drawn exactly like the Daily Report section */
+function sideDaysHTML(x, forPdf){
+  const hc = forPdf ? '#1a1a2e' : 'var(--text)', line = forPdf ? '#e6e6e6' : 'var(--line)';
+  return x.perDay.map(d=>{ const secs = dayLogSections(d.date); if(!secs.length) return '';
+    return `<div style="border-top:1px solid ${line};margin-top:12px;padding-top:8px;${forPdf?'page-break-inside:avoid;break-inside:avoid;':''}"><div style="font-weight:700;font-size:${forPdf?'12.5':'14'}px;color:${hc};">${fmtDate(d.date)}</div>${sectionsHTML(secs, forPdf)}</div>`; }).join('');
 }
 function sideDayBlockHTML(d){
   const late = d.marelEnd && toMin(d.marelEnd) > SHIFT_END_MIN;
@@ -1201,26 +1211,22 @@ function sideLabourHeadline(x){
 function renderSideLabourCard(start, end){
   const x = computeSideLabour(start, end);
   if(!x.hasData) return '';
-  return `<div class="card"><h3>Packaging Labour on Side Machines</h3>
+  return `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3>
+    <div style="font-size:10.5px;letter-spacing:.1em;color:var(--muted);font-weight:700;margin:4px 0 0;">WHOLE PERIOD</div>
     ${sectionsHTML(sideLabourSections(x))}
-    <div style="font-size:10.5px;letter-spacing:.1em;color:var(--muted);font-weight:700;margin:14px 0 2px;">BY DAY</div>
-    ${x.perDay.map(sideDayBlockHTML).join('')}
+    <div style="font-size:10.5px;letter-spacing:.1em;color:var(--muted);font-weight:700;margin:16px 0 0;">BY DAY</div>
+    ${sideDaysHTML(x, false)}
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Side-machine times are labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:8px;">${crewFootnoteHTML(false)}</div></div>`;
 }
 function renderSideLabourPdfHTML(start, end){
   const x = computeSideLabour(start, end);
   if(!x.hasData) return '';
-  const th = 'font-size:9.5px;color:#888;text-transform:uppercase;letter-spacing:0.04em;padding:5px 4px;border-bottom:2px solid #1e3a5f;text-align:center;';
-  const td = 'font-size:11px;color:#1a1a2e;padding:6px 4px;border-bottom:1px solid #e6e6e6;text-align:center;';
-  return `<div style="page-break-inside:avoid;break-inside:avoid;margin-bottom:20px;">
-    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Packaging Labour on Side Machines · Crew · MAREL Times</div>
-    <div style="margin-bottom:12px;">${sectionsHTML(sideLabourSections(x), true)}</div>
-    <table style="width:100%;border-collapse:collapse;">
-      <tr><th style="${th}text-align:left;">Day</th><th style="${th}">Packaging crew</th><th style="${th}">MAREL start</th><th style="${th}">MAREL finish</th>${SIDE_MACHINES.map(m=>`<th style="${th}">${m.name}</th>`).join('')}<th style="${th}">Trimmer help</th>${OFFLINE_ROLES.map(r=>`<th style="${th}">${r} on line</th>`).join('')}</tr>
-      ${x.perDay.map(d=>`<tr><td style="${td}text-align:left;">${fmtDate(d.date)}</td><td style="${td}">${d.crewShort||'—'}</td><td style="${td}">${d.marelStart?fmtTime12(d.marelStart):'—'}</td><td style="${td}${d.marelEnd && toMin(d.marelEnd)>SHIFT_END_MIN?'color:#c0392b;font-weight:700;background:#fdecea;':''}">${d.marelEnd?fmtTime12(d.marelEnd):'—'}</td>${SIDE_MACHINES.map(m=>`<td style="${td}">${d.byMachine[m.name]?fmtShort(d.byMachine[m.name]):'—'}</td>`).join('')}<td style="${td}">${d.trimMin?fmtShort(d.trimMin):'—'}</td>${OFFLINE_ROLES.map(r=>`<td style="${td}">${d.rolesOff.includes(r)?'off':(d.off[r].min?fmtShort(d.off[r].min):'—')}</td>`).join('')}</tr>`).join('')}
-    </table>
-    ${x.perDay.some(d=>crewTimeline(d.date).length>1)?`<div style="font-size:10.5px;color:#555;margin-top:6px;line-height:1.5;">Crew changes: ${x.perDay.filter(d=>crewTimeline(d.date).length>1).map(d=>`${fmtDate(d.date)}: ${escapeHtml(d.crewLong)}`).join(' · ')}</div>`:''}
-    <div style="font-size:10px;color:#888;margin-top:6px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:6px;">${crewFootnoteHTML(true)}</div>
+  return `<div style="margin-bottom:20px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Crew · MAREL · Side Machines</div>
+    <div style="page-break-inside:avoid;break-inside:avoid;"><div style="font-size:10.5px;letter-spacing:.1em;color:#888;font-weight:700;margin:6px 0 0;">WHOLE PERIOD</div>${sectionsHTML(sideLabourSections(x), true)}</div>
+    <div style="font-size:10.5px;letter-spacing:.1em;color:#888;font-weight:700;margin:14px 0 0;">BY DAY</div>
+    ${sideDaysHTML(x, true)}
+    <div style="font-size:10px;color:#888;margin-top:8px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:6px;">${crewFootnoteHTML(true)}</div>
   </div>`;
 }
 /* One-line day summary for the Daily Report: crew, MAREL times, side-machine labour. */
@@ -1442,7 +1448,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v11';
+const FLOOR3D_REV = 'v12';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
