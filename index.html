@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v132 - 2026-10-21 (Upstream Impact: Crew · MAREL · Side Machines now laid out exactly like the Daily Report, whole period then each day)';
+const APP_VERSION = 'v133 - 2026-10-22 (Upstream Impact: whole-period block removed, Lead Hand/Yield show hours only; MAREL added to Lead Hand/Yield step-in stations)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -686,7 +686,7 @@ const SHIFT_END_MIN = 16*60+30;
 let sideSetup = null;      // {machine, pack, trim, changeId}
 /* v110: Lead hand and yield operator are off-line roles (management wants them off the line). When they step in, it's logged On/Off with where they went — stored in dayLog[date].offline = [{id, role, where, start, end}]. Shown separately; not part of the crew count. */
 const OFFLINE_ROLES = ['Lead Hand','Yield Operator'];
-const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer'];
+const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','MAREL']; // v133: MAREL added
 let offlineSetup = null;   // {role, where}
 function openOffline(date){ const d = dayLogFor(date); return d ? (d.offline||[]).filter(o=>!o.end) : []; }
 async function startOffline(){
@@ -1149,14 +1149,14 @@ function marelRowFor(d){
   return {k:'Cutting', v:`${d.marelStart?fmtTime12(d.marelStart):'—'} – ${d.marelEnd?fmtTime12(d.marelEnd):'—'} (${note})`, red: !!late};
 }
 /* Daily Report: CREW · MAREL · SIDE MACHINES */
-function dayLogSections(date){
+function dayLogSections(date, opts){
   const d = dayLogFor(date); if(!d) return [];
   const x = computeSideLabour(date, date), om = offlineMinutes(date), out = [];
   const crew = [];
   const cl = crewLabel(date,false); if(cl) crew.push({k:'Packaging crew', v: cl});
   OFFLINE_ROLES.forEach(r=>{
     if(!roleIn(date,r)) crew.push({k:r, v:'off today'});
-    else { const m = om[r]; crew.push({k:r, v: m.min>0 ? `in today · on the line ${fmtDur(m.min)} (${[...m.where].join(', ')})` : 'in today · stayed off the line'}); }
+    else { const m = om[r]; crew.push({k:r, v: (opts && opts.short) ? (m.min>0 ? `on the line ${fmtDur(m.min)}` : 'stayed off the line') : (m.min>0 ? `in today · on the line ${fmtDur(m.min)} (${[...m.where].join(', ')})` : 'in today · stayed off the line')}); }
   });
   out.push({title:'CREW', rows:crew});
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
@@ -1189,8 +1189,10 @@ function sideLabourSections(x){
 /* v132: each day drawn exactly like the Daily Report section */
 function sideDaysHTML(x, forPdf){
   const hc = forPdf ? '#1a1a2e' : 'var(--text)', line = forPdf ? '#e6e6e6' : 'var(--line)';
-  return x.perDay.map(d=>{ const secs = dayLogSections(d.date); if(!secs.length) return '';
-    return `<div style="border-top:1px solid ${line};margin-top:12px;padding-top:8px;${forPdf?'page-break-inside:avoid;break-inside:avoid;':''}"><div style="font-weight:700;font-size:${forPdf?'12.5':'14'}px;color:${hc};">${fmtDate(d.date)}</div>${sectionsHTML(secs, forPdf)}</div>`; }).join('');
+  let first = true;
+  return x.perDay.map(d=>{ const secs = dayLogSections(d.date, {short:true}); if(!secs.length) return '';
+    const top = first ? 'margin-top:6px;' : `border-top:1px solid ${line};margin-top:12px;padding-top:8px;`; first = false;
+    return `<div style="${top}${forPdf?'page-break-inside:avoid;break-inside:avoid;':''}"><div style="font-weight:700;font-size:${forPdf?'12.5':'14'}px;color:${hc};">${fmtDate(d.date)}</div>${sectionsHTML(secs, forPdf)}</div>`; }).join('');
 }
 function sideDayBlockHTML(d){
   const late = d.marelEnd && toMin(d.marelEnd) > SHIFT_END_MIN;
@@ -1212,9 +1214,6 @@ function renderSideLabourCard(start, end){
   const x = computeSideLabour(start, end);
   if(!x.hasData) return '';
   return `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3>
-    <div style="font-size:10.5px;letter-spacing:.1em;color:var(--muted);font-weight:700;margin:4px 0 0;">WHOLE PERIOD</div>
-    ${sectionsHTML(sideLabourSections(x))}
-    <div style="font-size:10.5px;letter-spacing:.1em;color:var(--muted);font-weight:700;margin:16px 0 0;">BY DAY</div>
     ${sideDaysHTML(x, false)}
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4;">Side-machine times are labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:8px;">${crewFootnoteHTML(false)}</div></div>`;
 }
@@ -1223,8 +1222,6 @@ function renderSideLabourPdfHTML(start, end){
   if(!x.hasData) return '';
   return `<div style="margin-bottom:20px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Crew · MAREL · Side Machines</div>
-    <div style="page-break-inside:avoid;break-inside:avoid;"><div style="font-size:10.5px;letter-spacing:.1em;color:#888;font-weight:700;margin:6px 0 0;">WHOLE PERIOD</div>${sectionsHTML(sideLabourSections(x), true)}</div>
-    <div style="font-size:10.5px;letter-spacing:.1em;color:#888;font-weight:700;margin:14px 0 0;">BY DAY</div>
     ${sideDaysHTML(x, true)}
     <div style="font-size:10px;color:#888;margin-top:8px;line-height:1.5;">Side-machine times are packaging labour hours (time × packaging staff). MAREL finish in red = after packaging shift end (4:30 PM).</div><div style="margin-top:6px;">${crewFootnoteHTML(true)}</div>
   </div>`;
