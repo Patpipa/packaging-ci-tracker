@@ -16,7 +16,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v11 · CI Tracker</title>
+<title>3D Floor · v13 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1170,7 +1170,7 @@ function today(log=floorLog){const k=dateKey();return log.days[k]||{crew:null,ru
 const SIDE_KEY={Fajita:"fajita",Cutlet:"cutlet",Slicer:"slicer","Vacuum Sealer":"vacuum"},ROLE_KEY={"Lead Hand":"lead","Yield Operator":"yield"};
 function floorFromDayLog(dl){const days={};
   Object.keys(dl||{}).forEach(k=>{const d=dl[k]||{},runs=[];
-    (d.side||[]).forEach(x=>{const m=SIDE_KEY[x.machine];if(m)runs.push({m,on:x.start,off:x.end||null,people:x.pack||0,trim:x.trim||0})});
+    (d.side||[]).forEach(x=>{const m=SIDE_KEY[x.machine];if(!m)return;const w=(x.waits||[]).find(y=>!y.end);runs.push({m,on:x.start,off:x.end||null,people:x.pack||0,trim:x.trim||0,prod:x.product==="Other"?(x.productNote||"Other"):(x.product||""),cover:x.covering||"",waiting:w?w.start:""})});
     if(d.marelStart||d.marelEnd)runs.push({m:"marel",on:d.marelStart||d.marelEnd,off:d.marelEnd||null});
     (d.offline||[]).forEach(o=>{const m=ROLE_KEY[o.role];if(m)runs.push({m,on:o.start,off:o.end||null,where:o.where})});
     const cl=(Array.isArray(d.crewLog)&&d.crewLog.length)?d.crewLog.slice().sort((a,b)=>String(a.at).localeCompare(String(b.at))):(d.crew!=null?[{at:d.crewAt||"08:00",n:d.crew}]:[]);
@@ -1182,7 +1182,7 @@ function roleOff(key){const r=today().roles||{};return r[key==="lead"?"Lead Hand
 function openRun(key,log=floorLog){const ks=[dateKey()];
   for(const k of ks){const r=((log.days[k]||{}).runs||[]).slice().reverse().find(x=>x.m===key&&!x.off);if(r)return {r,day:k}}return null}
 function lastRunToday(key){return (today().runs||[]).filter(x=>x.m===key&&x.off).slice(-1)[0]||null}
-function sideState(key){const o=openRun(key);return o?{on:true,since:o.r.on,people:o.r.people||0,trim:o.r.trim||0,where:o.r.where||"",day:o.day}:{on:false,last:lastRunToday(key)}}
+function sideState(key){const o=openRun(key);return o?{on:true,since:o.r.on,people:o.r.people||0,trim:o.r.trim||0,where:o.r.where||"",day:o.day,prod:o.r.prod||"",cover:o.r.cover||"",waiting:o.r.waiting||""}:{on:false,last:lastRunToday(key)}}
 
 async function saveLog(mutate){
   if(!fsCol){mutate(floorLog);afterLogChange();return true} // preview: keep it on this page
@@ -1224,7 +1224,8 @@ function sideLine(s,st){
     if(st.last)return {tone:st.last.off>SHIFT_END?"wait":"nowork",line:"Done cutting at "+t12(st.last.off)};
     return {tone:"nowork",line:"Not cutting yet"};
   }
-  if(st.on)return {tone:"run",line:st.people+(st.people===1?" person":" people")+" · since "+t12(st.since)};
+  if(st.on&&st.waiting)return {tone:"change",line:(st.prod?st.prod+" · ":"")+"Waiting for trimmers since "+t12(st.waiting)};
+  if(st.on)return {tone:"run",line:(st.prod?st.prod+" · ":"")+st.people+(st.people===1?" person":" people")+" · since "+t12(st.since)+(st.cover?" · covering "+st.cover:"")};
   if(st.last)return {tone:"nowork",line:"Off · ran "+t12(st.last.on)+"–"+t12(st.last.off)};
   return {tone:"nowork",line:"Off"};
 }
@@ -1284,7 +1285,7 @@ function renderSide(){
   sideBody.innerHTML=`<div class="sheethead"><h2>${s.name}</h2><button class="hbtn" id="sideDone">Done</button></div>
     ${action}<span class="note" id="sideMsg"></span>
     <h3 class="sub">Today</h3>${hist}
-    ${s.marel?`<p class="note">Lets everyone see when the Marel finishes cutting. Packaging shift ends at 4:30 pm.</p>`:(()=>{const n=st.on?st.people:(sidePick.people||s.defPeople||1);const who=n===1?"1 operator":n+" operators";
+    ${s.marel?``:(()=>{const n=st.on?st.people:(sidePick.people||s.defPeople||1);const who=n===1?"1 operator":n+" operators";
       return `<p class="note foot">Uses packaging labour hours. Running the ${s.name.toLowerCase()} takes ${who} off a Variovac or another packaging station, so the line runs short-handed while it's on. These hours aren't counted in PLH, but they're logged here.</p>`})()}`;
 }
 sideSheet.addEventListener("click",async e=>{
@@ -2005,7 +2006,8 @@ function renderPanels(){
         if(st.on){const late=nowHM()>="16:00";tone=late?TONE_CSS.change:TONE_CSS.run;line=late?"⚠ still cutting":"since "+t12(st.since)}
         else if(st.last){const lateEnd=st.last.off>SHIFT_END;tone=lateEnd?TONE_CSS.wait:TONE_CSS.nowork;off=!lateEnd;line="done "+t12(st.last.off)}
         else{tone=TONE_CSS.nowork;off=true;line="not started"}}
-      else if(st.on){tone="#E0A030";line=`${st.people||0} pkg${st.trim?" +"+st.trim+" trim":""} · ${t12(st.since)}`}
+      else if(st.on&&st.waiting){tone=TONE_CSS.change;line=`⏸ waiting trimmers · ${t12(st.waiting)}`}
+      else if(st.on){tone="#E0A030";line=st.prod?`${st.prod} · ${st.people||0} pkg`:`${st.people||0} pkg${st.trim?" +"+st.trim+" trim":""} · ${t12(st.since)}`}
       else{tone=TONE_CSS.nowork;off=true;line=st.last?`ran ${t12(st.last.on).replace(/ [ap]m$/,"")}–${t12(st.last.off)}`:"off"}
       return `<button class="stile" data-sgo="${k}" style="--st:${tone}" title="${esc(name+': '+line)}"><span class="st1"><span class="sd"></span><span class="sn">${name}</span></span><span class="sl${off?" off":""}">${esc(line)}</span></button>`}).join("")}
   const nowTxt=new Date().toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"});
@@ -2099,7 +2101,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v11";
+const FLOOR3D_VERSION="v13";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});

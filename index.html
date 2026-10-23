@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v133 - 2026-10-22 (Upstream Impact: whole-period block removed, Lead Hand/Yield show hours only; MAREL added to Lead Hand/Yield step-in stations)';
+const APP_VERSION = 'v135 - 2026-10-23 (Side machines: Vacuum Sealer product + breakdown cover, Waiting for trimmers pause, QTY / LBS output in Daily and Upstream reports; loads 3D floor v13)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -224,7 +224,7 @@ const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change',
 const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk','Metal Detector Test'];
 const METAL_DETECTOR_MACHINES = ['Variovac 1','Variovac 2','Variovac 3']; // v100: one-tap Metal Detector button shows on these lines
 const WAITING_CATEGORIES = {
-  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Switching Product','MAREL - Operator on Break','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for Fajita','Waiting for Cutlet','Waiting for Slicer','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
+  'Upstream / Product': {cls:'upstream', reasons:['Waiting for Trimmer to Start','Waiting for Trimmed Meat','MAREL - Meat Being Cut, Not Ready Yet','MAREL - Meat Ready, but Cutting for Variovac 1','MAREL - Meat Ready, but Cutting for Variovac 2','MAREL - Meat Ready, but Cutting Chicken Muscle for Variovac 3','MAREL - Chicken Muscle Being Cut, Not Ready Yet','MAREL - Switching Product','MAREL - Operator on Break','MAREL - Waiting for Trimmed Meat','Waiting for Chicken Muscle (Trimmer Cutting by Hand)','Waiting for Ground Meat','Waiting for Diced Meat','Waiting for Diced Chicken','Waiting for Bison','Waiting for Venison','Waiting for Band Saw Product','Waiting for Band Saw Cut Meat (for Slicer)','Waiting for Fajita','Waiting for Cutlet','Waiting for Slicer','Waiting for End Cut','Waiting for Tenderloin Byproduct','Waiting for Byproduct','Waiting for Product','Waiting for Burger Room Product','Product Not Thawed/Ready','Waiting for Rework','Waiting for Rebox','Waiting for Warehouse to Scan In Product','Product Shortage','Production Department Behind Schedule']},
   'Materials / Warehouse': {cls:'internal', reasons:['Waiting for Boxes','Waiting for Labels','Waiting for Film','Waiting for Skid/Pallet','Waiting for Warehouse Materials','Wrong/Missing Materials']},
   'Machine / Equipment': {cls:'internal', reasons:['Machine Breakdown','Machine Adjustment','Machine Jam','Scale Problem','Sealer Problem','Film/Feed Problem','Electrical/Control Issue','Maintenance','Troubleshooting']},
   'Labour / Operational': {cls:'internal', reasons:['Employee Shortage','Employee Reassigned','Waiting for Operator','Training','Waiting for Management Confirmation/Decision','Label Boxes','Break Coverage Issue','Weighing/Scooping Issue','Box Building','Labeling Issue','Other Operational Delay']},
@@ -239,6 +239,7 @@ const MAREL_MACHINES = ['Variovac 1','Variovac 2','Variovac 3'];
 function reasonAllowedForMachine(reason, machine){
   if(!/^MAREL - /.test(reason)) return true;
   if(!MAREL_MACHINES.includes(machine)) return false;
+  if(reason==='MAREL - Chicken Muscle Being Cut, Not Ready Yet') return machine==='Variovac 3'; // v134: chicken muscle only goes to Variovac 3
   const m = reason.match(/for (Variovac \d)$/);
   return !(m && m[1]===machine);
 }
@@ -683,7 +684,65 @@ Stored in Firestore doc tracker/dayLog as { 'YYYY-MM-DD': {crew, crewAt, marelSt
 const SIDE_MACHINES = [ {name:'Fajita', max:2}, {name:'Slicer', max:1}, {name:'Cutlet', max:1}, {name:'Vacuum Sealer', max:2} ];
 const LINE_NEED = {'Variovac 1':2, 'Variovac 2':2, 'Variovac 3':2, 'Manual Pack':2}; // v119: Manual Pack needs 2 — one can step to a side machine while one stays for reboxes
 const SHIFT_END_MIN = 16*60+30;
-let sideSetup = null;      // {machine, pack, trim, changeId}
+let sideSetup = null;      // {machine, pack, trim, changeId, product, productNote, covering}
+/* v135: Vacuum Sealer product pick, Variovac-breakdown link, "waiting for trimmers" pause on side machines, and QTY / LBS output per machine per day.
+   side entry: {..., product, productNote, covering:'Variovac 2'|'' , waits:[{start,end}]}; dayLog[date].output = {'Fajita':{qty,lbs}, 'Vacuum Sealer|CHK Muscle':{qty,lbs}} */
+const VAC_PRODUCTS = ['Birds (Chicken / Turkey)','Bone-In','CHK Muscle','Ground Pork','Diced','Steaks','Other'];
+function sideProdLabel(s){ return s.product==='Other' ? ((s.productNote||'').trim() || 'Other') : (s.product||''); }
+function machineBreakdownsNow(){
+  return MACHINES.filter(m=>{ const l = Store.liveRuns && Store.liveRuns[m]; if(!l) return false; const seg = (l.downtimeSegments||[]).slice(-1)[0]; return !!(seg && !seg.end && seg.reasonCategory==='Machine / Equipment'); });
+}
+function sideOpenWait(s){ return (s.waits||[]).find(w=>!w.end) || null; }
+function closeSideWaits(s, at){ (s.waits||[]).forEach(w=>{ if(!w.end) w.end = at; }); }
+function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.covering||''}; }
+function outKey(machine, label){ return machine==='Vacuum Sealer' ? `Vacuum Sealer|${label||'not specified'}` : machine; }
+function qEsc(k){ return encodeURIComponent(k).replace(/'/g,'%27'); }
+async function setSideOutput(date, key, field, val){
+  const d = ensureDayLog(date); d.output = d.output || {};
+  const o = d.output[key] || (d.output[key] = {qty:'', lbs:''});
+  val = String(val||'').trim();
+  if(field==='qty'){ const n = parseInt(val,10); o.qty = val==='' ? '' : (isNaN(n)||n<0 ? o.qty : String(n)); }
+  else { const n = parseFloat(val); o.lbs = val==='' ? '' : (isNaN(n)||n<0 ? o.lbs : String(val)); }
+  if(!o.qty && !o.lbs) delete d.output[key];
+  const ok = await Store.saveDayLog(); if(ok){ render(); toast('Output saved'); }
+}
+function outText(o){
+  if(!o || (!o.qty && !o.lbs)) return 'output not entered';
+  return [o.qty?`${o.qty} box${o.qty==='1'?'':'es'}`:'', o.lbs?`${o.lbs} lbs`:''].filter(Boolean).join(' · ');
+}
+/* one row per machine (and per Vacuum Sealer product) used that day, for entering QTY / LBS any time after */
+function sideOutputGroups(date){
+  const iv = sideIntervals(date).filter(x=>x.min>0), groups = [];
+  SIDE_MACHINES.forEach(sm=>{
+    const mine = iv.filter(x=>x.machine===sm.name); if(!mine.length) return;
+    if(sm.name==='Vacuum Sealer'){
+      const lab = x=>sideProdLabel(x)||'not specified';
+      [...new Set(mine.map(lab))].forEach(l=>groups.push({machine:sm.name, label:l, key:outKey(sm.name,l), act: mine.filter(x=>lab(x)===l).reduce((a,x)=>a+x.act,0), open: mine.some(x=>!x.end && lab(x)===l)}));
+    } else groups.push({machine:sm.name, label:'', key:sm.name, act: mine.reduce((a,x)=>a+x.act,0), open: mine.some(x=>!x.end)});
+  });
+  return groups;
+}
+function sideOutputEditorHTML(date, forReport){
+  const g = sideOutputGroups(date); if(!g.length) return '';
+  const out = (dayLogFor(date)||{}).output || {};
+  return `<div ${forReport?'class="card" style="border-left:3px solid var(--amber);"':'style="margin-top:8px;"'}>${forReport?'<h3>Side Machine Output — QTY / LBS</h3>':'<div class="cb-lbl" style="margin-top:4px;">SIDE MACHINE OUTPUT (QTY / LBS)</div>'}
+    ${g.map(x=>{ const o = out[x.key]||{}; const nm = x.label ? `${x.machine} · ${escapeHtml(x.label)}` : x.machine;
+      return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm" style="font-size:13px;">${nm} <span class="cb-mut">ran ${fmtDur(x.act)}${x.open?' · still running':''}</span></span>
+        <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" placeholder="boxes" value="${escapeHtml(o.qty||'')}" onchange="setSideOutput('${date}', decodeURIComponent('${qEsc(x.key)}'), 'qty', this.value)" style="padding:8px;flex:1;min-width:0;">
+        <span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.001" placeholder="0.000" value="${escapeHtml(o.lbs||'')}" onchange="setSideOutput('${date}', decodeURIComponent('${qEsc(x.key)}'), 'lbs', this.value)" style="padding:8px;flex:1.3;min-width:0;"></span></div>`; }).join('')}
+    <div class="cb-mut" style="font-size:11.5px;margin-top:4px;">Enter the total for the day — any time, even the next day. It shows in the Daily and Upstream reports.</div></div>`;
+}
+async function sideWait(id){
+  const d = ensureDayLog(todayStr()), cur = (d.side||[]).find(x=>x.id===id); if(!cur || cur.end || sideOpenWait(cur)) return;
+  cur.waits = cur.waits || []; cur.waits.push({start: nowHHMM(), end: null});
+  await saveDayLogNow(); toast(`${cur.machine} — waiting for trimmers`);
+}
+async function sideWaitEnd(id){
+  const d = ensureDayLog(todayStr()), cur = (d.side||[]).find(x=>x.id===id); if(!cur) return;
+  const w = sideOpenWait(cur); if(!w) return; w.end = nowHHMM();
+  if(toMin(w.end) < toMin(w.start)) w.end = w.start;
+  await saveDayLogNow(); toast(`${cur.machine} — meat arrived, running again`);
+}
 /* v110: Lead hand and yield operator are off-line roles (management wants them off the line). When they step in, it's logged On/Off with where they went — stored in dayLog[date].offline = [{id, role, where, start, end}]. Shown separately; not part of the crew count. */
 const OFFLINE_ROLES = ['Lead Hand','Yield Operator'];
 const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','MAREL']; // v133: MAREL added
@@ -853,24 +912,34 @@ async function saveMarelStart(){
 async function clearMarel(which){ const d = ensureDayLog(todayStr()); d[which] = ''; await saveDayLogNow(); }
 function openSideSetup(machine, changeId){
   const cur = changeId ? (dayLogFor(todayStr()).side||[]).find(s=>s.id===changeId) : null;
-  sideSetup = {machine, pack: cur ? cur.pack : 1, trim: cur ? cur.trim : 0, changeId: changeId||null};
+  const bd = machineBreakdownsNow();
+  sideSetup = {machine, pack: cur ? cur.pack : 1, trim: cur ? cur.trim : 0, changeId: changeId||null,
+    product: cur ? (cur.product||'') : '', productNote: cur ? (cur.productNote||'') : '',
+    covering: cur ? (cur.covering||'') : (machine==='Vacuum Sealer' && bd.length ? bd[0] : '')};
   render();
 }
 async function confirmSide(){
   const s = sideSetup, max = (SIDE_MACHINES.find(x=>x.name===s.machine)||{max:1}).max;
   if(s.pack + s.trim < 1){ toast('Pick at least 1 person'); return; }
   if(s.pack + s.trim > max){ toast(`${s.machine} takes up to ${max} ${max===1?'person':'people'}`); return; }
+  const vac = s.machine==='Vacuum Sealer';
+  if(vac && !s.product){ toast('Pick what is being packed on the Vacuum Sealer'); return; }
+  if(vac && s.product==='Other' && !(s.productNote||'').trim()){ toast('Type what is being packed'); return; }
   const d = ensureDayLog(todayStr()), now = nowHHMM();
-  if(s.changeId){ const cur = d.side.find(x=>x.id===s.changeId); if(cur && !cur.end) cur.end = now; } // crew change = close the old entry, open a new one, so hours split exactly at the change
-  d.side.push({id: uid(), machine: s.machine, start: now, end: null, pack: s.pack, trim: s.trim});
+  let wasWaiting = false;
+  if(s.changeId){ const cur = d.side.find(x=>x.id===s.changeId); if(cur && !cur.end){ wasWaiting = !!sideOpenWait(cur); closeSideWaits(cur, now); cur.end = now; } } // change = close the old entry, open a new one, so hours split exactly at the change
+  const e = {id: uid(), machine: s.machine, start: now, end: null, pack: s.pack, trim: s.trim};
+  if(vac){ e.product = s.product; if(s.product==='Other') e.productNote = (s.productNote||'').trim(); if(s.covering) e.covering = s.covering; }
+  if(wasWaiting) e.waits = [{start: now, end: null}];
+  d.side.push(e);
   sideSetup = null;
   await saveDayLogNow();
-  toast(`${s.machine} started — ${s.pack} packaging${s.trim?` + ${s.trim} trimmer`:''}`);
+  toast(`${s.machine} ${s.changeId?'changed':'started'} — ${s.pack} packaging${s.trim?` + ${s.trim} trimmer`:''}${vac?` · ${sideProdLabel(e)}`:''}${e.covering?` · covering ${e.covering}`:''}`);
 }
 async function stopSide(id){
   const d = ensureDayLog(todayStr()), cur = d.side.find(x=>x.id===id);
   if(!cur) return;
-  cur.end = openEndToday(cur.start);
+  cur.end = openEndToday(cur.start); closeSideWaits(cur, cur.end);
   await saveDayLogNow();
   toast(cur.end!==nowHHMM() ? `${cur.machine} — set to 4:30 PM; fix the time in the log if needed` : `${cur.machine} stopped`);
 }
@@ -904,7 +973,9 @@ const CREW_FOOTNOTE_LINES = [
   'Lead hand and yield operator are off-line roles, marked in or off today. When either steps in to help, it is logged On/Off with where they helped, and shown separately. They are not part of the crew count.',
   'Anything left switched on after the 4:30 PM shift end stops counting at 4:30 PM; the real time can be fixed in the log.',
   'Line headcounts include whoever is actually working the line, so a line can show as covered only because the lead hand or yield operator stepped in.',
-  'Spare = crew minus packaging staff on lines and side machines. A lead hand or yield operator working a line is not taken off the spare count, since they are not part of the crew.'
+  'Spare = crew minus packaging staff on lines and side machines. A lead hand or yield operator working a line is not taken off the spare count, since they are not part of the crew.',
+  'Waiting for trimmers: a side machine can be paused while it waits for trimmed meat. That time is shown as "waited for trimmers" and is not counted as running time or labour.',
+  'Side machine output (QTY / LBS) is entered by hand for each machine per day, any time after. Fajita, Cutlet and Slicer product is packed later on the Variovacs, so it is not added to PLH.'
 ];
 function crewFootnoteHTML(forPdf, noTitle){
   const c = forPdf ? '#888' : 'var(--muted)';
@@ -937,7 +1008,7 @@ async function syncSideBreaks(){
   if(b.any && b.all && !d.breakPause){
     const runs = (d.side||[]).filter(x=>!x.end && x.start < b.start);
     if(runs.length){
-      runs.forEach(x=>{ x.end = b.start; x.breakPaused = true; });
+      runs.forEach(x=>{ x.end = b.start; x.breakPaused = true; closeSideWaits(x, b.start); });
       d.breakPause = {start: b.start, ids: runs.map(x=>x.id)};
       changed = true; msg = `${runs.map(x=>x.machine).join(', ')} paused for break`;
     }
@@ -945,7 +1016,7 @@ async function syncSideBreaks(){
     const at = breakEndAfter(d.breakPause.start), back = [];
     (d.side||[]).filter(x=>d.breakPause.ids.includes(x.id)).forEach(x=>{
       if((d.side||[]).some(y=>y.machine===x.machine && !y.end)) return; // already restarted by hand
-      d.side.push({id: uid(), machine: x.machine, start: at, end: null, pack: x.pack, trim: x.trim, afterBreak: true});
+      d.side.push({id: uid(), machine: x.machine, start: at, end: null, pack: x.pack, trim: x.trim, afterBreak: true, ...sideCarry(x)});
       back.push(x.machine);
     });
     d.breakPause = null;
@@ -970,7 +1041,7 @@ async function dontRestartSide(id){
 async function restartSideNow(id){
   const d = ensureDayLog(todayStr()), x = (d.side||[]).find(y=>y.id===id);
   if(!x) return;
-  d.side.push({id: uid(), machine: x.machine, start: nowHHMM(), end: null, pack: x.pack, trim: x.trim});
+  d.side.push({id: uid(), machine: x.machine, start: nowHHMM(), end: null, pack: x.pack, trim: x.trim, ...sideCarry(x)});
   if(d.breakPause){ d.breakPause.ids = d.breakPause.ids.filter(y=>y!==id); if(!d.breakPause.ids.length) d.breakPause = null; }
   await saveDayLogNow(); toast(`${x.machine} restarted`);
 }
@@ -1042,8 +1113,14 @@ function renderCrewBoard(){
     }
     if(run){
       const dots = []; for(let i=0;i<run.pack;i++) dots.push(personDot('side')); for(let i=0;i<run.trim;i++) dots.push(personDot('tr'));
-      return `<div class="cb-row" style="border-color:var(--amber);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
-        <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">Change crew</button><button class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="stopSide('${run.id}')">■ Stop</button></div></div>`;
+      const w = sideOpenWait(run), vac = sm.name==='Vacuum Sealer';
+      const info = [vac ? `<b style="color:var(--text);">${escapeHtml(sideProdLabel(run)||'product not picked')}</b>` : '', run.covering ? `<span style="color:var(--wait);">covering ${run.covering} breakdown</span>` : ''].filter(Boolean).join(' · ');
+      return `<div class="cb-row" style="border-color:${w?'var(--change)':'var(--amber)'};flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
+        ${info?`<div class="cb-mut" style="width:100%;">${info}</div>`:''}
+        ${w?`<div style="width:100%;font-size:12.5px;color:var(--change);font-weight:600;">⏸ Waiting for trimmers since ${fmtTime12(w.start)} — not counted as running time</div>`:''}
+        <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">${vac?'Change product / crew':'Change crew'}</button>
+        ${w?`<button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="sideWaitEnd('${run.id}')">▶ Meat arrived</button>`:`<button class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="sideWait('${run.id}')">⏸ Waiting for trimmers</button>`}
+        <button class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="stopSide('${run.id}')">■ Stop</button></div></div>`;
     }
     return `<div class="cb-row"><span class="cb-nm">${sm.name} ${tag}</span><button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></div>`;
   }).join('');
@@ -1076,7 +1153,7 @@ function renderCrewBoard(){
       ${late?`<div style="font-size:11.5px;color:var(--wait);width:100%;">Finished after packaging shift end (4:30 PM)</div>`:''}</div>`;
   const log = (d.side||[]);
   const logHtml = log.length ? `<div style="margin-top:6px;"><span class="cb-link" onclick="sideLogOpen=!sideLogOpen;render()">${sideLogOpen?'▲ Hide':'▼ Show'} today's side-machine log (${log.length})</span>
-    ${sideLogOpen ? log.map(s=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span>${s.machine} · ${s.pack} pkg${s.trim?` + ${s.trim} trim`:''}</span>
+    ${sideLogOpen ? log.map(s=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span>${s.machine}${s.product?` · ${escapeHtml(sideProdLabel(s))}`:''} · ${s.pack} pkg${s.trim?` + ${s.trim} trim`:''}${(s.waits||[]).length?` · waited ${(s.waits||[]).length}×`:''}</span>
       <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
   return `<div class="card cb" style="border-color:${colors[0]};">
     <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub" style="font-weight:600;color:var(--text);">${subLine1}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div>${stopHtml}</div></div>
@@ -1084,7 +1161,7 @@ function renderCrewBoard(){
     ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
     <div class="cb-lbl">OFF-LINE ROLES — STEPPING IN</div>${renderOfflineRows()}
-    <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}
+    <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}${sideOutputEditorHTML(todayStr(), false)}
     <div class="cb-lbl">TODAY</div>${crewRow}${marelRow}
     <div class="cb-legend"><span>${personDot('ok')} on line</span><span>${personDot('miss')} empty spot</span><span>${personDot('side')} packaging on side machine</span><span>${personDot('tr')} trimmer helping</span></div>
     ${dayLogFor(todayStr()) ? `<div style="text-align:center;margin-top:10px;"><span class="cb-link" style="color:var(--wait);" onclick="resetTodayCrewBoard()">Clear today's Crew Board entries</span></div>` : ''}
@@ -1096,13 +1173,26 @@ function renderSideSetup(sm){
   const opts = (key, label)=>`<div style="display:flex;align-items:center;gap:8px;width:100%;"><span class="cb-mut" style="width:78px;">${label}</span>${Array.from({length:sm.max+1},(_,n)=>`<button class="cb-btn" style="flex:1;${s[key]===n?'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);':''}" onclick="sideSetup.${key}=${n};render()">${n}</button>`).join('')}</div>`;
   return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--amber);"><span class="cb-nm">${s.changeId?'Change crew — ':''}${sm.name} <span class="cb-mut">(up to ${sm.max})</span></span>
     ${opts('pack','Packaging')}${opts('trim','Trimmers')}
+    ${sm.name==='Vacuum Sealer' ? vacSetupHTML(s) : ''}
     <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="confirmSide()">${s.changeId?'Save change':'▶ Start'}</button></div></div>`;
+}
+function vacSetupHTML(s){
+  const sel = 'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);';
+  const bd = machineBreakdownsNow(); if(s.covering && !bd.includes(s.covering)) bd.push(s.covering);
+  return `<span class="cb-mut" style="width:100%;">Packing what?</span>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${VAC_PRODUCTS.map(p=>`<button class="cb-btn" style="flex:1 1 30%;font-size:12px;${s.product===p?sel:''}" onclick="sideSetup.product='${p}';render()">${p}</button>`).join('')}</div>
+    ${s.product==='Other'?`<input type="text" maxlength="40" placeholder="What is being packed?" value="${escapeHtml(s.productNote||'')}" oninput="sideSetup.productNote=this.value" style="padding:8px;width:100%;">`:''}
+    ${bd.length?`<span class="cb-mut" style="width:100%;">Covering for a breakdown?</span>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;"><button class="cb-btn" style="flex:1;font-size:12px;${!s.covering?sel:''}" onclick="sideSetup.covering='';render()">No</button>${bd.map(m=>`<button class="cb-btn" style="flex:1;font-size:12px;${s.covering===m?'border-color:var(--wait);color:var(--wait);background:var(--wait-dim);':''}" onclick="sideSetup.covering='${m}';render()">${m}</button>`).join('')}</div>`:''}`;
 }
 function sideIntervals(date){
   const d = dayLogFor(date); if(!d) return [];
-  return (d.side||[]).map(s=>{ let a=toMin(s.start), b=toMin(s.end || (date===todayStr()? openEndToday(s.start) : pastOpenEnd(s.start))); if(b<a) b=a; return {...s, a, b, min: Math.max(0,b-a)}; });
+  return (d.side||[]).map(s=>{ let a=toMin(s.start), b=toMin(s.end || (date===todayStr()? openEndToday(s.start) : pastOpenEnd(s.start))); if(b<a) b=a;
+    const min = Math.max(0,b-a);
+    const waitMin = Math.min(min, (s.waits||[]).reduce((t,w)=>{ const wa=toMin(w.start), wb = w.end ? toMin(w.end) : b; return t + Math.max(0, Math.min(wb,b) - Math.max(wa,a)); }, 0));
+    return {...s, a, b, min, waitMin, act: Math.max(0, min - waitMin)}; }); // v135: act = running time without "waiting for trimmers" 
 }
-function sideMinutesToday(machine){ return sideIntervals(todayStr()).filter(s=>s.machine===machine && s.pack>0).reduce((t,s)=>t+s.min,0); }
+function sideMinutesToday(machine){ return sideIntervals(todayStr()).filter(s=>s.machine===machine && s.pack>0).reduce((t,s)=>t+s.act,0); }
 /* Packaging labour on side machines for a date range. packMin/trimMin are labour minutes (time × people). shortMin = minutes, while packaging staff were on side machines, that a Variovac's logged run had fewer than 2 people — taken from the staffing segments saved with each finished Live Floor run. */
 function computeSideLabour(start, end){
   const days = Object.keys(Store.dayLog||{}).filter(d=>d>=start && d<=end).sort();
@@ -1115,9 +1205,9 @@ function computeSideLabour(start, end){
     const day = {date:d, crew: crewNowFor(d), crewShort: crewLabel(d,true), crewLong: crewLabel(d,false), rolesOff: OFFLINE_ROLES.filter(r=>!roleIn(d,r)), marelStart: log.marelStart, marelEnd: log.marelEnd, packMin:0, trimMin:0, byMachine:{}, shortMin:0, offMin: OFFLINE_ROLES.reduce((a,r)=>a+om[r].min,0), off: om};
     iv.forEach(s=>{
       const pm = perMachine[s.machine] || (perMachine[s.machine]={packMin:0,trimMin:0,runMin:0});
-      pm.packMin += s.min*(s.pack||0); pm.trimMin += s.min*(s.trim||0); pm.runMin += s.min;
-      day.packMin += s.min*(s.pack||0); day.trimMin += s.min*(s.trim||0);
-      day.byMachine[s.machine] = (day.byMachine[s.machine]||0) + s.min*(s.pack||0);
+      pm.packMin += s.act*(s.pack||0); pm.trimMin += s.act*(s.trim||0); pm.runMin += s.min; pm.waitMin = (pm.waitMin||0) + s.waitMin;
+      day.packMin += s.act*(s.pack||0); day.trimMin += s.act*(s.trim||0);
+      day.byMachine[s.machine] = (day.byMachine[s.machine]||0) + s.act*(s.pack||0);
     });
     const packIv = mergeIntervals(iv.filter(s=>s.pack>0).map(s=>({start:s.a, end:s.b})));
     if(packIv.length){
@@ -1162,7 +1252,15 @@ function dayLogSections(date, opts){
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
   const side = [];
   const used = SIDE_MACHINES.filter(m=>x.perMachine[m.name].runMin>0);
-  used.forEach(m=>{ const pm = x.perMachine[m.name]; side.push({k:m.name, v:`${fmtDur(pm.packMin)} packaging labour${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}`}); });
+  const iv = sideIntervals(date), outp = d.output || {};
+  used.forEach(m=>{ const pm = x.perMachine[m.name], mine = iv.filter(s=>s.machine===m.name);
+    const act = mine.reduce((a,s)=>a+s.act,0), wait = mine.reduce((a,s)=>a+s.waitMin,0);
+    const base = `ran ${fmtDur(act)} · ${fmtDur(pm.packMin)} labour${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}${wait?` · waited for trimmers ${fmtDur(wait)}`:''}`;
+    if(m.name!=='Vacuum Sealer'){ side.push({k:m.name, v:`${base} · ${outText(outp[m.name])}`}); return; }
+    side.push({k:m.name, v:base});
+    sideOutputGroups(date).filter(g=>g.machine==='Vacuum Sealer').forEach(g=>side.push({k:`Vacuum Sealer · ${g.label}`, v:`ran ${fmtDur(g.act)} · ${outText(outp[g.key])}`}));
+    [...new Set(mine.filter(s=>s.covering).map(s=>s.covering))].forEach(c=>side.push({k:`Vacuum Sealer · covering ${c} breakdown`, v: fmtDur(mine.filter(s=>s.covering===c).reduce((a,s)=>a+s.act,0)), red:true}));
+  });
   const unused = SIDE_MACHINES.filter(m=>!used.includes(m)).map(m=>m.name);
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
   if(used.length) side.push({k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0});
@@ -1445,7 +1543,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v12';
+const FLOOR3D_REV = 'v13';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -3739,6 +3837,7 @@ function renderReportView(date){
     <div class="obs">${rep.observation}</div>
   </div>
   ${(()=>{ const secs=dayLogSections(rep.date); return secs.length ? `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3>${sectionsHTML(secs)}</div>` : ''; })()}
+  ${sideOutputEditorHTML(rep.date, true)}
   ${(()=>{ const h=plhHeadline(rep.date); return `<div class="card" style="border-left:3px solid var(--brk);"><div style="font-size:14px;line-height:1.5;"><b style="color:var(--brk);">${h.main}</b>${h.note?` <span style="color:var(--muted);font-style:italic;">${h.note}</span>`:''}</div></div>`; })()}
   <div class="card">
     <h3>Action for Tomorrow</h3>
