@@ -149,6 +149,25 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
 .scr .rail{position:absolute;right:0;top:0;bottom:0;width:22%;background:rgba(13,26,46,.92);border-left:1px solid var(--line);padding:22px 5px 5px;display:flex;flex-direction:column;gap:4px;z-index:2;}
 .scr .rail b{height:12px;border-radius:3px;background:var(--panel2);border-left:2px solid var(--c);}
 
+/* slide 1: before vs with the tracker */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ba .col{border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px;min-width:0;}
+.ba .before{background:var(--panel2);border:1px dashed var(--line);opacity:.75;}
+.ba .after{background:var(--panel2);border:1px solid var(--amber);}
+.ba .hd{font:600 10.5px 'Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);}
+.ba .after .hd{color:var(--amber);}
+.ba .quote{font-size:13px;line-height:1.45;color:var(--muted);font-style:italic;}
+.ba .fog{height:7px;border-radius:4px;background:var(--line);}
+.ba .big{font:600 22px/1.1 'IBM Plex Mono',monospace;color:var(--text);}
+.ba .big small{display:block;font:500 11px 'Inter',sans-serif;color:var(--muted);margin-top:3px;}
+.ba .ln{font-size:12px;line-height:1.35;display:flex;gap:6px;align-items:flex-start;}
+.ba .ln i{width:8px;height:8px;border-radius:50%;flex:none;margin-top:4px;}
+.ba .own{font-size:11.5px;color:var(--run);font-weight:600;}
+.active .ba .after > *{animation:fadeup .45s ease both;}
+.active .ba .after > *:nth-child(2){animation-delay:.3s}.active .ba .after > *:nth-child(3){animation-delay:.7s}
+.active .ba .after > *:nth-child(4){animation-delay:1.1s}.active .ba .after > *:nth-child(5){animation-delay:1.5s}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none !important;transition:none !important;}
 }
@@ -170,7 +189,31 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
 
   <div class="stage" id="stage">
 
-    <section class="slide" aria-label="1 of 8">
+    <section class="slide" aria-label="1 of 9">
+      <div class="art" aria-hidden="true">
+        <div class="ba">
+          <div class="col before">
+            <div class="hd">Before</div>
+            <div class="quote">"The line was down a lot today."</div>
+            <div class="fog" style="width:90%"></div><div class="fog" style="width:65%"></div><div class="fog" style="width:78%"></div>
+          </div>
+          <div class="col after">
+            <div class="hd">With the tracker</div>
+            <div class="big">1h 35m<small>lost today</small></div>
+            <div class="ln"><i style="background:var(--up)"></i><span>1h 10m upstream<br><span style="color:var(--muted)">MAREL · Trimmers</span></span></div>
+            <div class="ln"><i style="background:var(--int)"></i><span>25m ours<br><span style="color:var(--muted)">Machine Jam</span></span></div>
+            <div class="own">→ the right team fixes it</div>
+          </div>
+        </div>
+        <div class="caption">From guesses to numbers</div>
+      </div>
+      <div class="copy">
+        <h2>What this tracker solves</h2>
+        <p>It shows exactly where packaging loses time and why: who or what caused each stop, how long it lasted, and what it cost in labour. Then problems get fixed by the right team, based on real numbers instead of guesses.</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-label="2 of 9">
       <div class="art" aria-hidden="true">
         <div class="mrow"><div><div class="nm">Variovac 1</div><div class="sub">Pork cutlet 6oz</div></div><span class="pill run">Running <span class="mono" data-clock="4321">1:12:01</span></span></div>
         <div class="mrow alarm"><div><div class="nm">Variovac 2</div><div class="sub" style="color:var(--wait)">MAREL - Switching Product</div></div><span class="pill wait">Waiting <span class="mono" data-clock="1928">32:08</span></span></div>
@@ -183,7 +226,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="2 of 8">
+    <section class="slide" aria-label="3 of 9">
       <div class="art" aria-hidden="true">
         <div class="chips">
           <span class="chip sel">Upstream / Product</span><span class="chip">Materials</span><span class="chip">Machine</span><span class="chip">Labour</span><span class="chip">QA</span>
@@ -199,7 +242,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="3 of 8">
+    <section class="slide" aria-label="4 of 9">
       <div class="art" aria-hidden="true" id="ranks"></div>
       <div class="copy">
         <h2>Biggest time-wasters first</h2>
@@ -207,7 +250,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="4 of 8">
+    <section class="slide" aria-label="5 of 9">
       <div class="art" aria-hidden="true">
         <div style="font-size:12px;color:var(--muted)">Daily PLH</div>
         <div><span class="plh-big" id="plh">0.0</span><span class="plh-unit">lbs/hr</span></div>
@@ -222,7 +265,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="5 of 8">
+    <section class="slide" aria-label="6 of 9">
       <div class="art" aria-hidden="true">
         <div style="font-size:12px;color:var(--muted)">Daily downtime this week</div>
         <div class="week" id="week"></div>
@@ -235,7 +278,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="6 of 8">
+    <section class="slide" aria-label="7 of 9">
       <div class="art" aria-hidden="true">
         <span class="pdf">PDF</span>
         <div class="paper">
@@ -255,7 +298,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="7 of 8">
+    <section class="slide" aria-label="8 of 9">
       <div class="art" aria-hidden="true">
         <div class="devices">
           <div class="dev"><div class="frame" style="width:74px;height:56px"><i></i></div>Floor tablet</div>
@@ -272,7 +315,7 @@ body{display:flex;justify-content:center;padding:env(safe-area-inset-top) 0 env(
       </div>
     </section>
 
-    <section class="slide" aria-label="8 of 8">
+    <section class="slide" aria-label="9 of 9">
       <div class="art" aria-hidden="true">
         <div class="scr">
           <div class="leg"><span><i style="background:var(--run)"></i>Running</span><span><i style="background:var(--wait)"></i>Waiting</span><span><i style="background:var(--change)"></i>Changeover</span><span><i style="background:var(--brk)"></i>Break</span></div>
