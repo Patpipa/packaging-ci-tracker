@@ -16,7 +16,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v14 · CI Tracker</title>
+<title>3D Floor · v15 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1962,14 +1962,15 @@ function renderPanels(){
   // crew line-up — same wording and rules as the CI Tracker Crew Board (v119): each running line needs 2
   const LNEED=2, crewNow=today().crew;
   const lines=MACHINES.map(m=>{const v=view[m.key]||{state:"none"};const active=v.state==="run"||v.state==="down"||v.state==="break";
-    const staff=v.state==="break"?(v.crew||0):(v.staff||0);return {m,active,staff,need:active?LNEED:0,state:v.state}});
+    const staff=v.state==="break"?(v.crew||0):(v.staff||0);const idle=v.state==="down"&&v.label!=="Changeover"&&v.label!=="Planned stop"; // v15: Waiting / Downtime → its crew counts as spare
+    return {m,active:active&&!idle,staff,need:active&&!idle?LNEED:0,state:v.state,idle}});
   const onLines=lines.reduce((a,l)=>a+(l.active?l.staff:0),0), needed=lines.reduce((a,l)=>a+l.need,0);
   const shortL=lines.filter(l=>l.active&&l.staff<l.need);
   const sideKeys=[["fajita","Fajita"],["cutlet","Cutlet"],["slicer","Slicer"],["vacuum","Vacuum Sealer"]]; // Vacuum Sealer added in tracker v122
   const sidePack=sideKeys.reduce((a,[k])=>{const st=sideState(k);return a+(st.on?(st.people||0):0)},0);
   const sideTrim=sideKeys.reduce((a,[k])=>{const st=sideState(k);return a+(st.on?(st.trim||0):0)},0);
   const rolesOn=HELPERS.filter(h=>{const st=sideState(h.key);return st.on&&(!st.where||/^(Variovac|Manual)/.test(st.where))}).length; // v14: On line = on a packaging line
-  const spare=crewNow==null?null:crewNow-(onLines-rolesOn)-sidePack;
+  const spare=crewNow==null?null:crewNow-(onLines-Math.min(rolesOn,onLines))-sidePack;
   const pp=n=>n+" "+(n===1?"person":"people");
   let ctitle,cc;
   if(shortL.length){cc="var(--wait)";ctitle=shortL.length===1?`${shortL[0].m.name} short ${pp(shortL[0].need-shortL[0].staff)}`:`Short ${pp(shortL.reduce((a,l)=>a+l.need-l.staff,0))}: ${shortL.map(l=>l.m.name+" ("+(l.need-l.staff)+")").join(", ")}`}
@@ -1978,6 +1979,7 @@ function renderPanels(){
   else{cc="var(--run)";ctitle=spare!=null?`All lines covered: ${spare} spare`:"All lines covered"}
   const roleTxt=HELPERS.filter(h=>!roleOff(h.key)).map(h=>{const st=sideState(h.key);return h.name+(st.on?` (on ${"the line"})`:"")}).join(" + ");
   const lineRows=lines.map(l=>{
+    if(l.idle)return `<div class="row"><span class="lbl">${l.m.name}</span><span class="val" style="color:var(--wait);font-family:var(--body);font-weight:600">waiting · ${pp(l.staff)} spare</span></div>`;
     if(!l.active)return `<div class="row" style="opacity:.55"><span class="lbl">${l.m.name}</span><span class="val" style="color:var(--muted2);font-family:var(--body);font-weight:500">${l.state==="nowork"?"no work":"not running"}</span></div>`;
     const d=l.staff-l.need,dots=Array.from({length:Math.min(l.staff,6)},()=>"<i></i>").join("")+Array.from({length:Math.max(0,-d)},()=>'<i class="miss"></i>').join("");
     const cnt=d<0?`<span class="cnt3" style="color:var(--wait)">${l.staff} of ${l.need} · short ${-d}</span>`:`<span class="cnt3" style="color:var(--run)">${l.staff} of ${l.need}${d>0?` · ${d} extra`:""}</span>`;
@@ -2101,7 +2103,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v14";
+const FLOOR3D_VERSION="v15";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});

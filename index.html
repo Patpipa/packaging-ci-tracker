@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v137 - 2026-10-24 (Lead Hand / Yield: one-tap On line / Off line, no station; reports show hours only; loads 3D floor v14)';
+const APP_VERSION = 'v139 - 2026-10-24 (Crew Board: people on a line in Waiting / Downtime count as spare; loads 3D floor v15)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -754,6 +754,7 @@ async function startOffline(role){
   if(!role) return;
   const d = ensureDayLog(todayStr()); d.offline = d.offline || [];
   if(d.offline.some(x=>x.role===role && !x.end)){ render(); toast(`${role} is already on the line`); return; }
+  if(d.breakPause && d.breakPause.offIds){ const ids = d.offline.filter(x=>x.role===role).map(x=>x.id); d.breakPause.offIds = d.breakPause.offIds.filter(y=>!ids.includes(y)); if(breakPauseEmpty(d)) d.breakPause = null; }
   d.offline.push({id: uid(), role, start: nowHHMM(), end: null});
   await saveDayLogNow();
   toast(`${role} on the line`);
@@ -782,6 +783,10 @@ function renderOfflineRows(){
   const rows = OFFLINE_ROLES.map(role=>{
     if(!roleIn(todayStr(), role)) return `<div class="cb-row" style="opacity:.6;"><span class="cb-nm">${role} <span class="cb-mut">off today</span></span><button class="cb-btn" style="flex:0 0 auto;padding:9px 14px;" onclick="setRoleIn('${role}',true)">In today</button></div>`;
     const cur = open.find(o=>o.role===role);
+    const bp = !cur && breakPausedRole(todayStr(), role);
+    if(bp) return `<div class="cb-row" style="border-color:var(--brk);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${role}</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">⏸ Off the line for break since ${fmtTime12(bp.end)}</span>
+      <div class="cb-mut" style="width:100%;">Goes back on the line when the Variovacs come back from break.</div>
+      <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="dontRestartSide('${bp.id}')">Stay off line</button><button class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="roleOnNow('${bp.id}')">On line now</button></div></div>`;
     if(cur) return `<div class="cb-row" style="border-color:var(--brk);gap:8px;"><span class="cb-nm">${role} <span class="cb-tag" style="background:var(--brk-dim);color:var(--brk);">ON LINE · since ${fmtTime12(cur.start)}</span></span><span style="display:flex;gap:6px;flex:0 0 auto;"><button class="cb-btn" style="flex:0 0 auto;border-color:var(--brk);color:var(--brk);" onclick="stopOffline('${cur.id}')">Off</button></span></div>`;
     return `<div class="cb-row"><span class="cb-nm">${role} <span class="cb-mut">in today · off line</span><div><span class="cb-link" style="font-family:Inter,sans-serif;font-size:11.5px;color:var(--muted);" onclick="setRoleIn('${role}',false)">mark off today</span></div></span><button class="cb-btn" style="flex:0 0 auto;padding:9px 16px;" onclick="startOffline('${role}')">On line</button></div>`;
   }).join('');
@@ -837,14 +842,16 @@ function lineStaffNow(m){
   if(live.status!=='RUNNING' && openDt && !openDt.end && openDt.status==='NO_WORK') return {active:false, noWork:true}; // v116: No Work Scheduled needs nobody
   const lastSeg = live.segments[live.segments.length-1];
   const n = (live.pendingEmployees!=null && live.status!=='RUNNING') ? live.pendingEmployees : (lastSeg ? lastSeg.employees : null);
-  return {active:true, staff: (n==null || isNaN(n)) ? null : Number(n), status: live.status};
+  const idle = live.status!=='RUNNING' && !!(openDt && !openDt.end && openDt.status==='WAITING'); // v139: line in Waiting / Downtime — its crew has nothing to do, so they count as spare
+  return {active:true, staff: (n==null || isNaN(n)) ? null : Number(n), status: live.status, idle};
 }
 function crewSnapshot(){
   const date = todayStr(), d = dayLogFor(date);
   const lines = MACHINES.map(m=>{ const s = lineStaffNow(m); return {m, ...s, need: s.active ? (LINE_NEED[m]||0) : 0}; });
   const side = openSideRuns(date);
   const sidePack = side.reduce((a,s)=>a+(s.pack||0),0), sideTrim = side.reduce((a,s)=>a+(s.trim||0),0);
-  const counted = lines.filter(l=>l.active && l.staff!=null);
+  const counted = lines.filter(l=>l.active && l.staff!=null && !l.idle);
+  const idleLines = lines.filter(l=>l.active && l.staff!=null && l.idle);
   const onLines = counted.reduce((a,l)=>a+l.staff,0);
   const needed = counted.reduce((a,l)=>a+l.need,0);
   const short = counted.reduce((a,l)=>a+Math.max(0, l.need-l.staff),0);
@@ -852,9 +859,9 @@ function crewSnapshot(){
   const notEntered = lines.filter(l=>l.active && l.staff==null).map(l=>l.m);
   const crew = crewNowFor(date);
   // v116: lead hand / yield operator working a line are inside that line's headcount but not in the crew number, so add them back
-  const offOnLines = openOffline(date).filter(o=>!o.where || MACHINES.includes(o.where)).length; // v137: On line = on a packaging line (older entries kept their station)
+  const offOnLines = Math.min(onLines, openOffline(date).filter(o=>!o.where || MACHINES.includes(o.where)).length); // v137: On line = on a packaging line (older entries kept their station)
   const spare = crew!=null ? crew - (onLines - offOnLines) - sidePack : null;
-  return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, shortLines, notEntered, crew, spare};
+  return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, shortLines, notEntered, crew, spare, idleLines};
 }
 async function saveDayLogNow(){ const ok = await Store.saveDayLog(); if(ok) render(); return ok; }
 async function setCrew(n){ // first crew number of the day — counted from the 8:00 AM shift start (editable in the log)
@@ -953,8 +960,8 @@ const CREW_FOOTNOTE_LINES = [
   'Packaging staff and trimmer helpers are recorded separately. Only packaging staff count as packaging labour.',
   'Required = 2 per running line: each Variovac (one loading, one boxing + labelling) and Manual Pack (so one can step to a side machine while one stays for reboxes).',
   'Lines that are not running, or are on No Work Scheduled, are not counted.',
-  'Crew bar colour: green when everything is running and covered; it takes the status colour of any line that is stopped right now (Waiting red, Changeover orange, Planned, Break), with the reason entered on the Live Floor. People on a stopped line still count on that line, shown as free to help.',
-  'Break: when every Variovac on the Live Floor is on Break, side machines that are on pause at the time the last Variovac went on break, and restart with the same crew when the first Variovac comes back. Break minutes are not counted as side-machine time. Tap Don\'t restart if the job finished.',
+  'Crew bar colour: green when everything is running and covered; it takes the status colour of any line that is stopped right now (Waiting red, Changeover orange, Planned, Break), with the reason entered on the Live Floor. When a line is in Waiting / Downtime, its people have nothing to do, so they count as spare until the line runs again. On Changeover, Planned stop or Break they stay on the line.',
+  'Break: when every Variovac on the Live Floor is on Break, side machines that are on pause at the time the last Variovac went on break, and restart with the same crew when the first Variovac comes back. Break minutes are not counted as side-machine time. Tap Don\'t restart if the job finished. The lead hand and yield operator go off the line for the break the same way.',
   'Short = each line on its own: required minus packaging staff actually on that line. An extra person on one line does not cover a missing person on another.',
   'Packaging crew changes during the day (someone goes home, arrives late) are logged with the time, so the reports show e.g. 6 from 8:00 AM → 5 from 10:15 AM.',
   'A line with no headcount entered shows "not entered" and is not counted either way.',
@@ -995,10 +1002,12 @@ async function syncSideBreaks(){
   let changed = false, msg = '';
   if(b.any && b.all && !d.breakPause){
     const runs = (d.side||[]).filter(x=>!x.end && x.start < b.start);
-    if(runs.length){
+    const offl = (d.offline||[]).filter(x=>!x.end && x.start < b.start); // v138: Lead Hand / Yield go off the line with the break too
+    if(runs.length || offl.length){
       runs.forEach(x=>{ x.end = b.start; x.breakPaused = true; closeSideWaits(x, b.start); });
-      d.breakPause = {start: b.start, ids: runs.map(x=>x.id)};
-      changed = true; msg = `${runs.map(x=>x.machine).join(', ')} paused for break`;
+      offl.forEach(x=>{ x.end = b.start; x.breakPaused = true; });
+      d.breakPause = {start: b.start, ids: runs.map(x=>x.id), offIds: offl.map(x=>x.id)};
+      changed = true; msg = `${[...runs.map(x=>x.machine), ...offl.map(x=>x.role)].join(', ')} paused for break`;
     }
   } else if(d.breakPause && b.any && !b.all){
     const at = breakEndAfter(d.breakPause.start), back = [];
@@ -1006,6 +1015,11 @@ async function syncSideBreaks(){
       if((d.side||[]).some(y=>y.machine===x.machine && !y.end)) return; // already restarted by hand
       d.side.push({id: uid(), machine: x.machine, start: at, end: null, pack: x.pack, trim: x.trim, afterBreak: true, ...sideCarry(x)});
       back.push(x.machine);
+    });
+    (d.offline||[]).filter(x=>(d.breakPause.offIds||[]).includes(x.id)).forEach(x=>{
+      if((d.offline||[]).some(y=>y.role===x.role && !y.end) || !roleIn(date, x.role)) return; // already back on by hand, or marked off today
+      d.offline.push({id: uid(), role: x.role, start: at, end: null, afterBreak: true});
+      back.push(x.role);
     });
     d.breakPause = null;
     changed = true; if(back.length) msg = `${back.join(', ')} restarted after break`;
@@ -1023,15 +1037,28 @@ async function dontRestartSide(id){
   const d = ensureDayLog(todayStr());
   if(!d.breakPause) return;
   d.breakPause.ids = d.breakPause.ids.filter(x=>x!==id);
-  if(!d.breakPause.ids.length) d.breakPause = null;
+  d.breakPause.offIds = (d.breakPause.offIds||[]).filter(x=>x!==id);
+  if(breakPauseEmpty(d)) d.breakPause = null;
   await saveDayLogNow(); toast('Will stay off after break');
 }
 async function restartSideNow(id){
   const d = ensureDayLog(todayStr()), x = (d.side||[]).find(y=>y.id===id);
   if(!x) return;
   d.side.push({id: uid(), machine: x.machine, start: nowHHMM(), end: null, pack: x.pack, trim: x.trim, ...sideCarry(x)});
-  if(d.breakPause){ d.breakPause.ids = d.breakPause.ids.filter(y=>y!==id); if(!d.breakPause.ids.length) d.breakPause = null; }
+  if(d.breakPause){ d.breakPause.ids = d.breakPause.ids.filter(y=>y!==id); if(breakPauseEmpty(d)) d.breakPause = null; }
   await saveDayLogNow(); toast(`${x.machine} restarted`);
+}
+function breakPauseEmpty(d){ return !d.breakPause || (!(d.breakPause.ids||[]).length && !(d.breakPause.offIds||[]).length); }
+function breakPausedRole(date, role){
+  const d = dayLogFor(date);
+  if(!d || !d.breakPause) return null;
+  return (d.offline||[]).find(x=>x.role===role && (d.breakPause.offIds||[]).includes(x.id)) || null;
+}
+async function roleOnNow(id){ // paused for break → back on the line now
+  const d = ensureDayLog(todayStr()), x = (d.offline||[]).find(y=>y.id===id); if(!x) return;
+  if(d.breakPause){ d.breakPause.offIds = (d.breakPause.offIds||[]).filter(y=>y!==id); if(breakPauseEmpty(d)) d.breakPause = null; }
+  if(!(d.offline||[]).some(y=>y.role===x.role && !y.end)) d.offline.push({id: uid(), role: x.role, start: nowHHMM(), end: null});
+  await saveDayLogNow(); toast(`${x.role} on the line`);
 }
 /* v121: what a line on the Live Floor is doing right now when it is not running: status (with its colour), live reason, minutes so far */
 function lineStopNow(m){
@@ -1061,7 +1088,7 @@ function renderCrewBoard(){
   if(c.spare!=null){
     if(c.spare<=0) spareTxt = 'no spare';
     else {
-      const from = inactive.filter(l=>!l.stale).map(l=>`${l.m} ${l.noWork?'no work scheduled':'not running'}`);
+      const from = [...c.idleLines.filter(l=>l.staff>0).map(l=>`${l.m} waiting (${pp(l.staff)})`), ...inactive.filter(l=>!l.stale).map(l=>`${l.m} ${l.noWork?'no work scheduled':'not running'}`)];
       spareTxt = `${c.spare} spare`; spareWhy = `${c.spare} spare: ${from.length?`from ${from.join(', ')}`:'not on a line or side machine'}`;
     }
   }
@@ -1082,6 +1109,7 @@ function renderCrewBoard(){
   const lineRows = c.lines.map(l=>{
     if(!l.active) return `<div class="cb-row" style="opacity:.5"><span class="cb-nm">${l.m}</span><span class="cb-mut">${l.stale?'open from an earlier day — close it below':(l.noWork?'no work scheduled':'not running')}</span></div>`;
     if(l.staff==null) return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-mut" style="color:var(--change)">headcount not entered</span></div>`;
+    if(l.idle) return `<div class="cb-row"><span class="cb-nm">${l.m}</span><span class="cb-mut" style="color:var(--wait);font-weight:600;">waiting · ${pp(l.staff)} counted as spare</span></div>`;
     const dots = []; for(let i=0;i<Math.min(l.staff,8);i++) dots.push(personDot('ok')); for(let i=l.staff;i<l.need;i++) dots.push(personDot('miss'));
     const diff = l.staff - l.need;
     const cnt = diff<0 ? `<span style="color:var(--wait);font-weight:700;">${l.staff} of ${l.need} · short ${-diff}</span>` : `<span style="color:var(--run);font-weight:600;">${l.staff} of ${l.need}${diff>0?` · ${diff} extra`:''}</span>`;
@@ -1531,7 +1559,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v14';
+const FLOOR3D_REV = 'v15';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
