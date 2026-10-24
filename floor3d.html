@@ -16,7 +16,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v13 · CI Tracker</title>
+<title>3D Floor · v14 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1664,7 +1664,7 @@ function renderCards(){
   const sideCard=`<div class="card sidecard" data-tone="nowork">
       <div class="ctop"><span class="cname">Side machines</span>${td.crew?`<span class="chip crewchip">${td.crew} on shift</span>`:""}</div>
       ${SIDE.map(s=>{const st=sideState(s.key),l=sideLine(s,st);return `<button class="srow sidebtn" data-sidekey="${s.key}" style="--st:${TONE_CSS[l.tone]}"><span><i class="dot"></i>${s.name}</span><span class="sline">${esc(l.line)}</span></button>`}).join("")}
-      ${HELPERS.filter(h=>sideState(h.key).on).map(h=>`<div class="srow helperline"><span><i class="dot"></i>${h.name}</span><span class="sline">on ${esc(sideState(h.key).where||"the line")} since ${t12(sideState(h.key).since)}</span></div>`).join("")}
+      ${HELPERS.filter(h=>sideState(h.key).on).map(h=>`<div class="srow helperline"><span><i class="dot"></i>${h.name}</span><span class="sline">on ${"the line"} since ${t12(sideState(h.key).since)}</span></div>`).join("")}
     </div>`;
   cardsEl.innerHTML=html+sideCard;
   renderStations();
@@ -1721,7 +1721,7 @@ function renderStations(){
   const crew=today().crew;
   const helpers=HELPERS.map(h=>{const st=sideState(h.key);const runs=(today().runs||[]).filter(r=>r.m===h.key);
     const sub=st.on?`On the line since ${t12(st.since)}`:runs.length?"Earlier: "+runs.map(r=>t12(r.on)+"–"+t12(r.off)).join(", "):"Not on the line";
-    const where=st.on&&st.where?" · "+st.where:"";
+    const where="";
     return `<div class="srow helperrow"><span><b class="lbl">${h.name} on the line</b><br><span class="note">${roleOff(h.key)?"Off today":sub+where}</span></span>${fsCol?`<b class="lbl" style="color:${st.on?"var(--brk)":"var(--muted2)"}">${roleOff(h.key)?"Off today":st.on?"On":"Off"}</b>`:`<button class="toggle${st.on?" on":""}" data-helper="${h.key}" aria-pressed="${st.on}">${st.on?"On":"Off"}</button>`}</div>`}).join("");
   sheetBody.innerHTML=`<div class="srow crewrow"><span><b class="lbl">Crew on shift today</b><br><span class="note">Packaging staff, not counting the lead hand and yield person. Shared with everyone.</span></span>${fsCol?`<span class="staff"><b>${crew==null?"–":crew}</b></span>`:`<span class="staff"><button class="big" data-crew="-1" aria-label="One less on shift">−</button><b>${crew==null?"–":crew}</b><button class="big" data-crew="1" aria-label="One more on shift">+</button></span>`}</div>${crewNote()?`<p class="note">${crewNote()}</p>`:""}`+helpers+`<p class="note foot">* Crew, side machines, MAREL times and lead hand / yield are entered on the CI Tracker → Live Floor → Crew Board. This screen shows the same entries, so it always matches the reports. Crew count doesn't include the lead hand or yield person.</p><h3 class="sub">Other stations</h3>`+OTHER.map(o=>`<div class="srow" data-k="${o.key}"><span>${o.name}</span><span class="staff"><button class="big" data-d="-1" aria-label="Remove a worker from ${o.name}">−</button><b>${other[o.key]}</b><button class="big" data-d="1" aria-label="Add a worker to ${o.name}">+</button></span></div>`).join("")+
     `<div class="srow"><span>Slicer</span><span class="note">${sideState("slicer").on?(sideState("slicer").people||0)+" packaging"+(sideState("slicer").trim?" + "+sideState("slicer").trim+" trimmer":"")+" · from the Crew Board":"Off (Crew Board)"}</span></div>`;
@@ -1954,7 +1954,7 @@ function renderPanels(){
   const staffOf=v=>!v?0:(v.state==="run"||v.state==="down")?(v.staff||0):(v.state==="break"?(v.crew||0):0);
   const teamRows=MACHINES.map(m=>{const n=staffOf(view[m.key]);return `<div class="row"><span class="lbl">${m.name}</span><span class="val">${n} staff</span></div>`}).join("")+
     SIDE.filter(s=>s.key!=="marel").map(s=>{const st=sideState(s.key);return `<div class="row"><span class="lbl">${s.name}</span><span class="val">${st.on?(st.people||0)+" staff"+(st.trim?" + "+st.trim+" trim":""):'<span style="color:var(--muted2)">off</span>'}</span></div>`}).join("")+
-    HELPERS.map(h=>{const st=sideState(h.key);return `<div class="row"><span class="lbl">${h.name}</span><span class="val">${roleOff(h.key)?'<span style="color:var(--muted2)">off today</span>':st.on?"on "+esc(st.where||"line"):'<span style="color:var(--muted2)">off line</span>'}</span></div>`}).join("");
+    HELPERS.map(h=>{const st=sideState(h.key);return `<div class="row"><span class="lbl">${h.name}</span><span class="val">${roleOff(h.key)?'<span style="color:var(--muted2)">off today</span>':st.on?"on "+"the line":'<span style="color:var(--muted2)">off line</span>'}</span></div>`}).join("");
 
   // machine most affected (most waiting today) — same rule as the tracker
   const mostW=MACHINES.map(m=>({m:m.name,min:recs.filter(r=>r.machine===m.name&&r.status==="WAITING").reduce((a,r)=>a+(r.durationMin||0),0)})).sort((a,b)=>b.min-a.min)[0];
@@ -1968,7 +1968,7 @@ function renderPanels(){
   const sideKeys=[["fajita","Fajita"],["cutlet","Cutlet"],["slicer","Slicer"],["vacuum","Vacuum Sealer"]]; // Vacuum Sealer added in tracker v122
   const sidePack=sideKeys.reduce((a,[k])=>{const st=sideState(k);return a+(st.on?(st.people||0):0)},0);
   const sideTrim=sideKeys.reduce((a,[k])=>{const st=sideState(k);return a+(st.on?(st.trim||0):0)},0);
-  const rolesOn=HELPERS.filter(h=>{const st=sideState(h.key);return st.on&&/^(Variovac|Manual)/.test(st.where||"")}).length;
+  const rolesOn=HELPERS.filter(h=>{const st=sideState(h.key);return st.on&&(!st.where||/^(Variovac|Manual)/.test(st.where))}).length; // v14: On line = on a packaging line
   const spare=crewNow==null?null:crewNow-(onLines-rolesOn)-sidePack;
   const pp=n=>n+" "+(n===1?"person":"people");
   let ctitle,cc;
@@ -1976,7 +1976,7 @@ function renderPanels(){
   else if(needed===0){cc="var(--nowork)";ctitle="No lines running"}
   else if(spare!=null&&spare<=0){cc="var(--change)";ctitle="All lines covered: no spare"}
   else{cc="var(--run)";ctitle=spare!=null?`All lines covered: ${spare} spare`:"All lines covered"}
-  const roleTxt=HELPERS.filter(h=>!roleOff(h.key)).map(h=>{const st=sideState(h.key);return h.name+(st.on?` (on ${esc(st.where||"the line")})`:"")}).join(" + ");
+  const roleTxt=HELPERS.filter(h=>!roleOff(h.key)).map(h=>{const st=sideState(h.key);return h.name+(st.on?` (on ${"the line"})`:"")}).join(" + ");
   const lineRows=lines.map(l=>{
     if(!l.active)return `<div class="row" style="opacity:.55"><span class="lbl">${l.m.name}</span><span class="val" style="color:var(--muted2);font-family:var(--body);font-weight:500">${l.state==="nowork"?"no work":"not running"}</span></div>`;
     const d=l.staff-l.need,dots=Array.from({length:Math.min(l.staff,6)},()=>"<i></i>").join("")+Array.from({length:Math.max(0,-d)},()=>'<i class="miss"></i>').join("");
@@ -1985,7 +1985,7 @@ function renderPanels(){
   // crew present + lead hand / yield operator (each line's staffing is on its machine window)
   const roleRow=h=>{const st=sideState(h.key);let txt,c;
     if(roleOff(h.key)){txt="off today";c="var(--muted2)"}
-    else if(st.on){txt=`on ${esc(st.where||"the line")} · since ${t12(st.since)}`;c="var(--brk)"}
+    else if(st.on){txt=`on ${"the line"} · since ${t12(st.since)}`;c="var(--brk)"}
     else{txt="in today · off the line";c="var(--run)"}
     return `<div class="row"><span class="lbl">${h.name}</span><span class="cnt3" style="color:${c}">${txt}</span></div>`};
   const crewHtml=`<div class="crewbig"><b>${crewNow==null?"–":crewNow}</b><span>${crewNow==null?"crew not entered yet":"packaging crew present"}${crewNote()?`<br><em>${esc(crewNote())}</em>`:""}</span></div>
@@ -2101,7 +2101,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v13";
+const FLOOR3D_VERSION="v14";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
