@@ -203,7 +203,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v139 - 2026-10-24 (Crew Board: people on a line in Waiting / Downtime count as spare; loads 3D floor v15)';
+const APP_VERSION = 'v140 - 2026-10-25 (iPad: Open full screen link upright and sideways; loads 3D floor v16 with iPad layout and full-screen button)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1553,13 +1553,15 @@ function renderFloor3DSlot(){
 }
 /* v123: "Open full screen" — the 3D floor with the info panel (floor3d.html) in its own window, sized to the screen.
    Laptop / desktop / TV only (shown when the browser window is at least 900 px wide). Clicking again brings the same window to the front. */
+/* v140: laptops / desktops / TVs and iPads or tablets, either way up. Phones never. */
+function fullFloorOK(){ return Math.min(screen.width, screen.height) >= 700; } // laptops, desktops, TVs and iPads all have a short side of 700px+; phones are under 500
 function fullFloorLink(){
-  if(window.innerWidth < 900) return '';
+  if(!fullFloorOK()) return '';
   return `<a class="cb-link" href="floor3d.html?v=${FLOOR3D_REV}" target="ciFloor3d" rel="opener" onclick="return openFullFloor(event)" style="font-size:12.5px;white-space:nowrap;">Open full screen ↗</a>`;
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v15';
+const FLOOR3D_REV = 'v16';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -1569,8 +1571,8 @@ function openFullFloor(e){
   }catch(err){}
   return true; // pop-up blocked: the link opens it in a new tab instead
 }
-let fullFloorWide = window.innerWidth >= 900;
-window.addEventListener('resize', ()=>{ const w = window.innerWidth >= 900; if(w!==fullFloorWide){ fullFloorWide = w; if(Router.current==='dashboard') render(); } });
+let fullFloorWide = fullFloorOK();
+window.addEventListener('resize', ()=>{ const w = fullFloorOK(); if(w!==fullFloorWide){ fullFloorWide = w; if(Router.current==='dashboard') render(); } });
 let floor3DEl = null, floor3DShown = false;
 function placeFloor3D(){
   const slot = document.querySelector('.fp-3dslot');

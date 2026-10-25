@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="3D Floor">
 <meta name="theme-color" content="#0A1322">
 <!-- Live Factory View — hosted next to the CI Tracker (index.html). Same Firebase project and sign-in; read-only. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -16,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v15 · CI Tracker</title>
+<title>3D Floor · v16 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -328,15 +329,15 @@ body{overflow-x:hidden;overflow-y:auto}
 .rail{display:none!important}
 .railtoggle{display:none}
 /* big screens: live info panel on the right (hide with ▸, bring back with ◂; remembered on this computer) */
-@media (min-width:1000px){
-  .mainarea{display:grid!important;grid-template-columns:minmax(0,1fr) 372px;gap:0!important}
-  .rail{display:flex!important;flex-direction:column;gap:10px;height:100%;overflow-y:auto;padding:12px 12px 16px;background:#0B1628;border-left:1px solid var(--line);scrollbar-width:thin}
-  body.railoff .mainarea{grid-template-columns:minmax(0,1fr) 0}
-  body.railoff .rail{display:none!important}
-  .railtoggle{display:inline-flex;position:absolute;z-index:6;top:calc(10px + env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px));
+/* v16: was @media (min-width:1000px) — now set by screen class (laptop/TV, and iPads) */
+  body.wide .mainarea{display:grid!important;grid-template-columns:minmax(0,1fr) 372px;gap:0!important}
+  body.wide .rail{display:flex!important;flex-direction:column;gap:10px;height:100%;overflow-y:auto;padding:12px 12px 16px;background:#0B1628;border-left:1px solid var(--line);scrollbar-width:thin}
+  body.wide.railoff .mainarea{grid-template-columns:minmax(0,1fr) 0}
+  body.wide.railoff .rail{display:none!important}
+  body.wide .railtoggle{display:inline-flex;position:absolute;z-index:6;top:calc(10px + env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px));
     align-items:center;justify-content:center;width:38px;height:34px;border-radius:10px;border:1px solid var(--line);background:rgba(15,29,51,.88);color:var(--text);font:700 15px var(--body);cursor:pointer}
-  .conn3d{right:56px!important}
-}
+  body.wide .conn3d{right:56px!important}
+
 /* compact machine windows inside the panel so it all fits a laptop screen */
 .rail .panel{padding:8px 10px}
 .rail .panel h2{font-size:13.5px;margin-bottom:4px}
@@ -354,41 +355,62 @@ body{overflow-x:hidden;overflow-y:auto}
 /* inside the tracker dashboard (floor3d.html?embed=1): just the floor — no back button, live pill, panel or bar */
 .embed .backbtn,.embed .conn3d,.embed .railtoggle,.embed .sidebar3d,.embed .rail{display:none!important}
 .embed .mainarea{grid-template-columns:minmax(0,1fr)!important}
-@media (min-width:1000px){
-  .sidebar3d{display:flex;position:absolute;z-index:5;left:160px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));gap:6px;flex-wrap:nowrap;align-items:flex-end;pointer-events:none}
-  .stile{pointer-events:auto;display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;background:#0d1a2e;box-shadow:0 2px 10px rgba(0,0,0,.35);
+/* v16: was @media (min-width:1000px) — now set by screen class (laptop/TV, and iPads) */
+  body.big .sidebar3d{display:flex;position:absolute;z-index:5;left:var(--tilesL,205px);right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));gap:6px;flex-wrap:nowrap;align-items:flex-end;pointer-events:none}
+  body.big .stile{pointer-events:auto;display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;background:#0d1a2e;box-shadow:0 2px 10px rgba(0,0,0,.35);
     border:1px solid var(--line);border-left:4px solid var(--st);border-radius:10px;padding:7px 10px;color:var(--text);font:inherit;cursor:pointer;text-align:left}
-  .stile:hover{background:#16294a}
-  .stile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .stile .sn{font-family:var(--display);font-size:13.5px;flex:none;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
-  .stile{flex-direction:column;align-items:stretch!important;gap:3px!important}
-  .stile .st1{display:flex;align-items:center;gap:7px;min-width:0}
-  .stile .sn{overflow:hidden;text-overflow:ellipsis}
-  .stile .sd{width:9px;height:9px;border-radius:50%;background:var(--st);flex:none;box-shadow:0 0 6px var(--st)}
-  .stile .sl{font-size:12px;color:var(--st);white-space:nowrap;font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .stile .sl.off{color:var(--muted);font-weight:500}
-}
+  body.big .stile:hover{background:#16294a}
+  body.big .stile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  body.big .stile .sn{font-family:var(--display);font-size:13.5px;flex:none;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+  body.big .stile{flex-direction:column;align-items:stretch!important;gap:3px!important}
+  body.big .stile .st1{display:flex;align-items:center;gap:7px;min-width:0}
+  body.big .stile .sn{overflow:hidden;text-overflow:ellipsis}
+  body.big .stile .sd{width:9px;height:9px;border-radius:50%;background:var(--st);flex:none;box-shadow:0 0 6px var(--st)}
+  body.big .stile .sl{font-size:12px;color:var(--st);white-space:nowrap;font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  body.big .stile .sl.off{color:var(--muted);font-weight:500}
+
 /* v9: camera pad for TVs / remotes — laptop, desktop, TV only */
 .campad{display:none}
-@media (min-width:1000px){
-  .campad{display:grid;position:absolute;z-index:6;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));
+/* v16: was @media (min-width:1000px) — now set by screen class (laptop/TV, and iPads) */
+  body.big .campad{display:grid;position:absolute;z-index:6;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));
     grid-template-columns:repeat(3,46px) 12px 46px;grid-template-rows:repeat(3,46px);gap:6px;pointer-events:none}
-  .campad button{pointer-events:auto;width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(11,22,40,.9);color:var(--text);
+  body.big .campad button{pointer-events:auto;width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(11,22,40,.9);color:var(--text);
     font:700 18px var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);touch-action:none;user-select:none;-webkit-user-select:none}
-  .campad button:hover,.campad button.on{background:rgba(59,167,230,.35);border-color:var(--accent)}
-  .campad button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-}
+  body.big .campad button:hover,body.big .campad button.on{background:rgba(59,167,230,.35);border-color:var(--accent)}
+  body.big .campad button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
 .embed .campad{display:none!important}
 .legend3d{display:none}
-@media (min-width:1000px){
-  .legend3d{display:flex;position:absolute;z-index:6;top:calc(10px + env(safe-area-inset-top,0px));left:150px;gap:14px;align-items:center;
+/* v16: was @media (min-width:1000px) — now set by screen class (laptop/TV, and iPads) */
+  body.big .legend3d{display:flex;position:absolute;z-index:6;top:calc(10px + env(safe-area-inset-top,0px));left:150px;gap:14px;align-items:center;
     background:#0d1a2e;border:1px solid var(--line);border-radius:10px;padding:8px 14px;font:600 12.5px var(--body);color:var(--text);pointer-events:none;white-space:nowrap}
-  .legend3d span{display:inline-flex;align-items:center;gap:6px}
-  .legend3d i{width:11px;height:11px;border-radius:50%;flex:none}
-}
-@media (min-width:1700px){.legend3d{font-size:14px;gap:18px}.legend3d i{width:13px;height:13px}}
+  body.big .legend3d span{display:inline-flex;align-items:center;gap:6px}
+  body.big .legend3d i{width:11px;height:11px;border-radius:50%;flex:none}
+
+@media (min-width:1700px){body.big .legend3d{font-size:14px;gap:18px}.legend3d i{width:13px;height:13px}}
 .embed .legend3d{display:none!important}
-@media (min-width:1000px) and (max-width:1380px){body:not(.railoff) .legend3d{top:calc(56px + env(safe-area-inset-top,0px));left:max(10px,env(safe-area-inset-left,0px))}}
+/* v16: upright iPad / tablet — same parts as the laptop view; the info panel slides in from the right (▸ / ◂) */
+body.tablet .mainarea{display:block!important;position:relative}
+body.tablet .rail{display:flex!important;flex-direction:column;gap:10px;position:absolute;top:0;right:0;bottom:0;width:min(372px,86vw);z-index:8;overflow-y:auto;
+  padding:52px 12px 16px;background:#0B1628;border-left:1px solid var(--line);box-shadow:-10px 0 28px rgba(0,0,0,.5)}
+body.tablet:not(.railopen) .rail{display:none!important}
+body.tablet .railtoggle{display:inline-flex;position:absolute;z-index:9;top:calc(10px + env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px));
+  align-items:center;justify-content:center;width:38px;height:34px;border-radius:10px;border:1px solid var(--line);background:rgba(15,29,51,.88);color:var(--text);font:700 15px var(--body);cursor:pointer}
+body.tablet .conn3d{right:56px!important}
+body.tablet .legend3d{top:calc(56px + env(safe-area-inset-top,0px));left:max(10px,env(safe-area-inset-left,0px));right:12px;flex-wrap:wrap;white-space:normal;gap:6px 14px;width:max-content;max-width:calc(100% - 22px)}
+body.tablet .sidebar3d{gap:5px}
+body.big .stile .sn{flex:0 1 auto;min-width:0}
+body.tablet .stile{padding:6px 8px}
+body.tablet .stile .sn{font-size:12.5px}
+body.tablet .stile .sl{font-size:11px}
+/* v16: full-screen button (iPad and computers) and the Add to Home Screen tip */
+#fsBtn{display:none}
+body.big.canfs #fsBtn{display:inline-flex}
+.a2hs{display:none;position:absolute;z-index:7;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));max-width:min(520px,calc(100% - 220px));
+  background:#0d1a2e;border:1px solid var(--accent);border-radius:10px;padding:8px 12px;font:500 12.5px/1.4 var(--body);color:var(--text);gap:10px;align-items:center}
+body.big.showa2hs .a2hs{display:flex}
+.a2hs button{flex:none;border:0;background:none;color:var(--muted);font:700 15px var(--body);cursor:pointer;padding:2px 4px}
+@media (max-width:1380px){body.wide:not(.railoff) .legend3d{top:calc(56px + env(safe-area-inset-top,0px));left:max(10px,env(safe-area-inset-left,0px))}}
 .rhead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 2px 0}
 .rhead b{font-family:var(--display);font-size:16px;letter-spacing:.06em;text-transform:uppercase}
 .rhead span{font-family:var(--mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -447,7 +469,9 @@ html,body{height:100%;overflow:hidden}
     <button class="railtoggle" id="railToggle" aria-label="Hide the info panel" title="Hide / show the info panel">▸</button>
     <button class="alarmbar" id="alarmBar" hidden></button>
     <button class="tourchip" id="tourExit">Display mode · tap to stop</button>
+    <div class="a2hs" id="a2hs" role="note"><span>Tip: tap <b>Share</b> → <b>Add to Home Screen</b> to open the 3D floor full screen, like an app.</span><button id="a2hsX" aria-label="Close tip">✕</button></div>
     <div class="stagetools">
+      <button class="ibtn" id="fsBtn" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke-width="2.4"/><path d="M9 9h6v6H9z"/></svg></button>
       <button class="ibtn modebtn" id="modeBtn" aria-label="Switch between photo and 3D floor">3D</button>
       <button class="ibtn only3d" id="vvCam" title="Variovacs" aria-label="Zoom to the Variovacs"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg></button>
       <button class="ibtn only3d" id="resetCam" title="Whole floor" aria-label="Show the whole floor"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
@@ -491,6 +515,12 @@ html,body{height:100%;overflow:hidden}
 (function(){
 "use strict";
 const EMBED=/[?&]embed=1/.test(location.search);if(EMBED){document.documentElement.dataset.theme="dark";document.body.classList.add("embed")}
+// v16: screen classes. wide = laptop / desktop / TV / iPad sideways (1000px+); tab = iPad or tablet upright (short screen side 700px+). Phones get neither.
+const TABLET=Math.min(screen.width,screen.height)>=700;
+function sizeClasses(){const b=document.body,w=!EMBED&&innerWidth>=1000,t=!EMBED&&!w&&TABLET;b.classList.toggle("wide",w);b.classList.toggle("tablet",t);b.classList.toggle("big",w||t)}
+sizeClasses();addEventListener("resize",sizeClasses);
+function placeTiles(){const t=document.querySelector(".stagetools"),st=document.getElementById("stage");if(!t||!st)return;const r=t.getBoundingClientRect(),s=st.getBoundingClientRect();if(r.width)document.body.style.setProperty("--tilesL",Math.round(r.right-s.left+10)+"px")}
+addEventListener("load",placeTiles);addEventListener("resize",placeTiles);setTimeout(placeTiles,600);
 /* ---------- three setup ---------- */
 const stage=document.getElementById("stage");
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -2103,14 +2133,31 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v15";
+const FLOOR3D_VERSION="v16";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
 (function(){let off=false;try{off=localStorage.getItem("floor3d_rail")==="off"}catch(e){}
   const btn=document.getElementById("railToggle");
-  const apply=()=>{document.body.classList.toggle("railoff",off);if(btn){btn.textContent=off?"◂":"▸";btn.setAttribute("aria-label",off?"Show the info panel":"Hide the info panel")}};
-  apply();if(btn)btn.addEventListener("click",()=>{off=!off;try{localStorage.setItem("floor3d_rail",off?"off":"on")}catch(e){};apply()});
+  let open=false; // v16: upright iPad — panel is a drawer, closed to start with
+  const apply=()=>{const tab=document.body.classList.contains("tablet");document.body.classList.toggle("railoff",off);document.body.classList.toggle("railopen",open);
+    const shut=tab?!open:off;if(btn){btn.textContent=shut?"◂":"▸";btn.setAttribute("aria-label",shut?"Show the info panel":"Hide the info panel")}};
+  apply();addEventListener("resize",apply);
+  if(btn)btn.addEventListener("click",()=>{if(document.body.classList.contains("tablet")){open=!open}else{off=!off;try{localStorage.setItem("floor3d_rail",off?"off":"on")}catch(e){}};apply()});
+  // v16: full screen (iPad Safari and computers allow it; iPhone does not) + Add to Home Screen tip for iPads
+  const de=document.documentElement,fsOK=!!(document.fullscreenEnabled||document.webkitFullscreenEnabled||de.requestFullscreen||de.webkitRequestFullscreen);
+  const iOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  const standalone=navigator.standalone===true||(window.matchMedia&&matchMedia("(display-mode: standalone)").matches);
+  document.body.classList.toggle("canfs",fsOK&&!standalone);
+  const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement;
+  const fb=document.getElementById("fsBtn");
+  if(fb)fb.addEventListener("click",()=>{try{
+    if(fsEl()){(document.exitFullscreen||document.webkitExitFullscreen).call(document)}
+    else{const r=(de.requestFullscreen||de.webkitRequestFullscreen).call(de);if(r&&r.catch)r.catch(()=>{if(iOS)document.body.classList.add("showa2hs")})}
+  }catch(e){if(iOS)document.body.classList.add("showa2hs")}});
+  let tipSeen=false;try{tipSeen=localStorage.getItem("floor3d_a2hs")==="seen"}catch(e){}
+  if(iOS&&TABLET&&!standalone&&!EMBED&&!tipSeen)document.body.classList.add("showa2hs");
+  const tx=document.getElementById("a2hsX");if(tx)tx.addEventListener("click",()=>{document.body.classList.remove("showa2hs");try{localStorage.setItem("floor3d_a2hs","seen")}catch(e){}});
 })();
 setInterval(()=>{try{renderPanels()}catch(e){}},30000); // keep minutes and the clock current
 document.getElementById("rail").addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(!b)return;const k=b.dataset.go;if(tour.on)setTour(false);flyTo(k);openMachine(k)});
