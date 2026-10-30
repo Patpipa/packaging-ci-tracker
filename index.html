@@ -204,7 +204,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v143 - 2026-10-29 (Side machines: In training count + optional trainee name, shown on the Live Floor and in reports; loads 3D floor v19)';
+const APP_VERSION = 'v144 - 2026-10-29 (Vacuum Sealer breakdown cover: not pre-selected, ends automatically when that Variovac runs again; loads 3D floor v20)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -696,7 +696,14 @@ function machineBreakdownsNow(){
 }
 function sideOpenWait(s){ return (s.waits||[]).find(w=>!w.end) || null; }
 function closeSideWaits(s, at){ (s.waits||[]).forEach(w=>{ if(!w.end) w.end = at; }); }
-function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.covering||'', train: x.train||0, trainName: x.trainName||''}; }
+function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.coverEnd ? '' : (x.covering||''), train: x.train||0, trainName: x.trainName||''}; }
+/* v144: cover time = sealer running time while that Variovac was still down (ends when it runs again), minus waits for trimmers */
+function coverMin(s){ const end = s.coverEnd ? Math.min(s.b, Math.max(s.a, toMin(s.coverEnd))) : s.b;
+  const w = (s.waits||[]).reduce((t,x)=>{ const wa=toMin(x.start), wb = x.end ? toMin(x.end) : s.b; return t + Math.max(0, Math.min(wb,end) - Math.max(wa,s.a)); }, 0);
+  return Math.max(0, end - s.a - w); }
+async function endCoverFor(m){ const d = dayLogFor(todayStr()); if(!d) return; const now = nowHHMM(); let ch = false;
+  (d.side||[]).forEach(x=>{ if(!x.end && x.covering===m && !x.coverEnd){ x.coverEnd = now; ch = true; } });
+  if(ch){ const ok = await Store.saveDayLog(); if(ok){ render(); toast(`${m} running again — Vacuum Sealer no longer covering it`); } } }
 function trainText(s){ return s.train ? `${s.train} in training${s.trainName?` (${s.trainName})`:''}` : ''; } // v143
 function outKey(machine, label){ return machine==='Vacuum Sealer' ? `Vacuum Sealer|${label||'not specified'}` : machine; }
 function qEsc(k){ return encodeURIComponent(k).replace(/'/g,'%27'); }
@@ -918,7 +925,7 @@ function openSideSetup(machine, changeId){
   const bd = machineBreakdownsNow();
   sideSetup = {machine, pack: cur ? cur.pack : 1, trim: cur ? cur.trim : 0, changeId: changeId||null,
     product: cur ? (cur.product||'') : '', productNote: cur ? (cur.productNote||'') : '', train: cur ? (cur.train||0) : 0, trainName: cur ? (cur.trainName||'') : '',
-    covering: cur ? (cur.covering||'') : (machine==='Vacuum Sealer' && bd.length ? bd[0] : '')};
+    covering: cur && !cur.coverEnd ? (cur.covering||'') : ''}; // v144: never pre-selected — tap the Variovac only when the sealer is really taking its work
   render();
 }
 async function confirmSide(){
@@ -1140,7 +1147,7 @@ function renderCrewBoard(){
     if(run){
       const dots = []; for(let i=0;i<run.pack;i++) dots.push(personDot(i>=run.pack-(run.train||0)?'trn':'side')); for(let i=0;i<run.trim;i++) dots.push(personDot('tr'));
       const w = sideOpenWait(run), vac = sm.name==='Vacuum Sealer';
-      const info = [vac ? `<b style="color:var(--text);">${escapeHtml(sideProdLabel(run)||'product not picked')}</b>` : '', run.train ? `<span style="color:#F2C14E;">${escapeHtml(trainText(run))}</span>` : '', run.covering ? `<span style="color:var(--wait);">covering ${run.covering} breakdown</span>` : ''].filter(Boolean).join(' · ');
+      const info = [vac ? `<b style="color:var(--text);">${escapeHtml(sideProdLabel(run)||'product not picked')}</b>` : '', run.train ? `<span style="color:#F2C14E;">${escapeHtml(trainText(run))}</span>` : '', run.covering && !run.coverEnd ? `<span style="color:var(--wait);">covering ${run.covering} breakdown</span>` : ''].filter(Boolean).join(' · ');
       return `<div class="cb-row" style="border-color:${w?'var(--change)':'var(--amber)'};flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
         ${info?`<div class="cb-mut" style="width:100%;">${info}</div>`:''}
         ${w?`<div style="width:100%;font-size:12.5px;color:var(--change);font-weight:600;">⏸ Waiting for trimmers since ${fmtTime12(w.start)} — not counted as running time</div>`:''}
@@ -1304,7 +1311,7 @@ function dayLogSections(date, opts){
     side.push({k:'Vacuum Sealer · total', v: base + (vg.length>1 ? tot : ` · ${outText(outp[vg[0] ? vg[0].key : ''])}`), bold:false});
     if(vg.length>1) vg.forEach(g=>side.push({k:`↳ ${g.label}`, sub:true, v:`ran ${fmtDur(g.act)} · ${outText(outp[g.key])}`}));
     else if(vg.length===1) side[side.length-1].k = `Vacuum Sealer · ${vg[0].label}`;
-    [...new Set(mine.filter(s=>s.covering).map(s=>s.covering))].forEach(c=>side.push({k:`↳ covering ${c} breakdown`, sub:true, v: fmtDur(mine.filter(s=>s.covering===c).reduce((a,s)=>a+s.act,0)), red:true}));
+    [...new Set(mine.filter(s=>s.covering).map(s=>s.covering))].forEach(c=>side.push({k:`↳ covering ${c} breakdown`, sub:true, v: fmtDur(mine.filter(s=>s.covering===c).reduce((a,s)=>a+coverMin(s),0)), red:true}));
   });
   const unused = SIDE_MACHINES.filter(m=>!used.includes(m)).map(m=>m.name);
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
@@ -1590,7 +1597,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v19';
+const FLOOR3D_REV = 'v20';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -2975,6 +2982,9 @@ async function closeOutLiveRun(m, opts){
   if(!okR) return null;
   return {count: toSave.length, grossPLH};
 }
+// v144: when a Variovac runs again, any Vacuum Sealer cover for it ends at that moment
+{ const _resume = resumeRun; resumeRun = async function(m){ const r = await _resume(m); const l = Store.liveRuns[m]; if(l && l.status==='RUNNING') await endCoverFor(m); return r; };
+  const _start = confirmStartRun; confirmStartRun = async function(){ const m = liveSetup && liveSetup.machine; const r = await _start(); const l = m && Store.liveRuns[m]; if(l && l.status==='RUNNING') await endCoverFor(m); return r; }; }
 let isSwitching = false;
 async function switchProduct(m){
   if(isSwitching) return;
@@ -3004,6 +3014,7 @@ async function switchProduct(m){
 let isEndingDowntime = false;
 async function endStandaloneDowntime(m){
   if(isEndingDowntime) return;
+  endCoverFor(m); // v144: breakdown over
   isEndingDowntime = true;
   const btn = document.getElementById('endDowntimeBtn-'+machineIdSafe(m));
   if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='Saving…'; }
