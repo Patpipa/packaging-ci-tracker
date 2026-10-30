@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v20 · CI Tracker</title>
+<title>3D Floor · v21 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1479,7 +1479,10 @@ function cleanupDone(){
   if(jackQ.length||(jackW&&jackW.state==="walk"))return false;
   return (crews.gbg||[]).every(w=>w.gbgDone);
 }
-function shiftOver(){return shiftEnded()&&(Date.now()>=endShiftAt+15*60000||(cleanupMode()&&cleanupDone()))}
+// v21: a line started after End Shift (overtime, or End Shift pressed early by mistake) brings the floor back
+function startedAfterEnd(){if(!endShiftAt)return false;const d=new Date(endShiftAt),hm=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  return MACHINES.some(m=>{const l=view[m.key]&&view[m.key].live;return !!(l&&(!l.date||l.date===localDate())&&(l.startedAt||"")>hm)})}
+function shiftOver(){return shiftEnded()&&!startedAfterEnd()&&(Date.now()>=endShiftAt+15*60000||(cleanupMode()&&cleanupDone()))}
 function wanted(){
   const n={};
   MACHINES.forEach(m=>{view[m.key]=readMachine(m.name);n[m.key]=Math.min(8,view[m.key].staff||0)});
@@ -2185,7 +2188,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v20";
+const FLOOR3D_VERSION="v21";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
@@ -2498,6 +2501,7 @@ function v18Tick(){try{
   (crews.gbg||[]).forEach((w,i)=>{if(w.state==="work"&&!w.gbgDone&&!w.gbgBusy)garbageRun(w,i===0?[[-3.0,21.2],[-3.0,10.2]]:[[2.2,-2.8],[11.0,16.0]],true)});
   // 6) End Shift: after 15 min (or once the clean-up is done) everyone walks out by Manual Pack; the forklift driver stays
   const over=shiftOver();const st=(m>=15*60?"3":"")+(cu?"c":"")+(over?"x":"");
+  if(!over&&homeSent&&startedAfterEnd()){location.reload();return} // v21: back to work after End Shift — start the floor fresh
   if(over&&!homeSent){homeSent=true;[jackW,runner,typeof rackW!=="undefined"?rackW:null].forEach(w=>{if(w&&w.state!=="gone")sendHome(w)});workers.forEach(w=>{if(w.key==="garbage")sendHome(w)})}
   if(st!==v18Last){const first=v18Last==="";v18Last=st;if(!first)syncFloor()}
   // v19: trainees on side machines wear a yellow helmet (the last packaging spots of that machine)
