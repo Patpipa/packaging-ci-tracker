@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v16 · CI Tracker</title>
+<title>3D Floor · v19 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1183,11 +1183,11 @@ function updateLabelVisibility(){const d=camera.position.distanceTo(controls.tar
    Nothing is entered here, so this screen and the reports always show the same numbers. */
 const SHIFT_END="16:30";
 const SIDE=[
-  {key:"fajita",name:"Fajita machine",maxPeople:2,defPeople:2,rect:[-13.9,7.33,-11.9,8.58]},
-  {key:"cutlet",name:"Cutlet machine",maxPeople:1,defPeople:1,rect:[-9.08,7.45,-7.33,8.45]},
+  {key:"fajita",name:"Fajita machine",maxPeople:3,defPeople:2,rect:[-13.9,7.33,-11.9,8.58]},
+  {key:"cutlet",name:"Cutlet machine",maxPeople:3,defPeople:1,rect:[-9.08,7.45,-7.33,8.45]},
   {key:"marel",name:"Marel",marel:true,rect:[-8.75,-7.5,-2.25,1.0]},
-  {key:"slicer",name:"Slicer",maxPeople:1,defPeople:1,tag:3.5,rect:[-18.05,-2.85,-16.45,-1.15]},
-  {key:"vacuum",name:"Vacuum sealer",maxPeople:2,defPeople:2,tag:3.5,rect:[-18.25,-6.85,-16.65,-5.15]}
+  {key:"slicer",name:"Slicer",maxPeople:3,defPeople:1,tag:3.5,rect:[-18.05,-2.85,-16.45,-1.15]},
+  {key:"vacuum",name:"Vacuum sealer",maxPeople:3,defPeople:2,tag:3.5,rect:[-18.25,-6.85,-16.65,-5.15]}
 ];
 let floorLog={days:{}};
 let fsCol=null;                         // set once signed in
@@ -1200,7 +1200,7 @@ function today(log=floorLog){const k=dateKey();return log.days[k]||{crew:null,ru
 const SIDE_KEY={Fajita:"fajita",Cutlet:"cutlet",Slicer:"slicer","Vacuum Sealer":"vacuum"},ROLE_KEY={"Lead Hand":"lead","Yield Operator":"yield"};
 function floorFromDayLog(dl){const days={};
   Object.keys(dl||{}).forEach(k=>{const d=dl[k]||{},runs=[];
-    (d.side||[]).forEach(x=>{const m=SIDE_KEY[x.machine];if(!m)return;const w=(x.waits||[]).find(y=>!y.end);runs.push({m,on:x.start,off:x.end||null,people:x.pack||0,trim:x.trim||0,prod:x.product==="Other"?(x.productNote||"Other"):(x.product||""),cover:x.covering||"",waiting:w?w.start:""})});
+    (d.side||[]).forEach(x=>{const m=SIDE_KEY[x.machine];if(!m)return;const w=(x.waits||[]).find(y=>!y.end);runs.push({m,on:x.start,off:x.end||null,people:x.pack||0,trim:x.trim||0,train:Math.min(x.train||0,x.pack||0),trainName:x.trainName||"",waits:x.waits||[],prod:x.product==="Other"?(x.productNote||"Other"):(x.product||""),cover:x.covering||"",waiting:w?w.start:""})});
     if(d.marelStart||d.marelEnd)runs.push({m:"marel",on:d.marelStart||d.marelEnd,off:d.marelEnd||null});
     (d.offline||[]).forEach(o=>{const m=ROLE_KEY[o.role];if(m)runs.push({m,on:o.start,off:o.end||null,where:o.where})});
     const cl=(Array.isArray(d.crewLog)&&d.crewLog.length)?d.crewLog.slice().sort((a,b)=>String(a.at).localeCompare(String(b.at))):(d.crew!=null?[{at:d.crewAt||"08:00",n:d.crew}]:[]);
@@ -1212,7 +1212,7 @@ function roleOff(key){const r=today().roles||{};return r[key==="lead"?"Lead Hand
 function openRun(key,log=floorLog){const ks=[dateKey()];
   for(const k of ks){const r=((log.days[k]||{}).runs||[]).slice().reverse().find(x=>x.m===key&&!x.off);if(r)return {r,day:k}}return null}
 function lastRunToday(key){return (today().runs||[]).filter(x=>x.m===key&&x.off).slice(-1)[0]||null}
-function sideState(key){const o=openRun(key);return o?{on:true,since:o.r.on,people:o.r.people||0,trim:o.r.trim||0,where:o.r.where||"",day:o.day,prod:o.r.prod||"",cover:o.r.cover||"",waiting:o.r.waiting||""}:{on:false,last:lastRunToday(key)}}
+function sideState(key){const o=openRun(key);return o?{on:true,since:o.r.on,people:o.r.people||0,trim:o.r.trim||0,where:o.r.where||"",day:o.day,prod:o.r.prod||"",cover:o.r.cover||"",waiting:o.r.waiting||"",train:o.r.train||0}:{on:false,last:lastRunToday(key)}}
 
 async function saveLog(mutate){
   if(!fsCol){mutate(floorLog);afterLogChange();return true} // preview: keep it on this page
@@ -1255,7 +1255,7 @@ function sideLine(s,st){
     return {tone:"nowork",line:"Not cutting yet"};
   }
   if(st.on&&st.waiting)return {tone:"change",line:(st.prod?st.prod+" · ":"")+"Waiting for trimmers since "+t12(st.waiting)};
-  if(st.on)return {tone:"run",line:(st.prod?st.prod+" · ":"")+st.people+(st.people===1?" person":" people")+" · since "+t12(st.since)+(st.cover?" · covering "+st.cover:"")};
+  if(st.on)return {tone:"run",line:(st.prod?st.prod+" · ":"")+st.people+(st.people===1?" person":" people")+(st.train?` (${st.train} in training)`:"")+" · since "+t12(st.since)+(st.cover?" · covering "+st.cover:"")};
   if(st.last)return {tone:"nowork",line:"Off · ran "+t12(st.last.on)+"–"+t12(st.last.off)};
   return {tone:"nowork",line:"Off"};
 }
@@ -1297,15 +1297,15 @@ function sideToast(msg){const el=document.getElementById("sideMsg");if(el)el.tex
 function openSide(key){const s=SIDE.find(x=>x.key===key);if(!s)return;machinePick=null;sidePick={key,people:s.defPeople||0};highlight[key]=performance.now()/1000;renderSide();sideSheet.hidden=false}
 function renderSide(){
   const s=SIDE.find(x=>x.key===sidePick.key),st=sideState(s.key),runs=(today().runs||[]).filter(r=>r.m===s.key);
-  const hist=runs.length?`<div class="runlist">${runs.map(r=>`<div><span>${t12(r.on)} – ${r.off?t12(r.off):"now"}</span>${s.marel?"":`<span>${r.people} pkg${r.trim?" + "+r.trim+" trim":""}</span>`}</div>`).join("")}</div>`:`<p class="note">Nothing logged today yet.</p>`;
+  const hist=runs.length?`<div class="runlist">${runs.map(r=>`<div><span>${t12(r.on)} – ${r.off?t12(r.off):"now"}</span>${s.marel?"":`<span>${r.people} pkg${r.train?` (${r.train} training)`:""}${r.trim?" + "+r.trim+" trim":""}</span>`}</div>`).join("")}</div>`:`<p class="note">Nothing logged today yet.</p>`;
   let action;
   const live=!!fsCol;
   if(live){
-    action=st.on?`<p class="state on">${s.marel?"Cutting":"Running"} since ${t12(st.since)}${s.marel?"":" · "+st.people+" packaging"+(st.trim?" + "+st.trim+" trimmer":"")}</p>`
+    action=st.on?`<p class="state on">${s.marel?"Cutting":"Running"} since ${t12(st.since)}${s.marel?"":" · "+st.people+" packaging"+(st.train?` (${st.train} in training)`:"")+(st.trim?" + "+st.trim+" trimmer":"")}</p>`
       :`<p class="state">${s.marel?(st.last?"Finished cutting at "+t12(st.last.off):"Not cutting yet"):"Off right now"}</p>`;
     action+=`<p class="note">Entered on the CI Tracker → Live Floor → Crew Board, so this screen and the reports always match.</p>`;
   }
-  else if(st.on)action=`<p class="state on">${s.marel?"Cutting":"Running"} since ${t12(st.since)}${s.marel?"":" · "+st.people+(st.people===1?" person":" people")}</p>
+  else if(st.on)action=`<p class="state on">${s.marel?"Cutting":"Running"} since ${t12(st.since)}${s.marel?"":" · "+st.people+(st.people===1?" person":" people")+(st.train?` (${st.train} in training)`:"")}</p>
     ${s.marel?`<div class="timerow"><label for="marelStart">Fix start time</label><input type="time" id="marelStart" value="${st.since}"><button class="hbtn ghost" data-side="fixstart">Save</button></div>`:""}
     <button class="bigact stop" data-side="stop">${s.marel?"Marel finished cutting":"Stop "+s.name.toLowerCase()}</button>`;
   else action=`<p class="state">${s.marel?"Not cutting right now":"Off right now"}</p>
@@ -1315,8 +1315,16 @@ function renderSide(){
   sideBody.innerHTML=`<div class="sheethead"><h2>${s.name}</h2><button class="hbtn" id="sideDone">Done</button></div>
     ${action}<span class="note" id="sideMsg"></span>
     <h3 class="sub">Today</h3>${hist}
-    ${s.marel?``:(()=>{const n=st.on?st.people:(sidePick.people||s.defPeople||1);const who=n===1?"1 operator":n+" operators";
-      return `<p class="note foot">Uses packaging labour hours. Running the ${s.name.toLowerCase()} takes ${who} off a Variovac or another packaging station, so the line runs short-handed while it's on. These hours aren't counted in PLH, but they're logged here.</p>`})()}`;
+    ${s.marel?``:(()=>{const nm=s.name.toLowerCase();
+      // v19: today's packaging labour = time on × packaging people, minus waits for trimmers, capped at 4:30 PM (same as the reports)
+      const nowHM=new Date().toTimeString().slice(0,5),cap=t=>t>"16:30"?"16:30":t,mn=t=>{const [h,m]=String(t).split(":").map(Number);return h*60+m};
+      let lab=0,trn=0;runs.forEach(r=>{const a=mn(r.on),b=Math.max(a,mn(cap(r.off||nowHM)));let w=0;(r.waits||[]).forEach(x=>{const wa=mn(x.start),wb=mn(cap(x.end||nowHM));w+=Math.max(0,Math.min(wb,b)-Math.max(wa,a))});
+        const act=Math.max(0,b-a-w);lab+=act*(r.people||0);trn+=act*(r.train||0)});
+      const fd=m=>{m=Math.round(m);return m>=60?Math.floor(m/60)+"h "+(m%60)+"m":m+"m"};
+      const total=lab?`<p class="note"><b>Today: ${fd(lab)} packaging labour${trn?` (incl. ${fd(trn)} training)`:""}</b></p>`:"";
+      const msg=st.on?`Right now <b>${st.people} packaging ${st.people===1?"person is":"people are"}</b> on the ${nm}${st.train?` (${st.train} in training)`:""} instead of the packaging lines, so a line can run short-handed.`
+        :`Running the ${nm} takes packaging people off the lines (however many are picked on the Crew Board, 1 to 3).`;
+      return total+`<p class="note foot">${msg} These hours aren't counted in PLH, but they're logged here.</p>`})()}`;
 }
 sideSheet.addEventListener("click",async e=>{
   if(e.target===sideSheet||e.target.id==="sideDone"){sideSheet.hidden=true;return}
@@ -1365,7 +1373,7 @@ function makeWorker(hatColor,skin){
   mesh(new THREE.CylinderGeometry(0.06,0.07,0.1,8),skin,0,headG);
   const head=mesh(new THREE.SphereGeometry(0.155,16,12),skin,0.14,headG,true);
   const net=mesh(new THREE.SphereGeometry(0.163,16,8,0,Math.PI*2,0,Math.PI*0.55),WK.net,0.145,headG);
-  mesh(new THREE.SphereGeometry(0.185,16,8,0,Math.PI*2,0,Math.PI/2),M(hatColor,{roughness:.35}),0.2,headG);
+  const hat=mesh(new THREE.SphereGeometry(0.185,16,8,0,Math.PI*2,0,Math.PI/2),M(hatColor,{roughness:.35}),0.2,headG);
   const brim=mesh(new THREE.CylinderGeometry(0.22,0.22,0.025,16),M(hatColor,{roughness:.35}),0.21,headG);brim.position.z=0.04;
   const carry=box(0.5,0.3,0.38,mats.box,0,0.28,0.42,torso);carry.visible=false;
   // hi-vis safety vest, worn instead of the white frock in Warehouse 1, the In & Out passage and the Burger Room
@@ -1374,7 +1382,7 @@ function makeWorker(hatColor,skin){
   [0.23,0.43].forEach(y=>{const r=new THREE.Mesh(new THREE.CylinderGeometry(0.258,0.262,0.045,14,1,true),WK.reflect);r.position.y=y;vest.add(r)});
   const vs=new THREE.Mesh(new THREE.SphereGeometry(0.245,14,8,0,Math.PI*2,0,Math.PI/2),WK.vest);vs.position.y=0.6;vs.scale.set(1.06,.42,.92);vest.add(vs);
   scene.add(g);
-  return {g,legs,knees,arms,elbows,torso,headG,carry,phase:Math.random()*6,body,net,head,shoulders,sleeves,apron,vest,vested:false,
+  return {g,legs,knees,arms,elbows,torso,headG,carry,phase:Math.random()*6,body,net,head,shoulders,sleeves,apron,vest,vested:false,hat,brim,
     v:0,idleType:Math.floor(Math.random()*3),lookYaw:0,lookT:2+Math.random()*4,stretchT:20+Math.random()*40,stretching:0};
 }
 
@@ -1389,8 +1397,9 @@ function newWorker(x,z){
    Variovac 1 & 2: 1st loader, 2nd packer, 3rd centre-line (skid & labels), rest extra hands.
    Variovac 3: 1st loader, 2nd boxing & labelling, 3rd loader. Manual Pack works the rebox table. */
 const SPOTS={
-  fajita:[[-13.4,9.4,-13.4,8.0],[-12.4,9.4,-12.4,8.0]],
-  cutlet:[[-8.2,9.4,-8.2,8.0]],
+  // v17: up to 3 packaging + 2 trimmers on any side machine → 5 spots each
+  fajita:[[-13.4,9.4,-13.4,8.0],[-12.4,9.4,-12.4,8.0],[-14.4,9.4,-14.0,8.0],[-11.4,9.4,-11.9,8.0],[-15.3,7.8,-14.2,7.8]],
+  cutlet:[[-8.2,9.4,-8.2,8.0],[-9.2,9.4,-9.0,8.0],[-7.2,9.4,-7.6,8.0],[-10.4,7.8,-9.4,7.8],[-6.7,7.8,-7.6,7.8]],
   // Variovac 1 & 2: loader at the infeed (chicken table side), packer at the outfeed, 3rd on the centre conveyor
   v1:[[-5.3,18.0,-4.4,18.0],[6.0,19.3,5.4,18.0],[7.3,14.2,6.1,14.2],[-1.5,16.2,-1.5,18.6],[1.8,16.2,1.8,18.6],[-1.5,21.0,-1.5,18.6],[1.8,21.0,1.8,18.6],[-5.3,19.4,-4.4,19.4]],
   v2:[[-5.3,7.4,-4.4,7.4],[6.3,5.6,5.4,6.5],[7.3,9.6,6.1,9.6],[-1.5,5.6,-1.5,7.95],[1.8,5.6,1.8,7.95],[-1.5,10.3,-1.5,7.95],[1.8,10.3,1.8,7.95],[-5.3,8.7,-4.4,8.7]],
@@ -1405,9 +1414,12 @@ const SPOTS={
   bs1:[[7.8,-5.75,9.4,-5.75],[9.4,-4.2,9.4,-5.75]],
   bs2:[[-15.7,-12.0,-17.5,-12.0],[-15.7,-10.6,-17.5,-11.6]],
   dicer:[[8.4,-8.6,10.0,-8.6],[8.4,-11.2,9.9,-11.2]],
-  slicer:[[-15.5,-2.0,-17.2,-2.0]],
-  vacuum:[[-15.7,-6.45,-17.4,-6.45],[-15.7,-5.5,-17.4,-5.5]],
-  maint:[[7.3,-7.2,6.4,-7.2]]
+  slicer:[[-15.5,-2.0,-17.2,-2.0],[-15.5,-2.9,-17.0,-2.6],[-15.5,-1.1,-17.0,-1.4],[-14.6,-2.45,-16.6,-2.2],[-14.6,-1.55,-16.6,-1.8]],
+  vacuum:[[-15.7,-6.45,-17.4,-6.45],[-15.7,-5.5,-17.4,-5.5],[-15.7,-7.35,-17.2,-7.0],[-14.8,-6.0,-16.8,-6.0],[-14.8,-6.95,-16.8,-6.6]],
+  maint:[[7.3,-7.2,6.4,-7.2]],
+  // v18: end-of-day clean-up at the Variovac infeeds (taking parts off at the meat loading end), and the 2 garbage people
+  clean:[[-5.3,18.0,-4.4,18.0],[-5.3,7.4,-4.4,7.4],[4.7,-10.8,4.7,-9.9],[-5.3,19.4,-4.4,19.4],[-5.3,8.7,-4.4,8.7],[3.3,-8.6,4.1,-8.6],[-1.5,16.2,-1.5,18.6],[-1.5,5.6,-1.5,7.95],[3.3,-6.4,4.1,-6.4]],
+  gbg:[[-1.5,10.3,-1.5,7.95],[3.3,-4.8,4.1,-4.8]]
 };
 const MAINT_SPOT={v1:[0.2,16.2,0.2,18.6],v2:[0.2,10.3,0.2,7.95],v3:[7.3,-7.2,6.4,-7.2]};
 const DOOR=[17.6,-2.3];             // people come in from the warehouse through In & Out
@@ -1443,6 +1455,31 @@ function readMachine(name){
   const lab=st==="CHANGEOVER"?"Changeover":st==="PLANNED"?"Planned stop":"Waiting";
   return Object.assign(v,{state:"down",staff:crew,label:lab});
 }
+/* ---------- v18: end of day, racks, garbage, pallet jack on Finish ----------
+   3:00 PM trimmers / band saws / dicer / Debox rack go home through the exit by Manual Pack (MAREL: operator + 1 until finished).
+   A rack of white tubs goes to each running Variovac and back behind the Fajita machine when it stops.
+   Garbage runs 9:30 / 12:30 / 3:00. When no Variovac is running (after 1 PM): clean-up. End Shift: 15 min, then everyone goes home. */
+const HOME_KEYS=["trimmer","trim","trim3","bs1","bs2","dicer","marel"];
+const RACK_SPOT={v1:[-7.0,17.3],v2:[-7.0,6.2],v3:[3.0,-11.8]},RACK_PICK=[-15.8,3.2],RACK_IDLE=[-15.6,5.8];
+const INOUT_DROP=[16.0,-0.5];
+const GARBAGE_STOPS=[[2.2,-2.8],[-11.2,-3.6],[-14.0,-6.0],[-13.8,-2.0],[-8.6,9.9],[-12.9,9.8],[-3.0,10.2],[-3.0,21.2],[11.0,16.0]];
+const GARBAGE_TIMES=[9*60+30,12*60+30,15*60];
+let rackAt={},rackQ=[],jackQ=[],prevRun={},v18First=true,sawRun=false,cleanStart=0,cleanWas=false;
+let endShiftAt=0,endShiftDate="",homeSent=false,runner=null,v18Last="",noRunSince=0,v18Date="";
+function shiftEnded(){return !!endShiftAt&&endShiftDate===localDate()&&Date.now()>=endShiftAt}
+function cleanupMode(){
+  if(nowMins()<13*60)return false;
+  const ran=sawRun||(records||[]).some(r=>r&&r.date===localDate()&&/^Variovac/.test(r.machine||""));
+  const none=["v1","v2","v3"].every(k=>!view[k]||!view[k].live);
+  if(!none){noRunSince=0;return false}if(!noRunSince)noRunSince=Date.now();
+  return ran&&Date.now()-noRunSince>=2*60000; // 2 min with no Variovac running, so a quick Finish → Start is not the end of the day
+}
+function cleanupDone(){
+  if(!cleanStart||Date.now()-cleanStart<8*60000)return false;
+  if(jackQ.length||(jackW&&jackW.state==="walk"))return false;
+  return (crews.gbg||[]).every(w=>w.gbgDone);
+}
+function shiftOver(){return shiftEnded()&&(Date.now()>=endShiftAt+15*60000||(cleanupMode()&&cleanupDone()))}
 function wanted(){
   const n={};
   MACHINES.forEach(m=>{view[m.key]=readMachine(m.name);n[m.key]=Math.min(8,view[m.key].staff||0)});
@@ -1456,9 +1493,12 @@ function wanted(){
   ["fajita","cutlet"].forEach(k=>{const st=sideState(k);n[k]=st.on?Math.min(SPOTS[k].length,(st.people||0)+(st.trim||0)):0});
   if(trimBreak())TRIM_KEYS.forEach(k=>n[k]=0);   // trimmers' break: every trim table empties
   // v8: end of the trimmers' day (device clock): from 2:30 PM only 2 stay at the main trim table, at 3:00 PM they leave too
-  {const m=nowMins();if(m>=15*60)TRIM_KEYS.forEach(k=>n[k]=0);else if(m>=14*60+30){n.trimmer=Math.min(n.trimmer||0,2);n.trim=0;n.trim3=0}
+  {const m=nowMins();if(m>=15*60){TRIM_KEYS.forEach(k=>n[k]=0);n.bs1=0;n.bs2=0;n.dicer=0}else if(m>=14*60+30){n.trimmer=Math.min(n.trimmer||0,2);n.trim=0;n.trim3=0}
   // MAREL: from 2:30 PM the operator + 1 helper stay until the MAREL finish time is entered on the Crew Board; then they leave
    const mr=sideState("marel");if(mr.last&&!mr.on)n.marel=0;else if(m>=14*60+30)n.marel=2}
+  // v18: clean-up once no Variovac is running — packaging crew clean the Variovacs, 2 take the garbage (the pallet jack takes the skids)
+  if(cleanupMode()){const c=today().crew;const crew=c==null?4:Number(c)||4;n.clean=Math.max(1,Math.min(SPOTS.clean.length,crew-3));n.gbg=2}else{n.clean=0;n.gbg=0}
+  if(shiftOver())Object.keys(n).forEach(k=>n[k]=0);   // End Shift + 15 min (or clean-up done): everyone goes home
   return n;
 }
 /* ---------- trimmers' breaks: 9:00-9:30 and 12:00-12:30 every day (this device's clock) ----------
@@ -1476,6 +1516,7 @@ function roleFor(key,i){
   if((key==="v1"||key==="v2")&&i===2)return "centre";
   if(key==="v3"&&i===1)return "boxer";
   if(key==="marel"&&i===1)return "tubs";
+  if(key==="gbg")return "gbg";
   return null;
 }
 function assign(w,key,i,fromDoor){
@@ -1486,8 +1527,8 @@ function assign(w,key,i,fromDoor){
 }
 // move people to match the floor: surplus people are reused for open spots before anyone new walks in
 function syncFloor(){
-  const n=wanted();const pool=[],leave=[],brk=[];const onBrk=trimBreak();
-  Object.keys(n).forEach(k=>{const list=crews[k]||(crews[k]=[]);while(list.length>n[k])(k==="maint"?leave:(onBrk&&TRIM_KEYS.includes(k)?brk:pool)).push(list.pop())});
+  const n=wanted();const pool=[],leave=[],brk=[];const onBrk=trimBreak();const over=shiftOver(),late=nowMins()>=14*60+30;
+  Object.keys(n).forEach(k=>{const list=crews[k]||(crews[k]=[]);while(list.length>n[k])(k==="maint"?leave:((onBrk&&TRIM_KEYS.includes(k))||over||(late&&HOME_KEYS.includes(k))?brk:pool)).push(list.pop())});
   if(maintFor&&crews.maint&&crews.maint[0]){const w=crews.maint[0];const sp=MAINT_SPOT[maintFor];if(w.spot[0]!==sp[0]||w.spot[1]!==sp[1])assign(w,"maint",0,false)}
   Object.keys(n).forEach(k=>{const list=crews[k];
     while(list.length<n[k]){const i=list.length;let w;
@@ -1497,6 +1538,7 @@ function syncFloor(){
       }else if(TRIM_KEYS.includes(k)&&trimReturning()){w=newWorker(BREAK_OUT[0],BREAK_OUT[1]);assign(w,k,i,false)} // back from break through the exit
       else{w=newWorker(DOOR[0],DOOR[1]);assign(w,k,i,true)}
       list.push(w)}});
+  if(over){brk.push(...pool.splice(0))} // after End Shift everyone uses the exit by Manual Pack
   pool.concat(leave).forEach(w=>{w.path=findPath([w.g.position.x,w.g.position.z],DOOR).concat([OUT]);w.leaving=true;w.key=null;w.carry.visible=false;w.drop=false;w.state="walk"});
   brk.forEach(w=>{w.path=findPath([w.g.position.x,w.g.position.z],BREAK_EXIT).concat([BREAK_OUT]);w.leaving=true;w.key=null;w.carry.visible=false;w.drop=false;w.state="walk"});
   placeMandy();
@@ -1544,6 +1586,9 @@ function addSkidBox(k){if(k.count>=12)return;const i=k.count++,layer=Math.floor(
 function clearSkid(k){k.boxes.forEach(b=>k.g.remove(b));k.boxes=[];k.count=0}
 const skid=makeSkid(8.4,17.6,4,"Skid & labels");
 const skid3=makeSkid(7.9,-2.0,3,null);
+const skid2=makeSkid(9.0,7.2,2,null); // v18: Variovac 2 gets its own skid at the outfeed
+skid.ap=[skid.x,skid.z-1.35];skid2.ap=[skid2.x,skid2.z+1.35];skid3.ap=[skid3.x,skid3.z+1.35];
+const SKID_OF={v1:skid,v2:skid2,v3:skid3};
 buildGrid();
 const beltBoxes=[];for(let i=0;i<4;i++){const b=box(0.42,0.3,0.5,mats.box,6.0,1.02,0);beltBoxes.push({b,from:i<2?"v2":"v1",off:(i%2)*2.1})}
 
@@ -1557,6 +1602,7 @@ function isBusy(w){
   const k=w.key;if(!k)return false;
   if(view[k])return view[k].state==="run";
   if(k==="maint")return !!maintFor;
+  if(k==="runner"||k==="garbage")return false;
   return true;
 }
 // Warehouse 1, the In & Out passage and the Burger Room (grey floor): safety vest instead of the white frock
@@ -1566,6 +1612,8 @@ function dressFor(w){if(!w.vest)return;const v=inYard(w.g.position.x,w.g.positio
 function updateWorker(w,dt,t){dressFor(w);
   const p=w.g.position,k=Math.min(1,dt*9),L=(o,ax,tg,kk)=>{o.rotation[ax]+=(tg-o.rotation[ax])*(kk||k)};
   const legs=w.legs,knees=w.knees||[],arms=w.arms,elb=w.elbows||[],tor=w.torso,hd=w.headG;
+  if(w.state==="walk"&&w.pauseT>0){w.pauseT-=dt;w.v=0;p.y*=0.8;   // v18: short stop on a round (garbage pick-up)
+    arms.forEach(a=>{L(a,"x",-1.25);L(a,"z",0)});elb.forEach(e=>L(e,"x",-0.5));if(tor)L(tor,"x",0.35);if(hd)L(hd,"x",0.3);return}
   if(w.state==="walk"){
     const tgt=w.path[0];
     if(!tgt){w.state=w.leaving?"gone":"work";return}
@@ -1595,7 +1643,10 @@ function updateWorker(w,dt,t){dressFor(w);
   if(tor){tor.position.y=0.9+br*0.007;L(tor,"z",Math.sin(t*0.45+w.id)*0.025,0.05)}
   legs.forEach((l,i)=>L(l,"x",i===((w.id+Math.floor(t/7))%2)?0.04:-0.02));knees.forEach((n,i)=>L(n,"x",i===((w.id+Math.floor(t/7))%2)?0.1:0.03));
   if(busy){
-    const kk=w.key||"",task=/^(trimmer|trim|trim3)$/.test(kk)?"cut":kk==="marel"?"load":/^(fajita|cutlet|slicer|vacuum|bs1|bs2|dicer)$/.test(kk)?"feed":"pack";
+    const kk=w.key||"",task=/^(trimmer|trim|trim3)$/.test(kk)?"cut":kk==="marel"?"load":/^(fajita|cutlet|slicer|vacuum|bs1|bs2|dicer)$/.test(kk)?"feed":/^(clean|gbg)$/.test(kk)?"clean":"pack";
+    if(task==="clean"){w.phase+=dt*3.6;const st=Math.sin(w.phase),st2=Math.sin(w.phase*0.37);   // v18: bent at the loading end, unscrewing / lifting parts off and scrubbing
+      L(arms[0],"x",-1.3+st*0.25);L(arms[1],"x",-1.3-st*0.25);arms.forEach((a,i)=>L(a,"z",(i?-1:1)*(0.1+st2*0.08)));elb.forEach((e,i)=>L(e,"x",-0.45-Math.max(0,i?st:-st)*0.35));
+      L(tor,"x",0.42+st2*0.08);L(tor,"y",st2*0.15);L(hd,"x",0.42);L(hd,"y",st2*0.1)}else
     if(task==="cut"){w.phase+=dt*6.5;const st=Math.sin(w.phase*1.3);                 // knife hand saws, other hand holds the meat
       L(arms[1],"x",-0.85+st*0.22);L(arms[1],"z",-0.12);L(elb[1],"x",-1.05+Math.sin(w.phase*1.3+1.1)*0.35);
       L(arms[0],"x",-0.75);L(arms[0],"z",0.18);L(elb[0],"x",-0.95+Math.sin(w.phase*0.4)*0.05);
@@ -1626,12 +1677,13 @@ function updateWorker(w,dt,t){dressFor(w);
   if(w.role==="boxer"){ // Variovac 3 boxes go on its skid
     if(skid3.count>=12)return; // full: waits for the pallet jack
     trip(w,[skid3.x-1.0,skid3.z],true,()=>addSkidBox(skid3));
-  }else if(w.role==="centre"){
-    if(skid.count>=12||Math.random()<0.25)trip(w,[11.8,4.6],false);          // labels from the Manual Pack scale
-    else{trip(w,[skid.x-1.0,skid.z],true,()=>addSkidBox(skid));w.timer=3+Math.random()*3}
+  }else if(w.role==="centre"){const sk=w.key==="v2"?skid2:skid;
+    if(sk.count>=12||Math.random()<0.25)trip(w,[11.8,4.6],false);          // labels from the Manual Pack scale
+    else{trip(w,[sk.x-1.0,sk.z],true,()=>addSkidBox(sk));w.timer=3+Math.random()*3}
   }else if(w.role==="jack"){ // takes a full skid to Warehouse 1 on the pallet jack, brings an empty one back
-    const k=skid.count>=8?skid:skid3.count>=8?skid3:null;if(!k){w.timer=3;return}
-    const here=[w.g.position.x,w.g.position.z],at=k===skid?[k.x,k.z-1.35]:[k.x,k.z+1.35],drop=[12.1,-7.4];
+    let k=null;while(jackQ.length&&!k){const q=jackQ.shift();if(q.count>0)k=q}       // v18: Finish / Switch Product queue first
+    if(!k)k=[skid,skid2,skid3].find(x=>x.count>=12)||null;if(!k){w.timer=2;return}  // a full skid never blocks the line
+    const here=[w.g.position.x,w.g.position.z],at=k.ap,drop=INOUT_DROP;
     const a=findPath(here,at),b=findPath(at,drop),c=findPath(drop,w.spot);
     w.state="walk";w.path=a.concat(b,c);w.carry.visible=false;w.drop=false;
     w.events=[{at:b.length+c.length,fn:()=>{clearSkid(k);w.jackLoad.visible=true}},{at:c.length,fn:()=>{w.jackLoad.visible=false;w.timer=4}}];
@@ -2039,7 +2091,7 @@ function renderPanels(){
         else if(st.last){const lateEnd=st.last.off>SHIFT_END;tone=lateEnd?TONE_CSS.wait:TONE_CSS.nowork;off=!lateEnd;line="done "+t12(st.last.off)}
         else{tone=TONE_CSS.nowork;off=true;line="not started"}}
       else if(st.on&&st.waiting){tone=TONE_CSS.change;line=`⏸ waiting trimmers · ${t12(st.waiting)}`}
-      else if(st.on){tone="#E0A030";line=st.prod?`${st.prod} · ${st.people||0} pkg`:`${st.people||0} pkg${st.trim?" +"+st.trim+" trim":""} · ${t12(st.since)}`}
+      else if(st.on){tone="#E0A030";line=st.prod?`${st.prod} · ${st.people||0} pkg${st.train?` (${st.train} trn)`:""}`:`${st.people||0} pkg${st.train?` (${st.train} training)`:""}${st.trim?" +"+st.trim+" trim":""} · ${t12(st.since)}`}
       else{tone=TONE_CSS.nowork;off=true;line=st.last?`ran ${t12(st.last.on).replace(/ [ap]m$/,"")}–${t12(st.last.off)}`:"off"}
       return `<button class="stile" data-sgo="${k}" style="--st:${tone}" title="${esc(name+': '+line)}"><span class="st1"><span class="sd"></span><span class="sn">${name}</span></span><span class="sl${off?" off":""}">${esc(line)}</span></button>`}).join("")}
   const nowTxt=new Date().toLocaleTimeString("en-CA",{hour:"numeric",minute:"2-digit"});
@@ -2133,7 +2185,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v16";
+const FLOOR3D_VERSION="v19";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
@@ -2250,6 +2302,8 @@ function startLive(){
     },err=>{setConn("off","Can't reach tracker");console.error(err)}));
     unsub.push(col.doc("settings").onSnapshot(snap=>{const st=parseDoc(snap,{});const n=Number(st.downtimeAlarmMinutes);alarmMin=n>0?n:30;renderCards()},err=>console.error(err)));
     unsub.push(col.doc("records").onSnapshot(snap=>{records=parseDoc(snap,[]);renderCards()},err=>console.error(err)));
+    unsub.push(col.doc("dailyReports").onSnapshot(snap=>{const reps=parseDoc(snap,[]);const r=(Array.isArray(reps)?reps:[]).find(x=>x&&x.date===localDate());
+      if(r){endShiftAt=Number(r.generatedAt)||Date.now();endShiftDate=localDate()}else{endShiftAt=0;endShiftDate=""}},err=>console.error(err)));
   });
   document.getElementById("loginForm").addEventListener("submit",async e=>{
     e.preventDefault();const btn=document.getElementById("loginBtn"),err=document.getElementById("loginErr");
@@ -2356,7 +2410,7 @@ const jackW=newWorker(9.8,11.0);
 /* ---------- meat rack: one person brings product out of the Debox room ---------- */
 const rackW=newWorker(7.2,-16.5);
 (function(){const w=rackW;w.key="rack";w.role="rack";w.spot=[7.2,-16.5];w.look=[5.0,-16.5];w.timer=10;w.speed=1.15;w.jack=true; // arms forward like pushing
-  const g=new THREE.Group();g.position.set(0,0,0.85);w.g.add(g);
+  const g=new THREE.Group();g.position.set(0,0,0.85);w.g.add(g);w.rackG=g;
   const st=M(0xC9D1D6,{metalness:.55,roughness:.3}),blk=M(0x24282c,{roughness:.6});
   const W=0.95,D=0.75,H=1.85;
   [[-W/2,-D/2],[W/2,-D/2],[-W/2,D/2],[W/2,D/2]].forEach(([x,z])=>{box(0.04,H,0.04,st,x,0.12+H/2,z,g);const wh=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.04,10),blk);wh.rotation.z=Math.PI/2;wh.position.set(x,0.055,z);g.add(wh)});
@@ -2367,6 +2421,92 @@ const rackW=newWorker(7.2,-16.5);
   shelves.forEach(y=>{[-0.22,0,0.22].forEach(z=>{for(let i=0;i<7;i++){const c=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.3,8),sausage);c.position.set(-W/2+0.1+i*0.125,y-0.17,z);c.castShadow=true;meat.add(c)}})});
   label("Meat rack",0,2.35,0,.45,w.g);
 })();
+/* ---------- v18 props: rack of white tubs, big blue garbage bin ---------- */
+function makeTubRackG(loaded){const g=new THREE.Group();const W=.55,D=.68,H=1.65,r=.016;
+  const post=(px,pz)=>{const p=new THREE.Mesh(new THREE.CylinderGeometry(r,r,H-.14,8),TUBRACK.tube);p.position.set(px,.14+(H-.14)/2,pz);g.add(p)};
+  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>{post(a*W/2,b*D/2);const wl=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.035,12),TUBRACK.wheel);wl.rotation.z=Math.PI/2;wl.position.set(a*(W/2-.02),.05,b*(D/2-.02));g.add(wl)});
+  [.14,H].forEach(y=>{[-1,1].forEach(b=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,W,8),TUBRACK.tube);m.rotation.z=Math.PI/2;m.position.set(0,y,b*D/2);g.add(m)})});
+  for(let i=0;i<6;i++){const y=.32+i*.215;box(W-.04,.15,D-.06,BUG.tub,0,y+.08,0,g);if(loaded)box(W-.1,.03,D-.12,BUG.meat,0,y+.15,0,g)} // white tubs (with meat when loaded)
+  return g}
+const BINM={blue:M(0x1f5fbf,{roughness:.5}),bag:M(0x15181b,{roughness:.35,metalness:.1}),wheel:M(0x24282c,{roughness:.6})};
+function makeBin(){const g=new THREE.Group();
+  box(0.86,0.95,0.9,BINM.blue,0,0.6,0,g);box(0.92,0.06,0.96,BINM.blue,0,1.08,0,g);
+  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>{const wl=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.05,12),BINM.wheel);wl.rotation.z=Math.PI/2;wl.position.set(a*.36,.06,b*.38);g.add(wl)});
+  const fill=new THREE.Group();g.add(fill);g.fill=fill;g.n=0;return g}
+function binAdd(bin){if(!bin||bin.n>=9)return;const i=bin.n++;const y=1.1+Math.floor(i/3)*0.16,x=((i%3)-1)*0.26;
+  if(i%2===0){const b=new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8),BINM.bag);b.scale.set(1,0.8,1.1);b.position.set(x,y,(i%3===1?0.12:-0.1));bin.fill.add(b)} // black garbage bag
+  else{const c=box(0.42,0.04,0.5,mats.box,x,y-0.02,0.05,bin.fill);c.rotation.z=(i%4-1.5)*0.2}}                                        // flattened meat box
+function attach(w,obj,off){obj.position.set(0,0,off||0.8);obj.rotation.set(0,0,0);w.g.add(obj);w.prop=obj;w.jack=w.jack||true}
+function detach(w){if(w.prop){w.g.remove(w.prop);w.prop=null}if(w.jack===true)w.jack=false}
+function legs4(a){return a.length?a:[a]}
+// a walk with stops along the way: events fire as each stop is reached (path length left = .at)
+function routeWith(w,legsArr,onStop){let path=[];const ats=[];legsArr.forEach(seg=>{path=path.concat(seg)});let left=path.length;
+  legsArr.forEach((seg,i)=>{left-=seg.length;ats.push(left)});w.state="walk";w.path=path;w.drop=false;w.carry.visible=false;
+  w.events=ats.map((at,i)=>({at,fn:()=>onStop(i)}))}
+function pathOr(a,b){const r=findPath(a,b);return r.length?r:[b.slice()]}
+/* rack runner: one packaging person keeps the Variovacs supplied with racks of meat tubs */
+function makeRunner(){const w=newWorker(RACK_IDLE[0],RACK_IDLE[1]);w.key="runner";w.role="runner";w.spot=RACK_IDLE.slice();w.look=[-17.4,3.2];w.speed=1.2;w.timer=1;return w}
+function runRackJob(w,j){const here=[w.g.position.x,w.g.position.z],spot=RACK_SPOT[j.k];w.job=j;
+  if(j.type==="deliver"){
+    routeWith(w,[pathOr(here,RACK_PICK),pathOr(RACK_PICK,spot),pathOr(spot,w.spot)],i=>{
+      if(i===0)attach(w,makeTubRackG(true),0.75);
+      else if(i===1){const g=w.prop;detach(w);if(g){const p=new THREE.Vector3();w.g.localToWorld(p.set(0,0,0.75));g.position.set(p.x,0,p.z);g.rotation.y=w.g.rotation.y;scene.add(g);if(rackAt[j.k])scene.remove(rackAt[j.k]);rackAt[j.k]=g}}
+      else w.job=null})}
+  else{
+    routeWith(w,[pathOr(here,spot),pathOr(spot,RACK_PICK),pathOr(RACK_PICK,w.spot)],i=>{
+      if(i===0){if(rackAt[j.k]){scene.remove(rackAt[j.k]);rackAt[j.k]=null}attach(w,makeTubRackG(false),0.75)}
+      else if(i===1)detach(w);
+      else w.job=null})}
+}
+/* garbage run with the big blue bin: every machine, then out through the hall to In & Out */
+function garbageRun(w,stops,comeBack){const here=[w.g.position.x,w.g.position.z];const legsArr=[];let cur=here;
+  stops.forEach(s=>{legsArr.push(pathOr(cur,s));cur=s});legsArr.push(pathOr(cur,DOOR).concat([OUT]));
+  if(comeBack)legsArr.push(pathOr(DOOR,w.spot));
+  attach(w,makeBin(),0.8);w.gbgBusy=true;
+  routeWith(w,legsArr,i=>{if(i<stops.length){binAdd(w.prop);binAdd(w.prop);w.pauseT=1.6}
+    else if(i===stops.length){detach(w);if(!comeBack){w.leaving=true}}
+    else{w.gbgBusy=false;w.gbgDone=true}})}
+function sendHome(w){if(!w||w.leaving)return;detach(w);if(w.jackLoad)w.jackLoad.visible=false;if(w.rackG)w.rackG.visible=false;if(w.rackMeat)w.rackMeat.visible=false;
+  if(w.jack&&w.jack!==true&&w.jack.visible!==undefined){w.jack.visible=false;w.jack=false}
+  w.events=null;w.pauseT=0;w.leaving=true;w.key=null;w.state="walk";w.path=pathOr([w.g.position.x,w.g.position.z],BREAK_EXIT).concat([BREAK_OUT])}
+function v18Tick(){try{
+  const m=nowMins(),date=localDate();
+  if(v18Date&&date!==v18Date){location.reload();return}v18Date=date; // a page left on overnight starts the new day fresh
+  // 1) racks follow the Variovacs; 2) Finish / Switch Product sends the pallet jack for that skid
+  ["v1","v2","v3"].forEach(k=>{const v=view[k]||{};const live=v.live;const id=live?(live.date||"")+"|"+(live.startedAt||""):null; // a new start time = Finish / Switch Product (editing the product name does not count)
+    if(live)sawRun=true;
+    if(v18First){if(v.state==="run"&&!rackAt[k]){const g=makeTubRackG(true);g.position.set(RACK_SPOT[k][0],0,RACK_SPOT[k][1]);scene.add(g);rackAt[k]=g}}
+    else{
+      if(prevRun[k]&&prevRun[k]!==id){const sk=SKID_OF[k];if(sk&&!jackQ.includes(sk)){jackQ.push(sk);if(jackW)jackW.timer=Math.min(jackW.timer,0.5)}}
+      if(v.state==="run"&&!rackAt[k]&&!rackQ.some(j=>j.k===k)&&!(runner&&runner.job&&runner.job.k===k&&runner.job.type==="deliver"))rackQ.push({type:"deliver",k});
+      if(!live&&rackAt[k]&&!rackQ.some(j=>j.k===k&&j.type==="return")&&!(runner&&runner.job&&runner.job.k===k&&runner.job.type==="return"))rackQ.push({type:"return",k});
+    }
+    prevRun[k]=id});
+  if(!homeSent){
+    if(!runner)runner=makeRunner();
+    if(runner.state==="work"&&!runner.job){
+      while(rackQ.length){const j=rackQ.shift();const v=view[j.k]||{};if(j.type==="deliver"&&v.state!=="run")continue;if(j.type==="return"&&!rackAt[j.k])continue;runRackJob(runner,j);break}}
+  }
+  // 3) 3:00 PM: the Debox rack pusher goes home with the trimmers
+  if(typeof rackW!=="undefined"&&rackW&&!rackW.leaving&&m>=15*60){if(v18First&&m>=15*60+2){rackW.state="gone"}else if(rackW.state==="work")sendHome(rackW)}
+  // 4) garbage runs at 9:30, 12:30 and 3:00 (once each, for 20 minutes after the time)
+  if(!shiftEnded())GARBAGE_TIMES.forEach(t=>{const key="floor3d_gbg_"+date+"_"+t;let done=false;try{done=localStorage.getItem(key)==="1"}catch(e){}
+    if(!done&&m>=t&&m<t+20&&!v18First){try{localStorage.setItem(key,"1")}catch(e){};const w=newWorker(DOOR[0],DOOR[1]);w.key="garbage";w.spot=DOOR.slice();w.look=[DOOR[0]-1,DOOR[1]];w.speed=1.2;garbageRun(w,GARBAGE_STOPS,false)}});
+  // 5) clean-up: the pallet jack takes every Variovac skid out; the 2 garbage people do their round once
+  const cu=cleanupMode();if(cu&&!cleanWas){cleanStart=Date.now();[skid,skid2,skid3].forEach(sk=>{if(sk.count>0&&!jackQ.includes(sk))jackQ.push(sk)});if(jackW)jackW.timer=0.5}
+  if(!cu)cleanStart=0;cleanWas=cu;
+  (crews.gbg||[]).forEach((w,i)=>{if(w.state==="work"&&!w.gbgDone&&!w.gbgBusy)garbageRun(w,i===0?[[-3.0,21.2],[-3.0,10.2]]:[[2.2,-2.8],[11.0,16.0]],true)});
+  // 6) End Shift: after 15 min (or once the clean-up is done) everyone walks out by Manual Pack; the forklift driver stays
+  const over=shiftOver();const st=(m>=15*60?"3":"")+(cu?"c":"")+(over?"x":"");
+  if(over&&!homeSent){homeSent=true;[jackW,runner,typeof rackW!=="undefined"?rackW:null].forEach(w=>{if(w&&w.state!=="gone")sendHome(w)});workers.forEach(w=>{if(w.key==="garbage")sendHome(w)})}
+  if(st!==v18Last){const first=v18Last==="";v18Last=st;if(!first)syncFloor()}
+  // v19: trainees on side machines wear a yellow helmet (the last packaging spots of that machine)
+  ["fajita","cutlet","slicer","vacuum"].forEach(k=>{const st=sideState(k),tr=st.on?(st.train||0):0,pk=st.on?(st.people||0):0;
+    (crews[k]||[]).forEach((w,i)=>{const yes=i<pk&&i>=pk-tr;if(w.hat&&w.trainee!==yes){w.trainee=yes;const c=yes?0xF2C14E:WHITE_HAT;w.hat.material.color.setHex(c);if(w.brim)w.brim.material.color.setHex(c)}})});
+  workers.forEach(w=>{if(w.trainee&&!(w.key&&["fajita","cutlet","slicer","vacuum"].includes(w.key))&&w.hat){w.trainee=false;w.hat.material.color.setHex(WHITE_HAT);if(w.brim)w.brim.material.color.setHex(WHITE_HAT)}});
+  v18First=false;
+}catch(e){console.error(e)}}
+setInterval(v18Tick,1000);
 /* ---------- forklift in Warehouse 1 ---------- */
 const FL={g:new THREE.Group(),path:[[14.15,-6.6],[14.15,-18.9],[17.55,-18.9],[17.55,-6.6]],i:1,wait:0,lift:0,loaded:false};
 (function buildForklift(){const g=FL.g;scene.add(g);
