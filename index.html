@@ -90,6 +90,24 @@ textarea{min-height:70px;resize:vertical;font-size:15px;}
 .timerow .field{flex:1;}
 .duration-badge{background:var(--panel2);border:1px dashed var(--line);border-radius:10px;padding:10px 14px;text-align:center;margin:-4px 0 16px;font-family:'IBM Plex Mono';color:var(--amber);font-size:14px;}
 .statusgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+/* v149: downtime picker — blocks instead of dropdowns */
+.dt-lbl{font:600 10.5px 'Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 7px;}
+.dt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.dt-tile{display:flex;flex-direction:column;justify-content:space-between;gap:5px;text-align:left;min-height:60px;border:1.5px solid var(--line);border-left:4px solid var(--tc,var(--line));background:var(--panel2);color:var(--text);border-radius:11px;padding:9px 10px;font:600 13.5px/1.25 'Inter',sans-serif;cursor:pointer;min-width:0;overflow-wrap:anywhere;}
+.dt-tile .meta{font:500 11px 'Inter',sans-serif;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;}
+.dt-tile .star{color:var(--amber);font-weight:700;}
+.dt-tile.sel{border-color:var(--amber);background:var(--amber-dim);box-shadow:0 0 0 1px var(--amber) inset;}
+.dt-cats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.dt-cat{border:1.5px solid var(--line);border-top:4px solid var(--cc);background:var(--panel2);border-radius:11px;padding:10px 8px;cursor:pointer;color:var(--text);text-align:left;display:flex;flex-direction:column;gap:3px;}
+.dt-cat b{font:600 13px/1.2 'Inter',sans-serif;}
+.dt-cat span{font:500 11px 'IBM Plex Mono',monospace;color:var(--muted);}
+.dt-cat.open{border-color:var(--cc);background:color-mix(in srgb,var(--cc) 16%,var(--panel2));}
+.dt-group{margin-top:10px;}
+.dt-group h4{margin:0 0 6px;font:600 11px 'Inter',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--tc);}
+.dt-search{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:0 12px;margin-top:4px;}
+.dt-search input{flex:1;min-width:0;background:none;border:0;color:var(--text);font:500 15px 'Inter',sans-serif;padding:12px 0;outline:none;}
+.dt-search:focus-within{border-color:var(--amber);}
+@media (max-width:360px){.dt-cats{grid-template-columns:1fr 1fr;}}
 .statusopt{padding:16px 8px;border-radius:12px;border:2px solid var(--line);background:var(--panel2);text-align:center;font-family:'Oswald';font-size:13px;letter-spacing:0.03em;color:var(--muted);}
 .statusopt .dot{width:10px;height:10px;margin:0 auto 6px;}
 .statusopt.sel{border-color:var(--sc);color:var(--text);background:var(--scdim);}
@@ -204,7 +222,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v148 - 2026-11-01 (Loads 3D floor v23: Dashboard 3D and full-screen view each run their own garbage collection)';
+const APP_VERSION = 'v149 - 2026-11-01 (Live Floor downtime picker: Most used here, category blocks, reasons as blocks grouped by department, search)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2726,48 +2744,120 @@ async function confirmStaffChange(){
   render();
 }
 function openDowntimeSetup(m){
-  liveDowntimeSetup = {machine:m, status:'WAITING', waitCategory: Object.keys(WAITING_CATEGORIES)[0], waitReason:'', waitReasonOther:'', plannedReason: PLANNED_REASONS[0], plannedReasonOther:'', changeReason: CHANGEOVER_REASONS[0], changeReasonOther:'', notes:''};
+  liveDowntimeSetup = {machine:m, status:'WAITING', waitCategory:'', waitReason:'', waitReasonOther:'', plannedReason:'', plannedReasonOther:'', changeReason:'', changeReasonOther:'', notes:'', cat:'', q:''}; // v149: nothing pre-picked; tap a block
   render();
+}
+/* v149: downtime picker — "Most used here" (this line, last 14 days), category blocks, reasons as blocks (Upstream grouped by department), search */
+const DT_CATS = [['Upstream / Product','Upstream','#C77DD6'],['Materials / Warehouse','Materials','#4FB3C2'],['Machine / Equipment','Machine','#E0705F'],['Labour / Operational','Labour','#E0A030'],['Cleaning / Sanitation','Cleaning','#6FA8E8'],['QA / Pre-Op','QA / Pre-Op','#5DB97A']];
+function dtCatColor(c){ const x = DT_CATS.find(y=>y[0]===c); return x ? x[2] : 'var(--line)'; }
+function dtTopReasons(m){
+  const d = new Date(todayStr()+'T00:00:00'); d.setDate(d.getDate()-14); const since = localDateStr(d);
+  const map = {}; let last = null;
+  Store.records.filter(r=>r.machine===m && r.date>=since && (r.status==='WAITING'||r.status==='CHANGEOVER')).forEach(r=>{
+    const reason = REASON_RENAMES[r.reason] || r.reason; if(!reason || reason==='Other') return;
+    const cat = r.status==='WAITING' ? (r.reasonCategory||'') : '';
+    if(r.status==='WAITING'){ if(!WAITING_CATEGORIES[cat] || !WAITING_CATEGORIES[cat].reasons.includes(reason) || !reasonAllowedForMachine(reason, m)) return; }
+    else if(!CHANGEOVER_REASONS.includes(reason)) return;
+    const k = r.status+'|'+cat+'|'+reason, g = map[k] || (map[k] = {s:r.status, c:cat, r:reason, n:0, min:0});
+    g.n++; g.min += r.durationMin||0;
+    const at = r.date+' '+(r.startTime||''); if(!last || at>last.at) last = {k, at};
+  });
+  return Object.entries(map).sort((a,b)=>b[1].n-a[1].n || b[1].min-a[1].min).slice(0,6).map(([k,g])=>({...g, last: !!(last && last.k===k)}));
+}
+function dtIsSel(s, st, c, r){
+  if(st==='WAITING') return s.status==='WAITING' && s.waitReason===r && (r==='Other' ? s.waitCategory===c : true);
+  if(st==='CHANGEOVER') return s.status==='CHANGEOVER' && s.changeReason===r;
+  if(st==='PLANNED') return s.status==='PLANNED' && s.plannedReason===r;
+  return false;
+}
+function dtTile(s, st, c, r, meta){
+  const col = st==='CHANGEOVER' ? 'var(--change)' : st==='PLANNED' ? 'var(--planned)' : dtCatColor(c);
+  return `<button type="button" class="dt-tile${dtIsSel(s,st,c,r)?' sel':''}" style="--tc:${col}" data-s="${st}" data-c="${escapeHtml(c||'')}" data-r="${escapeHtml(r)}" onclick="dtPick(this)">${escapeHtml(r)}${meta?`<span class="meta">${meta}</span>`:''}</button>`;
+}
+function dtPick(el){
+  const s = liveDowntimeSetup; if(!s) return;
+  const st = el.dataset.s, c = el.dataset.c, r = el.dataset.r;
+  s.status = st;
+  if(st==='WAITING'){ s.waitCategory = c; s.waitReason = r; }
+  else if(st==='CHANGEOVER') s.changeReason = r;
+  else if(st==='PLANNED') s.plannedReason = r;
+  render();
+  if(r==='Other'){ const o = document.getElementById('dtOther'); if(o) o.focus(); }
+}
+function dtOpenCat(c){ const s = liveDowntimeSetup; if(!s) return; s.cat = s.cat===c ? '' : c; render(); }
+function dtSearchHTML(s){
+  const q = (s.q||'').trim().toLowerCase(); if(!q) return '';
+  const hits = [];
+  Object.keys(WAITING_CATEGORIES).forEach(c=>reasonsForMachine(c, s.machine).forEach(r=>{ if(r.toLowerCase().includes(q)) hits.push([c,r]); }));
+  return `<div class="dt-lbl">${hits.length} match${hits.length===1?'':'es'}</div>` + (hits.length
+    ? `<div class="dt-grid">${hits.map(([c,r])=>dtTile(s,'WAITING',c,r,`<span>${escapeHtml((DT_CATS.find(x=>x[0]===c)||[])[1]||c)}</span>`)).join('')}</div>`
+    : `<div style="color:var(--muted);font-size:13px;">No reason matches "${escapeHtml(s.q)}". Open a category below and use Other to type it.</div>`);
+}
+function dtSearch(v){
+  const s = liveDowntimeSetup; if(!s) return; s.q = v;
+  const box = document.getElementById('dtResults'), rest = document.getElementById('dtBrowse');
+  if(box) box.innerHTML = dtSearchHTML(s);
+  if(rest) rest.hidden = !!v.trim();
+}
+function dtReady(s){
+  if(s.status==='NO_WORK' || s.status==='BREAK') return true;
+  if(s.status==='WAITING') return !!s.waitReason && !!s.waitCategory && (s.waitReason!=='Other' || !!(s.waitReasonOther||'').trim());
+  if(s.status==='CHANGEOVER') return !!s.changeReason && (s.changeReason!=='Other' || !!(s.changeReasonOther||'').trim());
+  if(s.status==='PLANNED') return !!s.plannedReason && (s.plannedReason!=='Other' || !!(s.plannedReasonOther||'').trim());
+  return false;
 }
 function renderLiveDowntimeSetupCard(live){
   const s = liveDowntimeSetup;
+  let pick = '';
+  if(s.status==='WAITING'){
+    const top = dtTopReasons(s.machine);
+    pick += `<label class="dt-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="dtSearch" type="search" placeholder="Search all reasons… e.g. jam, boxes, marel" value="${escapeHtml(s.q||'')}" oninput="dtSearch(this.value)" autocomplete="off"></label>
+      <div id="dtResults">${dtSearchHTML(s)}</div>
+      <div id="dtBrowse" ${(s.q||'').trim()?'hidden':''}>
+      ${top.length ? `<div class="dt-lbl">Most used here · last 2 weeks</div><div class="dt-grid">${top.map(t=>dtTile(s,t.s,t.c,t.r,`${t.last?'<span class="star">★ last used</span>':''}<span>${t.n}× · ${fmtDur(t.min)}</span>${t.s==='CHANGEOVER'?'<span>Changeover</span>':''}`)).join('')}</div>` : ''}
+      <div class="dt-lbl">All reasons by category</div>
+      <div class="dt-cats">${DT_CATS.map(([k,l,c])=>`<button type="button" class="dt-cat${s.cat===k?' open':''}" style="--cc:${c}" onclick="dtOpenCat('${k}')"><b>${l}</b><span>${reasonsForMachine(k, s.machine).length} reasons</span></button>`).join('')}</div>
+      ${s.cat ? (()=>{ const list = reasonsForMachine(s.cat, s.machine, s.waitCategory===s.cat ? s.waitReason : ''), col = dtCatColor(s.cat);
+        if(s.cat==='Upstream / Product'){
+          const order = UPSTREAM_DEPARTMENTS.map(d=>d.name).concat([UPSTREAM_OTHERS]), groups = {};
+          list.forEach(r=>{ const g = upstreamDeptFor(r); (groups[g] = groups[g] || []).push(r); });
+          return order.filter(g=>groups[g]).map(g=>`<div class="dt-group" style="--tc:${col}"><h4>${escapeHtml(g)}</h4><div class="dt-grid">${groups[g].map(r=>dtTile(s,'WAITING',s.cat,r)).join('')}</div></div>`).join('') + `<div class="dt-grid" style="margin-top:8px;">${dtTile(s,'WAITING',s.cat,'Other')}</div>`;
+        }
+        return `<div class="dt-grid" style="margin-top:10px;">${list.map(r=>dtTile(s,'WAITING',s.cat,r)).join('')}${dtTile(s,'WAITING',s.cat,'Other')}</div>`; })() : ''}
+      </div>
+      ${s.waitReason==='Other' ? `<div class="field" style="margin-top:10px;"><label>Other — what happened?</label><input id="dtOther" type="text" value="${escapeHtml(s.waitReasonOther||'')}" oninput="liveDowntimeSetup.waitReasonOther=this.value;dtSyncBtn()"></div>` : ''}`;
+  }
+  if(s.status==='CHANGEOVER'){
+    pick += `<div class="dt-lbl">Changeover reason</div><div class="dt-grid">${CHANGEOVER_REASONS.map(r=>dtTile(s,'CHANGEOVER','',r)).join('')}</div>
+      ${s.changeReason==='Other' ? `<div class="field" style="margin-top:10px;"><label>Specify</label><input id="dtOther" type="text" value="${escapeHtml(s.changeReasonOther||'')}" oninput="liveDowntimeSetup.changeReasonOther=this.value;dtSyncBtn()"></div>` : ''}`;
+  }
+  if(s.status==='PLANNED'){
+    pick += `<div class="dt-lbl">Planned stop</div><div class="dt-grid">${[...PLANNED_REASONS,'Other'].map(r=>dtTile(s,'PLANNED','',r)).join('')}</div>
+      ${s.plannedReason==='Other' ? `<div class="field" style="margin-top:10px;"><label>Specify</label><input id="dtOther" type="text" value="${escapeHtml(s.plannedReasonOther||'')}" oninput="liveDowntimeSetup.plannedReasonOther=this.value;dtSyncBtn()"></div>` : ''}
+      <div class="warnbanner" style="margin-top:10px;background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Planned stops are recorded but NOT counted against Efficiency or in the bottleneck rankings.</div>`;
+  }
+  if(s.status==='NO_WORK') pick += `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime or against Efficiency %.</div>`;
+  const sel = s.status==='WAITING' && s.waitReason ? `${(DT_CATS.find(x=>x[0]===s.waitCategory)||[])[1]||''} · ${s.waitReason==='Other'?(s.waitReasonOther||'Other'):s.waitReason}`
+    : s.status==='CHANGEOVER' && s.changeReason ? `Changeover · ${s.changeReason==='Other'?(s.changeReasonOther||'Other'):s.changeReason}`
+    : s.status==='PLANNED' && s.plannedReason ? `Planned · ${s.plannedReason==='Other'?(s.plannedReasonOther||'Other'):s.plannedReason}` : '';
   return `<div class="live-card downtime">
     <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Log Downtime</h3>
     <div class="statusgrid">
       ${['WAITING','CHANGEOVER','PLANNED','NO_WORK','BREAK'].map(key=>{ const info=statusInfo(key); return `<div class="statusopt ${s.status===key?'sel':''}" style="--sc:${info.color};--scdim:${info.dim}" onclick="liveDowntimeSetup.status='${key}'; render()"><div class="dot" style="background:${info.color}"></div>${info.label}</div>`; }).join('')}
     </div>
-    ${s.status==='CHANGEOVER' ? `
-      <div class="field"><label>Changeover Reason</label>
-        <select onchange="liveDowntimeSetup.changeReason=this.value; render()">${CHANGEOVER_REASONS.map(r=>`<option ${s.changeReason===r?'selected':''}>${r}</option>`).join('')}</select>
-      </div>
-      ${s.changeReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.changeReasonOther}" oninput="liveDowntimeSetup.changeReasonOther=this.value"></div>` : ''}
-    ` : ''}
-    ${s.status==='WAITING' ? `
-      <div class="field"><label>Reason Category</label>
-        <select onchange="liveDowntimeSetup.waitCategory=this.value; liveDowntimeSetup.waitReason=''; render()">${Object.keys(WAITING_CATEGORIES).map(c=>`<option ${s.waitCategory===c?'selected':''}>${c}</option>`).join('')}</select>
-      </div>
-      <div class="field"><label>Specific Reason</label>
-        <select onchange="liveDowntimeSetup.waitReason=this.value; render()">${reasonsForMachine(s.waitCategory, s.machine, s.waitReason).map(r=>`<option value="${r}" ${s.waitReason===r?'selected':''}>${r}</option>`).join('')}<option value="Other" ${s.waitReason==='Other'?'selected':''}>Other</option></select>
-      </div>
-      ${s.waitReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${s.waitReasonOther}" oninput="liveDowntimeSetup.waitReasonOther=this.value"></div>` : ''}
-    ` : ''}
-    ${s.status==='PLANNED' ? `
-      <div class="field"><label>Planned Stop</label>
-        <select onchange="liveDowntimeSetup.plannedReason=this.value; render()">${[...PLANNED_REASONS,'Other'].map(r=>`<option ${s.plannedReason===r?'selected':''}>${r}</option>`).join('')}</select>
-      </div>
-      ${s.plannedReason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(s.plannedReasonOther||'')}" oninput="liveDowntimeSetup.plannedReasonOther=this.value"></div>` : ''}
-      <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Planned stops are recorded but NOT counted against Efficiency or in the bottleneck rankings.</div>
-    ` : ''}
-    ${s.status==='NO_WORK' ? `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime or against Efficiency %.</div>` : ''}
-    <div class="field"><label>Notes (optional)</label><textarea oninput="liveDowntimeSetup.notes=this.value" placeholder="e.g. Waiting for trim">${s.notes}</textarea></div>
+    ${pick}
+    ${sel ? `<div style="margin-top:12px;font-size:13px;color:var(--muted);">Selected: <b style="color:var(--text);">${escapeHtml(sel)}</b></div>` : ''}
+    <div class="field" style="margin-top:12px;"><label>Notes (optional)</label><textarea oninput="liveDowntimeSetup.notes=this.value" placeholder="e.g. Waiting for trim">${s.notes}</textarea></div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="liveDowntimeSetup=null; render()">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmDowntime()">Confirm</button>
+      <button class="btn btn-primary" id="dtConfirm" onclick="confirmDowntime()" ${dtReady(s)?'':'disabled style="opacity:.45;"'}>Confirm</button>
     </div>
   </div>`;
 }
+function dtSyncBtn(){ const b = document.getElementById('dtConfirm'), s = liveDowntimeSetup; if(!b || !s) return; const ok = dtReady(s); b.disabled = !ok; b.style.opacity = ok ? '' : '.45'; }
 async function confirmDowntime(){
   const s = liveDowntimeSetup;
+  if(!dtReady(s)){ toast('Pick a reason first'); return; } // v149
   const now = nowHHMM();
   let live = Store.liveRuns[s.machine];
   let reasonCategory='', reason='', classification='';
