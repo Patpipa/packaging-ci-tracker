@@ -204,7 +204,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v145 - 2026-10-29 (Loads 3D floor v21: a line started after End Shift brings the 3D crew back)';
+const APP_VERSION = 'v148 - 2026-11-01 (Loads 3D floor v23: Dashboard 3D and full-screen view each run their own garbage collection)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -646,6 +646,7 @@ const Router = { current:'dashboard',
 function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
+  try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
   const m = document.getElementById('main');
   const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis', upstreamImpact:'Upstream Impact'};
   document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (titles[Router.current] || 'CI Tracker');
@@ -1597,7 +1598,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v21';
+const FLOOR3D_REV = 'v23';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -2042,7 +2043,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
         <div style="display:flex;gap:18px;margin-bottom:10px;">
           <div style="flex:1;">
             <div style="font-weight:700;font-size:10.5px;color:#1a1a2e;letter-spacing:0.04em;margin-bottom:3px;">GROSS PLH</div>
-            <div style="font-size:10px;color:#888;line-height:1.5;">Total pounds produced ÷ Gross Labour Hours — all time staff spent on the job, including any downtime (waiting, changeover) while the run was open.</div>
+            <div style="font-size:10px;color:#888;line-height:1.5;">Total pounds produced ÷ Gross Labour Hours — all paid time staff spent on the job, including downtime (waiting, changeover) while the run was open, and 30 paid minutes of break per line per day (the rest of the break is unpaid and not counted).</div>
           </div>
           <div style="flex:1;">
             <div style="font-weight:700;font-size:10.5px;color:#1a1a2e;letter-spacing:0.04em;margin-bottom:3px;">NET PLH</div>
@@ -2205,7 +2206,7 @@ function elapsedMinutesSince(hhmm){
 /* v116: same gross rule as the finished run (running + stops × staff), so the live figure matches what gets saved */
 function laborHoursSoFar(live){
   const now = nowHHMM();
-  const lab = runLabourMinutes((live.segments||[]).map(sg=>({...sg, end: sg.end||now})), (live.downtimeSegments||[]).map(d=>({...d, end: d.end||now})));
+  const lab = runLabourMinutes((live.segments||[]).map(sg=>({...sg, end: sg.end||now})), (live.downtimeSegments||[]).map(d=>({...d, end: d.end||now})), paidBreakLeftFor(live.date||todayStr(), live.machine, live.startedAt));
   return (lab.gross/60).toFixed(1);
 }
 function machineIdSafe(m){ return m.replace(/\s+/g,'-'); }
@@ -2869,15 +2870,44 @@ async function confirmFinishProduct(){
 }
 /* Closes out the current run's segments/downtime and saves them to History — shared by Finish Product (which stops there) and Switch Product (which immediately starts a new run right after). Quantity/weight/notes are optional; when skipped, the run still saves with full timing/staffing data and can be completed later from History, same as Finish Product's own "add later" path. */
 /* v116: labour for a run. Net = running minutes × staff on each segment. Gross = net + stop minutes (except No Work) × the staff on the line at the moment the stop began (the latest segment that started before it; a stop before the first segment uses the first segment's headcount). */
-function runLabourMinutes(segments, downtimeSegments){
+/* v146: paid break — each line gets 30 paid minutes of Break per day (normally the 10:00 break); Break time beyond that is unpaid and left out of gross labour */
+const PAID_BREAK_MIN = 30;
+function runLabourMinutes(segments, downtimeSegments, paidLeft){
+  if(paidLeft==null) paidLeft = PAID_BREAK_MIN;
   const segs = (segments||[]).filter(sg=>sg.start).slice().sort((a,b)=>toMin(a.start)-toMin(b.start));
   const empAt = t=>{ const tm=toMin(t); let best=null; segs.forEach(sg=>{ if(toMin(sg.start)<=tm) best=sg; }); const sg = best || segs[0]; return sg ? (Number(sg.employees)||0) : 1; };
   let net=0, gross=0;
   segs.forEach(sg=>{ net += duration(sg.start, sg.end) * (Number(sg.employees)||0); });
   gross = net;
-  (downtimeSegments||[]).forEach(d=>{ if(d.status==='NO_WORK') return; gross += duration(d.start, d.end) * empAt(d.start); });
-  return {net, gross};
+  (downtimeSegments||[]).slice().sort((a,b)=>toMin(a.start)-toMin(b.start)).forEach(d=>{
+    if(d.status==='NO_WORK') return;
+    let dur = duration(d.start, d.end);
+    if(d.status==='BREAK'){ const paid = Math.max(0, Math.min(dur, paidLeft)); paidLeft -= paid; dur = paid; }
+    gross += dur * empAt(d.start);
+  });
+  return {net, gross, paidLeft};
 }
+/* Break minutes already used today on this line by runs that finished before `before` (so the 30 paid minutes are shared in time order) */
+function paidBreakLeftFor(date, machine, before){
+  const used = Store.records.filter(r=>r.date===date && r.machine===machine && r.status==='RUNNING' && r.plh && Array.isArray(r.plh.downtimeSegments) && (!before || toMin(r.startTime) < toMin(before)))
+    .reduce((a,r)=>a + r.plh.downtimeSegments.filter(d=>d.status==='BREAK').reduce((b,d)=>b+duration(d.start,d.end),0), 0);
+  return Math.max(0, PAID_BREAK_MIN - used);
+}
+/* Re-works gross labour + gross PLH of every saved Live Floor run with the paid-break rule (past days too). Safe to repeat; only gross changes, net stays as saved. */
+function applyPaidBreakRule(recs){
+  const groups = {};
+  (recs||[]).forEach(r=>{ const p = r.plh;
+    if(r.status!=='RUNNING' || !p || !Array.isArray(p.segments) || !p.segments.length || !Array.isArray(p.downtimeSegments)) return;
+    if(p.downtimeSegments.some(d=>!d.status) || p.segments.some(sg=>!sg.start||!sg.end)) return;
+    (groups[r.date+'|'+r.machine] = groups[r.date+'|'+r.machine] || []).push(r); });
+  Object.values(groups).forEach(list=>{
+    list.sort((a,b)=>toMin(a.startTime)-toMin(b.startTime)); let left = PAID_BREAK_MIN;
+    list.forEach(r=>{ const p = r.plh; const lab = runLabourMinutes(p.segments, p.downtimeSegments, left); left = lab.paidLeft;
+      p.grossLaborHours = lab.gross/60;
+      if(p.weightLbs>0) p.grossPLH = p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null; });
+  });
+}
+
 /* Same text block the run notes have always carried (Qty · Weight · Labour · PLH · vs Target) */
 function plhNoteExtras(p){
   const extras = [];
@@ -2925,7 +2955,7 @@ async function closeOutLiveRun(m, opts){
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt && !lastDt.end) lastDt.end = now;
 
-  const lab = runLabourMinutes(live.segments, live.downtimeSegments);
+  const lab = runLabourMinutes(live.segments, live.downtimeSegments, paidBreakLeftFor(live.date, m, live.startedAt));
   const netLaborMin = lab.net, grossLaborMin = lab.gross;
   const grossLaborHours = grossLaborMin/60, netLaborHours = netLaborMin/60;
   const weightNum = parseFloat(opts.weight)||0;

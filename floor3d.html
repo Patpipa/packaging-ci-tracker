@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v21 · CI Tracker</title>
+<title>3D Floor · v23 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1494,9 +1494,9 @@ function wanted(){
   n.maint=broken?1:0;maintFor=broken?broken.key:null;
   // Fajita / Cutlet crews come from the on/off panel
   ["fajita","cutlet"].forEach(k=>{const st=sideState(k);n[k]=st.on?Math.min(SPOTS[k].length,(st.people||0)+(st.trim||0)):0});
-  if(trimBreak())TRIM_KEYS.forEach(k=>n[k]=0);   // trimmers' break: every trim table empties
+  if(trimBreak())BREAK_KEYS.forEach(k=>n[k]=0);   // trimmers' break (9:00 and 12:00): trim tables, both band saws and the dicer empty
   // v8: end of the trimmers' day (device clock): from 2:30 PM only 2 stay at the main trim table, at 3:00 PM they leave too
-  {const m=nowMins();if(m>=15*60){TRIM_KEYS.forEach(k=>n[k]=0);n.bs1=0;n.bs2=0;n.dicer=0}else if(m>=14*60+30){n.trimmer=Math.min(n.trimmer||0,2);n.trim=0;n.trim3=0}
+  {const m=nowMins();if(m>=15*60){TRIM_KEYS.forEach(k=>n[k]=0);n.bs1=0;n.bs2=0;n.dicer=0}else if(m>=14*60+30){n.trimmer=Math.min(n.trimmer||0,2);n.trim=0;n.trim3=0;n.bs1=0;n.bs2=0;n.dicer=0} // v22: band saws + dicer leave with the trimmers at 2:30
   // MAREL: from 2:30 PM the operator + 1 helper stay until the MAREL finish time is entered on the Crew Board; then they leave
    const mr=sideState("marel");if(mr.last&&!mr.on)n.marel=0;else if(m>=14*60+30)n.marel=2}
   // v18: clean-up once no Variovac is running — packaging crew clean the Variovacs, 2 take the garbage (the pallet jack takes the skids)
@@ -1507,6 +1507,7 @@ function wanted(){
 /* ---------- trimmers' breaks: 9:00-9:30 and 12:00-12:30 every day (this device's clock) ----------
    They walk out through the exit by Variovac 1 / the rebox table and come back in the same way. */
 const TRIM_KEYS=["trimmer","trim","trim3"];
+const BREAK_KEYS=TRIM_KEYS.concat(["bs1","bs2","dicer"]); // v22: band saw and dicer operators go on break with the trimmers
 const BREAK_EXIT=[13.3,21.75],BREAK_OUT=[14.35,21.75];
 const TRIM_BREAKS=[[9*60,9*60+30],[12*60,12*60+30]];
 function nowMins(){const d=new Date();return d.getHours()*60+d.getMinutes()+d.getSeconds()/60}
@@ -1531,14 +1532,14 @@ function assign(w,key,i,fromDoor){
 // move people to match the floor: surplus people are reused for open spots before anyone new walks in
 function syncFloor(){
   const n=wanted();const pool=[],leave=[],brk=[];const onBrk=trimBreak();const over=shiftOver(),late=nowMins()>=14*60+30;
-  Object.keys(n).forEach(k=>{const list=crews[k]||(crews[k]=[]);while(list.length>n[k])(k==="maint"?leave:((onBrk&&TRIM_KEYS.includes(k))||over||(late&&HOME_KEYS.includes(k))?brk:pool)).push(list.pop())});
+  Object.keys(n).forEach(k=>{const list=crews[k]||(crews[k]=[]);while(list.length>n[k])(k==="maint"?leave:((onBrk&&BREAK_KEYS.includes(k))||over||(late&&HOME_KEYS.includes(k))?brk:pool)).push(list.pop())});
   if(maintFor&&crews.maint&&crews.maint[0]){const w=crews.maint[0];const sp=MAINT_SPOT[maintFor];if(w.spot[0]!==sp[0]||w.spot[1]!==sp[1])assign(w,"maint",0,false)}
   Object.keys(n).forEach(k=>{const list=crews[k];
     while(list.length<n[k]){const i=list.length;let w;
       if(k!=="maint"&&pool.length){
         const sp=spotFor(k,i);pool.sort((a,b)=>Math.hypot(a.g.position.x-sp[0],a.g.position.z-sp[1])-Math.hypot(b.g.position.x-sp[0],b.g.position.z-sp[1]));
         w=pool.shift();assign(w,k,i,false);
-      }else if(TRIM_KEYS.includes(k)&&trimReturning()){w=newWorker(BREAK_OUT[0],BREAK_OUT[1]);assign(w,k,i,false)} // back from break through the exit
+      }else if(BREAK_KEYS.includes(k)&&trimReturning()){w=newWorker(BREAK_OUT[0],BREAK_OUT[1]);assign(w,k,i,false)} // back from break through the exit
       else{w=newWorker(DOOR[0],DOOR[1]);assign(w,k,i,true)}
       list.push(w)}});
   if(over){brk.push(...pool.splice(0))} // after End Shift everyone uses the exit by Manual Pack
@@ -2188,7 +2189,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v21";
+const FLOOR3D_VERSION="v23";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
@@ -2493,7 +2494,7 @@ function v18Tick(){try{
   // 3) 3:00 PM: the Debox rack pusher goes home with the trimmers
   if(typeof rackW!=="undefined"&&rackW&&!rackW.leaving&&m>=15*60){if(v18First&&m>=15*60+2){rackW.state="gone"}else if(rackW.state==="work")sendHome(rackW)}
   // 4) garbage runs at 9:30, 12:30 and 3:00 (once each, for 20 minutes after the time)
-  if(!shiftEnded())GARBAGE_TIMES.forEach(t=>{const key="floor3d_gbg_"+date+"_"+t;let done=false;try{done=localStorage.getItem(key)==="1"}catch(e){}
+  if(!shiftEnded())GARBAGE_TIMES.forEach(t=>{const key="floor3d_gbg_"+(EMBED?"dash_":"full_")+date+"_"+t; /* v23: the Dashboard 3D and the full-screen view each do their own run */let done=false;try{done=localStorage.getItem(key)==="1"}catch(e){}
     if(!done&&m>=t&&m<t+20&&!v18First){try{localStorage.setItem(key,"1")}catch(e){};const w=newWorker(DOOR[0],DOOR[1]);w.key="garbage";w.spot=DOOR.slice();w.look=[DOOR[0]-1,DOOR[1]];w.speed=1.2;garbageRun(w,GARBAGE_STOPS,false)}});
   // 5) clean-up: the pallet jack takes every Variovac skid out; the 2 garbage people do their round once
   const cu=cleanupMode();if(cu&&!cleanWas){cleanStart=Date.now();[skid,skid2,skid3].forEach(sk=>{if(sk.count>0&&!jackQ.includes(sk))jackQ.push(sk)});if(jackW)jackW.timer=0.5}
