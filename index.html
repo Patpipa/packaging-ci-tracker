@@ -222,7 +222,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v149 - 2026-11-01 (Live Floor downtime picker: Most used here, category blocks, reasons as blocks grouped by department, search)';
+const APP_VERSION = 'v150 - 2026-11-01 (Storage: records saved one document per month, old document kept as backup, storage meter in Settings; loads 3D floor v24)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -369,8 +369,7 @@ const Store = {
       const settRef = this.db.collection('tracker').doc('settings');
       const dayRef = this.db.collection('tracker').doc('dayLog');
 
-      const recSnap = await recRef.get();
-      this.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
+      await this.loadRecordMonths(false);   // v150: records live in one document per month (records_YYYY-MM); the old single document is kept as a backup
       const repSnap = await repRef.get();
       this.dailyReports = (repSnap.exists && repSnap.data().data) ? JSON.parse(repSnap.data().data) : [];
 
@@ -397,20 +396,17 @@ const Store = {
       if(this.records.length===0){
         const backupR = safeLocalGet('pct_records_backup');
         if(backupR){
-          try{ const parsed = JSON.parse(backupR); if(Array.isArray(parsed) && parsed.length>0){ this.records = parsed; await recRef.set({data: JSON.stringify(this.records), updatedAt: Date.now()}); toast('Recovered records from local backup'); } }catch(e){}
+          try{ const parsed = JSON.parse(backupR); if(Array.isArray(parsed) && parsed.length>0){ this.records = parsed; await this.saveRecords(); toast('Recovered records from local backup'); } }catch(e){}
         }
       }
       this._initialLoadDone = true;
       this.ready = true;
 
       // Real-time sync: any device that saves updates every other open device automatically
-      recRef.onSnapshot(snap=>{
-        if(!this._initialLoadDone) return;
-        if(snap.exists && snap.data().data){
-          this.records = JSON.parse(snap.data().data);
-          safeLocalSet('pct_records_backup', snap.data().data);
-          if(typeof Router!=='undefined' && Router.current!=='new') render();
-        }
+      this.watchRecordMonths();
+      recRef.onSnapshot(snap=>{ // v150: an older app version still saving to the old single document — bring its new entries across
+        if(!this._initialLoadDone || !snap.exists || !snap.data().data) return;
+        this.mergeLegacy(snap).catch(e=>console.error('legacy merge failed', e));
       }, err=>{ console.error('records listener error', err); });
       repRef.onSnapshot(snap=>{
         if(!this._initialLoadDone) return;
@@ -455,24 +451,86 @@ const Store = {
       showStorageWarning();
     }
   },
-  async refreshRecords(){
-    try{
-      const snap = await this.db.collection('tracker').doc('records').get({source:'server'});
-      if(snap.exists && snap.data().data) this.records = JSON.parse(snap.data().data);
-      return true;
-    }catch(e){
-      try{
-        const snap = await this.db.collection('tracker').doc('records').get();
-        if(snap.exists && snap.data().data) this.records = JSON.parse(snap.data().data);
-        return true;
-      }catch(e2){ console.error('refreshRecords failed', e2); return false; }
+  /* ============ v150: RECORDS SPLIT BY MONTH ============
+     tracker/records_YYYY-MM = {data: JSON array of that month's records}. tracker/recordsIndex = {months:[...], migratedAt, legacySeenAt}.
+     The old tracker/records document is never deleted (backup). An older app version that still saves there is merged in (new entries by id). */
+  recMonths:{}, recSaved:{}, recIndex:null, _recUnsubs:{},
+  monthOf(r){ const d = String((r && r.date) || ''); return /^\d{4}-\d{2}/.test(d) ? d.slice(0,7) : 'undated'; },
+  monthDocId(m){ return 'records_' + m; },
+  rebuildRecords(){ this.records = Object.keys(this.recMonths).sort().reduce((a,m)=>a.concat(this.recMonths[m]||[]), []); },
+  async loadRecordMonths(fromServer){
+    const col = this.db.collection('tracker'), opt = fromServer ? {source:'server'} : undefined;
+    const get = async ref=>{ try{ return await ref.get(opt); }catch(e){ if(fromServer) return await ref.get(); throw e; } };
+    const idxSnap = await get(col.doc('recordsIndex'));
+    let idx = idxSnap.exists ? (idxSnap.data()||{}) : null;
+    if(!idx || !idx.migratedAt){
+      // first run on v150: copy every record from the old single document into month documents (old document left untouched)
+      const legSnap = await get(col.doc('records'));
+      const legacy = (legSnap.exists && legSnap.data().data) ? JSON.parse(legSnap.data().data) : [];
+      const groups = {}; legacy.forEach(r=>{ const m = this.monthOf(r); (groups[m] = groups[m] || []).push(r); });
+      const months = Object.keys(groups).sort();
+      for(const m of months){ const json = JSON.stringify(groups[m]); await col.doc(this.monthDocId(m)).set({data: json, updatedAt: Date.now()}); this.recSaved[m] = json; }
+      idx = {months, migratedAt: Date.now(), legacySeenAt: (legSnap.exists && legSnap.data().updatedAt) || Date.now(), legacyCount: legacy.length};
+      await col.doc('recordsIndex').set(idx);
+      this.recMonths = groups;
+      if(legacy.length) setTimeout(()=>{ try{ toast(`Storage upgraded — ${legacy.length} records moved into monthly files`); }catch(e){} }, 1500);
+    } else {
+      const months = (idx.months||[]).slice().sort(); const out = {};
+      const snaps = await Promise.all(months.map(m=>get(col.doc(this.monthDocId(m)))));
+      snaps.forEach((sn,k)=>{ const raw = (sn.exists && sn.data().data) || '[]'; out[months[k]] = JSON.parse(raw); this.recSaved[months[k]] = raw; });
+      this.recMonths = out;
     }
+    this.recIndex = idx;
+    this.rebuildRecords();
+    return true;
+  },
+  watchRecordMonths(){
+    const col = this.db.collection('tracker');
+    const watch = m=>{ if(this._recUnsubs[m]) return;
+      this._recUnsubs[m] = col.doc(this.monthDocId(m)).onSnapshot(snap=>{
+        if(!this._initialLoadDone || !snap.exists) return;
+        const raw = (snap.data()||{}).data || '[]'; if(raw===this.recSaved[m] && this.recMonths[m]) return;
+        this.recMonths[m] = JSON.parse(raw); this.recSaved[m] = raw; this.rebuildRecords();
+        if(typeof Router!=='undefined' && Router.current!=='new') render();
+      }, err=>console.error('records month listener error', m, err)); };
+    (this.recIndex && this.recIndex.months || []).forEach(watch);
+    col.doc('recordsIndex').onSnapshot(snap=>{ if(!snap.exists) return; const idx = snap.data()||{}; this.recIndex = idx; (idx.months||[]).forEach(watch); }, err=>console.error('records index listener error', err));
+    this._watchMonth = watch;
+  },
+  async mergeLegacy(snap){
+    const upd = snap.data().updatedAt || 0, seen = (this.recIndex && this.recIndex.legacySeenAt) || 0;
+    if(!this.recIndex || !this.recIndex.migratedAt || upd <= seen) return;
+    const legacy = JSON.parse(snap.data().data); const have = new Set(this.records.map(r=>r.id));
+    const add = legacy.filter(r=>r && r.id && !have.has(r.id));
+    if(add.length){ this.records = this.records.concat(add); await this.saveRecords(); toast(`Added ${add.length} entr${add.length===1?'y':'ies'} saved by a device on an older version`); }
+    this.recIndex.legacySeenAt = upd; await this.db.collection('tracker').doc('recordsIndex').set(this.recIndex, {merge:true});
+  },
+  async refreshRecords(){
+    try{ await this.loadRecordMonths(true); return true; }
+    catch(e){ try{ await this.loadRecordMonths(false); return true; }catch(e2){ console.error('refreshRecords failed', e2); return false; } }
   },
   async saveRecords(){
     try{
-      const json = JSON.stringify(this.records);
-      await this.db.collection('tracker').doc('records').set({data: json, updatedAt: Date.now()});
-      safeLocalSet('pct_records_backup', json);
+      const col = this.db.collection('tracker'), groups = {};
+      this.records.forEach(r=>{ const m = this.monthOf(r); (groups[m] = groups[m] || []).push(r); });
+      const months = [...new Set(Object.keys(groups).concat(Object.keys(this.recMonths)))].sort();
+      let wrote = 0;
+      for(const m of months){
+        const json = JSON.stringify(groups[m] || []);
+        if(json === this.recSaved[m]) continue;                       // only months that changed are written
+        if(new Blob([json]).size > 1000000) throw new Error(`Month ${m} is too large to save`);
+        await col.doc(this.monthDocId(m)).set({data: json, updatedAt: Date.now()});
+        this.recSaved[m] = json; wrote++;
+      }
+      this.recMonths = {}; months.forEach(m=>{ this.recMonths[m] = groups[m] || []; });
+      const known = (this.recIndex && this.recIndex.months) || [];
+      const newMonths = months.filter(m=>!known.includes(m) && (groups[m]||[]).length);
+      if(newMonths.length || !this.recIndex){
+        this.recIndex = {...(this.recIndex||{migratedAt: Date.now()}), months: [...new Set(known.concat(newMonths))].sort()};
+        await col.doc('recordsIndex').set(this.recIndex, {merge:true});
+        if(this._watchMonth) newMonths.forEach(this._watchMonth);
+      }
+      try{ safeLocalSet('pct_records_backup', JSON.stringify(this.records)); }catch(e){}
       hideStorageWarning();
       return true;
     }catch(e){ console.error('save records failed', e); window._lastStorageError = String(e && e.message || e); showStorageWarning(); return false; }
@@ -1616,7 +1674,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v23';
+const FLOOR3D_REV = 'v24';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -4264,6 +4322,25 @@ function exportReportPDF(date){
 }
 
 /* ============ SETTINGS / DATA MANAGEMENT ============ */
+/* v150: storage meter — every cloud document has a 1 MB limit; warn at 80% */
+const DOC_LIMIT = 1048576;
+function storageUsage(){
+  const sz = v=>{ try{ return new Blob([typeof v==='string' ? v : JSON.stringify(v)]).size; }catch(e){ return 0; } };
+  const rows = Object.keys(Store.recMonths||{}).sort().map(m=>({name:`Records · ${m==='undated'?'no date':fmtDate(m+'-01').replace(/\s\d+,/, '')}`, bytes: sz(Store.recSaved[m] || JSON.stringify(Store.recMonths[m]||[]))}));
+  rows.push({name:'Daily reports', bytes: sz(Store.dailyReports||[])}, {name:'Crew Board day log', bytes: sz(Store.dayLog||{})}, {name:'Live runs', bytes: sz(Store.liveRuns||{})}, {name:'Product library', bytes: sz(Store.productLibrary||[])});
+  rows.forEach(r=>r.pct = r.bytes/DOC_LIMIT*100);
+  return rows;
+}
+function storageCardHTML(){
+  const rows = storageUsage(), worst = rows.reduce((a,r)=>r.pct>a.pct?r:a, {pct:0});
+  const bar = r=>{ const c = r.pct>=80 ? 'var(--wait)' : r.pct>=60 ? 'var(--change)' : 'var(--run)';
+    return `<div style="display:flex;align-items:center;gap:10px;font-size:12.5px;padding:3px 0;"><span style="flex:0 0 46%;color:var(--muted);">${escapeHtml(r.name)}</span><span style="flex:1;height:7px;background:var(--panel2);border-radius:5px;overflow:hidden;"><i style="display:block;height:100%;width:${Math.min(100,r.pct).toFixed(1)}%;background:${c};"></i></span><span class="mono" style="flex:0 0 74px;text-align:right;${r.pct>=80?'color:var(--wait);font-weight:700;':''}">${(r.bytes/1024).toFixed(0)} KB · ${r.pct.toFixed(0)}%</span></div>`; };
+  return `<div class="card"><h3>Storage</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:8px;line-height:1.4;">Each part is saved as its own cloud file with a 1 MB limit. Records are split by month, so they never run out of room.</div>
+    ${worst.pct>=80 ? `<div class="warnbanner" style="margin-bottom:8px;">${escapeHtml(worst.name)} is ${worst.pct.toFixed(0)}% full — tell Claude so it can be split before it fills up.</div>` : ''}
+    ${rows.map(bar).join('')}
+    <div style="font-size:11px;color:var(--muted2);margin-top:6px;">The old single records file is kept untouched as a backup.</div></div>`;
+}
 function renderSettings(){
   return `
   <div class="card">
@@ -4285,6 +4362,7 @@ function renderSettings(){
     <div style="color:var(--muted);font-size:13px;margin-bottom:10px;">${Store.productLibrary.length} product${Store.productLibrary.length===1?'':'s'} saved — add or edit anytime, no need to wait for a live run.</div>
     <button class="btn btn-secondary" onclick="Router.go('products')">📦 Manage Product Library →</button>
   </div>
+  ${storageCardHTML()}
   <div class="card">
     <h3>Data Backup &amp; Restore</h3>
     <div class="btnrow" style="margin-bottom:8px;">
@@ -4431,17 +4509,15 @@ async function forceRefreshFromServer(){
   toast('Refreshing from server…');
   try{
     const [recSnap, repSnap, liveSnap, prodSnap] = await Promise.all([
-      Store.db.collection('tracker').doc('records').get({source:'server'}),
+      Store.refreshRecords(),
       Store.db.collection('tracker').doc('dailyReports').get({source:'server'}),
       Store.db.collection('tracker').doc('liveRuns').get({source:'server'}),
       Store.db.collection('tracker').doc('productLibrary').get({source:'server'})
     ]);
-    Store.records = (recSnap.exists && recSnap.data().data) ? JSON.parse(recSnap.data().data) : [];
     Store.dailyReports = (repSnap.exists && repSnap.data().data) ? JSON.parse(repSnap.data().data) : [];
     Store.liveRuns = (liveSnap.exists && liveSnap.data().data) ? JSON.parse(liveSnap.data().data) : {};
     Store.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
     if(liveSnap.exists && liveSnap.data().data) safeLocalSet('pct_live_runs_backup', liveSnap.data().data);
-    if(recSnap.exists && recSnap.data().data) safeLocalSet('pct_records_backup', recSnap.data().data);
     toast('Synced with server ✓');
     render();
   }catch(e){
@@ -4862,6 +4938,7 @@ async function repairOvernightRecords(){
 }
 async function startApp(){
   await Store.init();
+  try{ const w = storageUsage().filter(r=>r.pct>=80); const k='pct_storage_warn_'+todayStr(); if(w.length && !safeLocalGet(k)){ safeLocalSet(k,'1'); setTimeout(()=>toast(`Storage: ${w[0].name} is ${w[0].pct.toFixed(0)}% full — see Settings`), 2500); } }catch(e){}
   await migrateReasonLabels();
   await repairOvernightRecords();
   render();
@@ -4875,7 +4952,7 @@ async function startApp(){
     if(document.visibilityState==='hidden'){ wasHidden = true; return; }
     if(document.visibilityState==='visible' && wasHidden && Store.db){
       wasHidden = false;
-      Store.db.collection('tracker').doc('records').get().catch(e=>{
+      Store.db.collection('tracker').doc('settings').get().catch(e=>{ // v150: small document, just to test the connection
         const msg = String(e && e.message || e).toLowerCase();
         if(msg.includes('terminated') || msg.includes('client is offline')){
           toast('Reconnecting…');
