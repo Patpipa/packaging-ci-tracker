@@ -222,7 +222,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v152 - 2026-11-02 (Garbage button on Variovac cards: 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v24)';
+const APP_VERSION = 'v153 - 2026-11-02 (Garbage button on Variovac cards (Packaging / Trimmer / Burger Room): 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v24)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1091,7 +1091,7 @@ function breakEndAfter(t){
 /* ============ v152: GARBAGE RUNS ============
 One tap takes 1 crew off a running Variovac (line keeps running with one less), ↩ Back puts them back.
 Each run is saved in the day log (dayLog[date].garbage) and its minutes stay in GROSS labour (paid, assigned) but not NET. */
-const GARBAGE_KINDS = ['Packaging','Trimmer'];
+const GARBAGE_KINDS = ['Packaging','Trimmer','Burger Room'];
 function garbageEvents(date){ const d = dayLogFor(date); return d ? (d.garbage||[]) : []; }
 function garbageOpenFor(m){ const l = Store.liveRuns[m]; if(!l || !l.gOut) return null; return garbageEvents(l.date||todayStr()).find(e=>e.id===l.gOut && !e.end) || null; }
 function garbageEndOf(e, date){ return e.end || (date===todayStr() ? openEndToday(e.start) : '16:30'); }
@@ -1162,7 +1162,8 @@ function garbageCardHTML(m, live, isRunning, lastSeg){
       <div style="flex:1;font-size:13.5px;font-weight:600;color:var(--change);">🗑 1 out on garbage (${escapeHtml(ev.kind)})<div style="font-size:12px;font-weight:400;color:var(--muted);">since ${fmtTime12(ev.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(ev.start)))}</div></div>
       <button class="btn btn-primary" style="width:auto;padding:10px 16px;margin:0;" onclick="garbageBack('${m}')">↩ Back</button></div>`;
   if(!isRunning || !lastSeg || (Number(lastSeg.employees)||0) < 2) return '';
-  return `<div class="btnrow" style="margin-top:8px;">${GARBAGE_KINDS.map(k=>`<button class="btn btn-secondary" onclick="garbageOut('${m}','${k}')">🗑 Garbage · ${k}</button>`).join('')}</div>`;
+  return `<div style="margin-top:10px;font-size:12px;color:var(--muted);letter-spacing:.5px;">🗑 GARBAGE RUN — 1 crew out for:</div>
+    <div class="btnrow" style="margin-top:4px;gap:6px;">${GARBAGE_KINDS.map(k=>`<button class="btn btn-secondary" style="padding:10px 4px;font-size:13px;" onclick="garbageOut('${m}','${k}')">${k}</button>`).join('')}</div>`;
 }
 /* Report rows: total + per kind + per line */
 function garbageSummary(dates){
@@ -1170,7 +1171,7 @@ function garbageSummary(dates){
   const sum = l=>l.reduce((a,e)=>a+e.min,0);
   const kinds = GARBAGE_KINDS.map(k=>{ const l = all.filter(e=>e.kind===k); return l.length ? `${k} ${l.length} (${fmtDur(sum(l))})` : ''; }).filter(Boolean);
   const lines = [...new Set(all.map(e=>e.machine))].sort().map(m=>{ const l = all.filter(e=>e.machine===m); return `${m} ×${l.length} (${fmtDur(sum(l))})`; });
-  return {n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind==='Trimmer').length, kinds, lines};
+  return {n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind!=='Packaging').length, kinds, lines};
 }
 let sideBreakBusy = false;
 async function syncSideBreaks(){
