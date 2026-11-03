@@ -222,7 +222,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v153 - 2026-11-02 (Garbage button on Variovac cards (Packaging / Trimmer / Burger Room): 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v24)';
+const APP_VERSION = 'v154 - 2026-11-02 (One-tap Start Break / End Break for all lines, each back to its own status; Garbage button on Variovac cards (Packaging / Trimmer / Burger Room): 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v24)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1872,6 +1872,7 @@ function renderDashboard(){
 
   return `
     ${renderCrewAlertLine()}
+    ${renderBreakAllBar()}
     <div class="card">
       <h3>Today · ${fmtDate(todayStr())}</h3>
       ${renderFloorSwitch()}
@@ -2408,6 +2409,70 @@ function inMetalCheck(live){
   const lastDt = live && (live.downtimeSegments||[])[live.downtimeSegments.length-1];
   return !!(lastDt && !lastDt.end && lastDt.status==='PLANNED' && lastDt.reason==='Metal Detector Test');
 }
+
+/* ============ v154: ONE-TAP BREAK (all lines) ============
+☕ Start Break puts every line on the Live Floor on Break at the same minute. Each line remembers what it was doing
+(Running with its crew, Waiting, Changeover, Planned Stop… incl. its reason) and ▶ End Break puts it back exactly so.
+No Work Scheduled lines and lines left open from an earlier day are left alone. Side machines, Lead Hand and Yield
+pause / restart on their own (syncSideBreaks), and anyone out on a garbage run is counted back in (syncGarbage). */
+let breakBusy = false;
+function breakAllCandidates(){
+  return MACHINES.filter(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l)) return false;
+    const o = (l.downtimeSegments||[])[l.downtimeSegments.length-1];
+    if(l.status!=='RUNNING' && o && !o.end && (o.status==='NO_WORK' || o.status==='BREAK')) return false;
+    return true; });
+}
+function openBreakAll(){
+  const lines = []; let start = null, id = null;
+  MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || l.status==='RUNNING') return;
+    const o = (l.downtimeSegments||[])[l.downtimeSegments.length-1];
+    if(o && !o.end && o.status==='BREAK' && o.breakAll){ lines.push(m); if(!start || o.start < start) start = o.start; id = o.breakAll; } });
+  return lines.length ? {id, start, lines} : null;
+}
+async function startBreakAll(){
+  if(breakBusy) return;
+  const ms = breakAllCandidates();
+  if(!ms.length){ toast('No lines to put on break'); return; }
+  breakBusy = true;
+  try{
+    const now = nowHHMM(), gid = uid();
+    ms.forEach(m=>{ const live = Store.liveRuns[m]; let resumeTo = null;
+      if(live.status==='RUNNING'){ const ls = live.segments[live.segments.length-1]; if(ls && !ls.end) ls.end = now; }
+      else { const o = live.downtimeSegments[live.downtimeSegments.length-1];
+        if(o && !o.end){ o.end = now; resumeTo = {status:o.status, reasonCategory:o.reasonCategory||'', reason:o.reason||'', classification:o.classification||''};
+          if(o.resumeTo) resumeTo.resumeTo = o.resumeTo; if(o.group) resumeTo.group = o.group; } }
+      live.downtimeSegments.push({start: now, end:null, status:'BREAK', reasonCategory:'', reason:'Break', classification:'', notes:'', breakAll: gid, resumeTo});
+      live.status = 'DOWNTIME'; });
+    if(liveDowntimeSetup && ms.includes(liveDowntimeSetup.machine)) liveDowntimeSetup = null;
+    if(!(await Store.saveLiveRuns())){ toast('Save failed — check connection'); return; }
+    toast(`☕ Break started — ${ms.length} line${ms.length===1?'':'s'}`); render();
+  } finally { breakBusy = false; }
+}
+async function endBreakAll(){
+  if(breakBusy) return;
+  const b = openBreakAll(); if(!b) return;
+  breakBusy = true;
+  try{
+    const now = nowHHMM(); let run = 0, back = 0;
+    b.lines.forEach(m=>{ const live = Store.liveRuns[m]; const o = live.downtimeSegments[live.downtimeSegments.length-1];
+      o.end = toMin(now) < toMin(o.start) ? o.start : now;
+      if(o.resumeTo){ live.downtimeSegments.push({start: o.end, end:null, ...o.resumeTo, notes:''}); back++; }
+      else if(live.segments.length){ const ls = live.segments[live.segments.length-1];
+        const emp = (live.pendingEmployees!=null) ? live.pendingEmployees : ls.employees;
+        live.segments.push({start: o.end, end:null, employees: emp}); delete live.pendingEmployees; live.status = 'RUNNING'; run++; } });
+    if(!(await Store.saveLiveRuns())){ toast('Save failed — check connection'); return; }
+    toast(`▶ Break over — ${run} running${back?`, ${back} back to ${back===1?'its':'their'} earlier status`:''}`); render();
+  } finally { breakBusy = false; }
+}
+function renderBreakAllBar(){
+  const b = openBreakAll();
+  if(b) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
+    <div style="font-family:'Oswald';font-size:16px;color:var(--brk);text-transform:uppercase;letter-spacing:0.04em;">☕ On break since ${fmtTime12(b.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(b.start)))}</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${b.lines.join(', ')} · each goes back to what it was doing</div>
+    <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="endBreakAll()">▶ End Break — all back</button></div>`;
+  const n = breakAllCandidates().length; if(!n) return '';
+  return `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--brk);color:var(--brk);" onclick="startBreakAll()">☕ Start Break — all lines (${n})</button>`;
+}
 let allLineSetup = null;
 let allLineBusy = false;
 function openAllLineSetup(){
@@ -2555,6 +2620,7 @@ function renderLive(){
   <div class="card" style="margin-bottom:16px;">
     <div style="color:var(--muted);font-size:13px;">Tap a machine to start tracking a run live — set the product now or later. Finishing a product writes it straight into History, same as manual entries.</div>
   </div>
+  ${renderBreakAllBar()}
   ${renderCrewBoard()}
   ${renderAllLineBanners()}
   ${allLineSetup ? renderAllLineSetupCard() : `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--planned);color:var(--planned);" onclick="openAllLineSetup()">⏸ All-Line Planned Stop</button>`}
