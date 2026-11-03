@@ -222,7 +222,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v150 - 2026-11-01 (Storage: records saved one document per month, old document kept as backup, storage meter in Settings; loads 3D floor v24)';
+const APP_VERSION = 'v152 - 2026-11-02 (Garbage button on Variovac cards: 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v24)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1087,6 +1087,91 @@ function breakEndAfter(t){
   VARIOVACS.forEach(m=>{ const live = Store.liveRuns[m]; if(!live) return; (live.downtimeSegments||[]).forEach(o=>{ if(o.status==='BREAK' && o.end && o.end>=t) ends.push(o.end); }); });
   return ends.sort()[0] || nowHHMM();
 }
+
+/* ============ v152: GARBAGE RUNS ============
+One tap takes 1 crew off a running Variovac (line keeps running with one less), ↩ Back puts them back.
+Each run is saved in the day log (dayLog[date].garbage) and its minutes stay in GROSS labour (paid, assigned) but not NET. */
+const GARBAGE_KINDS = ['Packaging','Trimmer'];
+function garbageEvents(date){ const d = dayLogFor(date); return d ? (d.garbage||[]) : []; }
+function garbageOpenFor(m){ const l = Store.liveRuns[m]; if(!l || !l.gOut) return null; return garbageEvents(l.date||todayStr()).find(e=>e.id===l.gOut && !e.end) || null; }
+function garbageEndOf(e, date){ return e.end || (date===todayStr() ? openEndToday(e.start) : '16:30'); }
+function garbageMinFor(date, m, from, to){
+  if(!from || !to) return 0; const a = toMin(from), b = toMin(to);
+  return garbageEvents(date).filter(e=>e.machine===m).reduce((t,e)=>{ const ea = toMin(e.start), eb = e.end ? toMin(e.end) : b;
+    return t + Math.max(0, Math.min(eb,b) - Math.max(ea,a)); }, 0);
+}
+/* person back while the line is stopped: a 0-minute marker segment so the rest of the stop (and a paid break) counts the full crew in gross; resume uses that count */
+function garbageBackWhileStopped(live, at){
+  const ls = live.segments[live.segments.length-1]; const e = ls ? Number(ls.employees)||0 : 0;
+  live.segments.push({start: at, end: at, employees: e+1});
+  if(live.pendingEmployees!=null) live.pendingEmployees += 1;
+}
+let garbageBusy = false;
+async function garbageOut(m, kind){
+  if(garbageBusy) return;
+  const live = Store.liveRuns[m]; if(!live || live.status!=='RUNNING' || garbageOpenFor(m)) return;
+  const lastSeg = live.segments[live.segments.length-1]; if(!lastSeg || (Number(lastSeg.employees)||0) < 2){ toast('Need at least 2 crew on the line'); return; }
+  garbageBusy = true;
+  try{
+    const now = nowHHMM(), e = Number(lastSeg.employees);
+    lastSeg.end = now; live.segments.push({start: now, end:null, employees: e-1});
+    const ev = {id: uid(), machine: m, kind, start: now, end: null};
+    const d = ensureDayLog(live.date||todayStr()); d.garbage = d.garbage || []; d.garbage.push(ev);
+    live.gOut = ev.id;
+    const ok = (await Store.saveLiveRuns()) && (await Store.saveDayLog());
+    if(!ok){ toast('Save failed — check connection'); return; }
+    toast(`🗑 ${m} — 1 out on garbage (${kind}) · ${e-1} on the line`); render();
+  } finally { garbageBusy = false; }
+}
+async function garbageBack(m){
+  if(garbageBusy) return;
+  const live = Store.liveRuns[m], ev = garbageOpenFor(m); if(!live) return;
+  garbageBusy = true;
+  try{
+    const now = nowHHMM();
+    if(ev) ev.end = toMin(now) < toMin(ev.start) ? ev.start : now;
+    live.gOut = null;
+    const lastSeg = live.segments[live.segments.length-1];
+    if(live.status==='RUNNING' && lastSeg){ lastSeg.end = now; live.segments.push({start: now, end:null, employees: (Number(lastSeg.employees)||0)+1}); }
+    else garbageBackWhileStopped(live, ev ? ev.end : now);
+    const ok = (await Store.saveLiveRuns()) && (await Store.saveDayLog());
+    if(!ok){ toast('Save failed — check connection'); return; }
+    toast(`${m} — back from garbage${ev?` (${fmtDur(duration(ev.start, ev.end))})`:''}`); render();
+  } finally { garbageBusy = false; }
+}
+/* Runs after every render: a garbage run whose line finished / was cancelled ends there; a line that went on Break brings the person back (count returns when it resumes) */
+async function syncGarbage(){
+  if(garbageBusy || !Store.ready) return;
+  const date = todayStr(), evs = garbageEvents(date).filter(e=>!e.end); if(!evs.length) return;
+  let chD = false, chL = false; const now = nowHHMM();
+  evs.forEach(e=>{ const live = Store.liveRuns[e.machine];
+    if(!live || live.gOut!==e.id){ e.end = openEndToday(e.start); chD = true; return; }
+    const dt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+    if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='BREAK'){
+      e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null;
+      garbageBackWhileStopped(live, e.end);
+      chD = chL = true;
+    } });
+  if(!chD) return;
+  garbageBusy = true;
+  try{ if(chL) await Store.saveLiveRuns(); if(await Store.saveDayLog()) render(); } finally { garbageBusy = false; }
+}
+function garbageCardHTML(m, live, isRunning, lastSeg){
+  const ev = garbageOpenFor(m);
+  if(ev) return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--change);border-radius:10px;display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;font-size:13.5px;font-weight:600;color:var(--change);">🗑 1 out on garbage (${escapeHtml(ev.kind)})<div style="font-size:12px;font-weight:400;color:var(--muted);">since ${fmtTime12(ev.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(ev.start)))}</div></div>
+      <button class="btn btn-primary" style="width:auto;padding:10px 16px;margin:0;" onclick="garbageBack('${m}')">↩ Back</button></div>`;
+  if(!isRunning || !lastSeg || (Number(lastSeg.employees)||0) < 2) return '';
+  return `<div class="btnrow" style="margin-top:8px;">${GARBAGE_KINDS.map(k=>`<button class="btn btn-secondary" onclick="garbageOut('${m}','${k}')">🗑 Garbage · ${k}</button>`).join('')}</div>`;
+}
+/* Report rows: total + per kind + per line */
+function garbageSummary(dates){
+  const all = []; dates.forEach(dt=>garbageEvents(dt).forEach(e=>{ const end = garbageEndOf(e, dt); all.push({...e, min: Math.max(0, toMin(end)-toMin(e.start))}); }));
+  const sum = l=>l.reduce((a,e)=>a+e.min,0);
+  const kinds = GARBAGE_KINDS.map(k=>{ const l = all.filter(e=>e.kind===k); return l.length ? `${k} ${l.length} (${fmtDur(sum(l))})` : ''; }).filter(Boolean);
+  const lines = [...new Set(all.map(e=>e.machine))].sort().map(m=>{ const l = all.filter(e=>e.machine===m); return `${m} ×${l.length} (${fmtDur(sum(l))})`; });
+  return {n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind==='Trimmer').length, kinds, lines};
+}
 let sideBreakBusy = false;
 async function syncSideBreaks(){
   if(sideBreakBusy || !Store.ready) return;
@@ -1371,6 +1456,9 @@ function dayLogSections(date, opts){
     if(!roleIn(date,r)) crew.push({k:r, v:'off today'});
     else { const m = om[r]; crew.push({k:r, v: (opts && opts.short) ? (m.min>0 ? `on the line ${fmtDur(m.min)}` : 'stayed off the line') : (m.min>0 ? `in today · on the line ${fmtDur(m.min)}` : 'in today · stayed off the line')}); }
   });
+  const gs = garbageSummary([date]);
+  if(gs.n){ crew.push({k:'Garbage runs', v:`${gs.n} · ${fmtDur(gs.min)} off the line · ${gs.kinds.join(' · ')}`, red: gs.trimN>0});
+    crew.push({k:'', sub:true, v: gs.lines.join(' · ')}); }
   out.push({title:'CREW', rows:crew});
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
   const side = [];
@@ -1401,6 +1489,8 @@ function sideLabourSections(x){
   /* v132: same layout and order as the Daily Report (CREW · MAREL · SIDE MACHINES), totalled for the range */
   const out = [];
   const crew = OFFLINE_ROLES.map(r=>({k:r, v: x.offTotals[r] ? `on the line ${fmtDur(x.offTotals[r])} in total` : 'stayed off the line'}));
+  const gs = garbageSummary((x.perDay||[]).map(d=>d.date));
+  if(gs.n) crew.push({k:'Garbage runs', v:`${gs.n} · ${fmtDur(gs.min)} packaging time off the line · ${gs.kinds.join(' · ')}`, red: gs.trimN>0});
   out.push({title:'CREW', rows:crew});
   const md = x.perDay.filter(d=>d.marelEnd), late = md.filter(d=>toMin(d.marelEnd) > SHIFT_END_MIN);
   if(md.length) out.push({title:'MAREL', rows:[{k:'Finished after 4:30 PM', v: late.length ? `${late.length} of ${md.length} day${md.length>1?'s':''}` : `none (0 of ${md.length} day${md.length>1?'s':''})`, red: late.length>0}]});
@@ -2282,7 +2372,7 @@ function elapsedMinutesSince(hhmm){
 /* v116: same gross rule as the finished run (running + stops × staff), so the live figure matches what gets saved */
 function laborHoursSoFar(live){
   const now = nowHHMM();
-  const lab = runLabourMinutes((live.segments||[]).map(sg=>({...sg, end: sg.end||now})), (live.downtimeSegments||[]).map(d=>({...d, end: d.end||now})), paidBreakLeftFor(live.date||todayStr(), live.machine, live.startedAt));
+  const lab = runLabourMinutes((live.segments||[]).map(sg=>({...sg, end: sg.end||now})), (live.downtimeSegments||[]).map(d=>({...d, end: d.end||now})), paidBreakLeftFor(live.date||todayStr(), live.machine, live.startedAt), garbageMinFor(live.date||todayStr(), live.machine, live.startedAt, now));
   return (lab.gross/60).toFixed(1);
 }
 function machineIdSafe(m){ return m.replace(/\s+/g,'-'); }
@@ -2756,6 +2846,7 @@ function renderLiveActiveCard(m, live){
         ? `<button class="btn btn-secondary" onclick="openDowntimeSetup('${m}')">⏸ Downtime</button>`
         : `<button class="btn btn-primary" style="background:var(--run);" onclick="resumeRun('${m}')">▶ Resume</button>`}
     </div>
+    ${garbageCardHTML(m, live, isRunning, lastSeg)}
     ${METAL_DETECTOR_MACHINES.includes(m) && !inMetalCheck(live) ? `<button class="btn btn-secondary" style="margin-top:8px;border-color:var(--planned);color:var(--planned);" onclick="quickMetalDetector('${m}')">🧲 Metal Detector</button>` : ''}
     <button class="btn btn-primary" style="margin-top:8px;" onclick="openFinishSetup('${m}')">✅ Finish Product</button>
     ${isRunning ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="switchProduct('${m}')">🔄 Switch Product (no stop)</button>` : ''}
@@ -3020,10 +3111,11 @@ async function confirmFinishProduct(){
 /* v116: labour for a run. Net = running minutes × staff on each segment. Gross = net + stop minutes (except No Work) × the staff on the line at the moment the stop began (the latest segment that started before it; a stop before the first segment uses the first segment's headcount). */
 /* v146: paid break — each line gets 30 paid minutes of Break per day (normally the 10:00 break); Break time beyond that is unpaid and left out of gross labour */
 const PAID_BREAK_MIN = 30;
-function runLabourMinutes(segments, downtimeSegments, paidLeft){
+function runLabourMinutes(segments, downtimeSegments, paidLeft, extraGross){
   if(paidLeft==null) paidLeft = PAID_BREAK_MIN;
   const segs = (segments||[]).filter(sg=>sg.start).slice().sort((a,b)=>toMin(a.start)-toMin(b.start));
   const empAt = t=>{ const tm=toMin(t); let best=null; segs.forEach(sg=>{ if(toMin(sg.start)<=tm) best=sg; }); const sg = best || segs[0]; return sg ? (Number(sg.employees)||0) : 1; };
+  const empAtMin = tm=>{ let best=null; segs.forEach(sg=>{ if(toMin(sg.start)<=tm) best=sg; }); const sg = best || segs[0]; return sg ? (Number(sg.employees)||0) : 1; };
   let net=0, gross=0;
   segs.forEach(sg=>{ net += duration(sg.start, sg.end) * (Number(sg.employees)||0); });
   gross = net;
@@ -3031,8 +3123,12 @@ function runLabourMinutes(segments, downtimeSegments, paidLeft){
     if(d.status==='NO_WORK') return;
     let dur = duration(d.start, d.end);
     if(d.status==='BREAK'){ const paid = Math.max(0, Math.min(dur, paidLeft)); paidLeft -= paid; dur = paid; }
-    gross += dur * empAt(d.start);
+    // v152: follow crew changes inside the stop (someone back from garbage while stopped)
+    const st = toMin(d.start), en = st + dur;
+    const cuts = segs.map(sg=>toMin(sg.start)).filter(t=>t>st && t<en).sort((x,y)=>x-y);
+    let from = st; [...cuts, en].forEach(t=>{ gross += (t-from) * empAtMin(from); from = t; });
   });
+  gross += Number(extraGross)||0; // v152: crew out on a garbage run — off net, still in gross
   return {net, gross, paidLeft};
 }
 /* Break minutes already used today on this line by runs that finished before `before` (so the 30 paid minutes are shared in time order) */
@@ -3050,7 +3146,7 @@ function applyPaidBreakRule(recs){
     (groups[r.date+'|'+r.machine] = groups[r.date+'|'+r.machine] || []).push(r); });
   Object.values(groups).forEach(list=>{
     list.sort((a,b)=>toMin(a.startTime)-toMin(b.startTime)); let left = PAID_BREAK_MIN;
-    list.forEach(r=>{ const p = r.plh; const lab = runLabourMinutes(p.segments, p.downtimeSegments, left); left = lab.paidLeft;
+    list.forEach(r=>{ const p = r.plh; const lab = runLabourMinutes(p.segments, p.downtimeSegments, left, p.garbageMin); left = lab.paidLeft;
       p.grossLaborHours = lab.gross/60;
       if(p.weightLbs>0) p.grossPLH = p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null; });
   });
@@ -3103,7 +3199,9 @@ async function closeOutLiveRun(m, opts){
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
   if(lastDt && !lastDt.end) lastDt.end = now;
 
-  const lab = runLabourMinutes(live.segments, live.downtimeSegments, paidBreakLeftFor(live.date, m, live.startedAt));
+  const runFrom = (live.segments[0]||{}).start || live.startedAt;
+  const gMin = garbageMinFor(live.date, m, runFrom, now);
+  const lab = runLabourMinutes(live.segments, live.downtimeSegments, paidBreakLeftFor(live.date, m, live.startedAt), gMin);
   const netLaborMin = lab.net, grossLaborMin = lab.gross;
   const grossLaborHours = grossLaborMin/60, netLaborHours = netLaborMin/60;
   const weightNum = parseFloat(opts.weight)||0;
@@ -3132,7 +3230,7 @@ async function closeOutLiveRun(m, opts){
     grossLaborHours, netLaborHours, grossPLH, netPLH,
     targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
     productId: live.productId||'', product: live.product||'',
-    machine: m, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees})),
+    machine: m, garbageMin: gMin, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees})),
     downtimeSegments: (live.downtimeSegments||[]).filter(d=>d.status!=='NO_WORK').map(d=>({start:d.start, end:d.end, status:d.status, reason:d.reason}))
   };
 
@@ -3179,7 +3277,7 @@ async function switchProduct(m){
       machine: m, status:'RUNNING', product:'', productId:'', date: todayStr(),
       startedAt: nowHHMM(), employees: carryEmployees,
       segments: [{start: nowHHMM(), end:null, employees: carryEmployees}],
-      downtimeSegments: []
+      downtimeSegments: [], gOut: live.gOut||null
     };
     const okL = await Store.saveLiveRuns();
     if(!okL){ toast('Save failed — check connection'); return; }
@@ -3992,14 +4090,48 @@ function exportWeeklyPDF(){
     catch(e2){ toast('PDF export not available here'); }
   }
 }
+async function closeAllOpenForEndShift(){
+  const o = endShiftOpenItems();
+  if(!o.n) return true;
+  // 1) Variovac / line live runs → records (today: now, capped 4:30 PM; older day: 4:30 PM on that day)
+  for(const m of o.runs){
+    const l = Store.liveRuns[m]; if(!l) continue;
+    const at = isStaleLive(l) ? (toMin(staleLatestStart(l)) > SHIFT_END_MIN ? staleLatestStart(l) : '16:30') : openEndToday(staleLatestStart(l)||l.startedAt||'00:00');
+    const r = await closeOutLiveRun(m, {endAt: at});
+    if(!r) return false;
+    delete Store.liveRuns[m];
+  }
+  if(o.runs.length && !(await Store.saveLiveRuns())) return false;
+  // 2) side machines and Lead Hand / Yield
+  const d = dayLogFor(todayStr());
+  if(d){
+    o.side.forEach(x=>{ x.end = openEndToday(x.start); closeSideWaits(x, x.end); });
+    o.offl.forEach(x=>{ x.end = openEndToday(x.start); });
+    (d.garbage||[]).forEach(x=>{ if(!x.end) x.end = openEndToday(x.start); });
+    d.breakPause = null; // nothing restarts after End Shift
+    if(!(await Store.saveDayLog())) return false;
+  }
+  return true;
+}
+let endingShift = false;
 async function confirmEndShift(){
+  if(endingShift) return;
+  endingShift = true;
+  const btn = document.getElementById('endShiftBtn'); if(btn){ btn.disabled = true; btn.textContent = 'Closing…'; }
+  try{
+    const n = endShiftOpenItems().n;
+    if(!(await closeAllOpenForEndShift())){ toast('Save failed — check connection'); if(btn){ btn.disabled=false; btn.textContent='Try again'; } return; }
+    await endShiftReport(n);
+  } finally { endingShift = false; }
+}
+async function endShiftReport(closedN){
   const rep = buildReport(todayStr());
   const existingIdx = Store.dailyReports.findIndex(r=>r.date===rep.date);
   if(existingIdx>-1) Store.dailyReports[existingIdx]=rep; else Store.dailyReports.push(rep);
   const ok = await Store.saveDailyReports();
   if(!ok){ toast('Save failed — storage unavailable'); return; }
   lastEndTime = '';
-  toast('Shift Closed — Report Generated');
+  toast(closedN ? `Shift Closed — ${closedN} open item${closedN===1?'':'s'} stopped, report generated` : 'Shift Closed — Report Generated');
   Router.go('reportView', rep.date);
 }
 function renderReportsList(){
@@ -4147,14 +4279,36 @@ function generateSuggestions(date){
   const el = document.getElementById('suggestChips');
   if(el) el.innerHTML = renderSuggestionChips(date);
 }
+/* v151: End Shift closes everything still open — Variovac / line live runs, side machines, Lead Hand / Yield */
+function endShiftOpenItems(){
+  const date = todayStr(), d = dayLogFor(date);
+  const runs = Object.keys(Store.liveRuns||{}).filter(m=>Store.liveRuns[m]);
+  const side = d ? (d.side||[]).filter(x=>!x.end) : [];
+  const offl = d ? (d.offline||[]).filter(x=>!x.end) : [];
+  return {runs, side, offl, n: runs.length + side.length + offl.length};
+}
 function renderEndShiftConfirm(){
   const recs = recordsForDate(todayStr());
+  const o = endShiftOpenItems();
+  const li = t=>`<li style="margin:3px 0;">${t}</li>`;
+  const openList = o.n ? `
+  <div class="card" style="border-color:var(--wait);">
+    <h3 style="color:var(--wait);">Still open — will be closed now</h3>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:14px;line-height:1.45;">
+      ${o.runs.map(m=>{ const l = Store.liveRuns[m];
+        const st = isStaleLive(l) ? `open since ${fmtDate(l.date)} — closed at 4:30 PM that day` : (l.status==='RUNNING' ? 'running' : 'in downtime');
+        return li(`<b>${escapeHtml(m)}</b> — ${st}${l.product?' · '+escapeHtml(l.product):''}`); }).join('')}
+      ${o.side.map(x=>li(`<b>${escapeHtml(x.machine)}</b> — on since ${fmtTime12(x.start)}`)).join('')}
+      ${o.offl.map(x=>li(`<b>${escapeHtml(x.role)}</b> — on the line since ${fmtTime12(x.start)}`)).join('')}
+    </ul>
+    <p style="color:var(--muted);font-size:13px;line-height:1.45;margin-top:8px;">They stop at the current time (4:30 PM if it's later than that). Line runs are saved without weight — add Qty/Weight later from History, or press Cancel and use <b>Finish</b> on the Live Floor first.</p>
+  </div>` : '';
   return `
   <div class="card">
     <h3>Ready to End Shift?</h3>
     <p style="color:var(--muted);font-size:14px;line-height:1.5;">This will close today's production day (${recs.length} record${recs.length===1?'':'s'} logged) and generate the Daily CI Report. You can still edit records afterward from History.</p>
-  </div>
-  <button class="btn btn-primary" onclick="confirmEndShift()">Confirm End Shift</button>
+  </div>${openList}
+  <button class="btn btn-primary" id="endShiftBtn" onclick="confirmEndShift()">${o.n?`Close ${o.n} open item${o.n===1?'':'s'} &amp; End Shift`:'Confirm End Shift'}</button>
   <button class="btn btn-ghost" style="margin-top:10px;" onclick="Router.go('dashboard')">Cancel</button>
   `;
 }
@@ -4564,6 +4718,7 @@ function attachFloorVideo(){
 function afterRender(){
   attachFloorVideo();
   setTimeout(syncSideBreaks, 0);
+  setTimeout(syncGarbage, 0);
   placeFloor3D();
   if(Router.current==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); }
   if(Router.current==='live' && liveScrollTarget){
