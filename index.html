@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v159 - 2026-11-05 (Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
+const APP_VERSION = 'v160 - 2026-11-05 (Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1250,26 +1250,35 @@ function garbageMinFor(date, m, from, to){
     return t + Math.max(0, Math.min(eb,b) - Math.max(ea,a)); }, 0);
 }
 /* person back while the line is stopped: a 0-minute marker segment so the rest of the stop (and a paid break) counts the full crew in gross; resume uses that count */
-function garbageBackWhileStopped(live, at){
+function garbageBackWhileStopped(live, at, who){
   const ls = live.segments[live.segments.length-1]; const e = ls ? Number(ls.employees)||0 : 0;
-  live.segments.push({start: at, end: at, employees: e+1, ...segNamesOf(ls)});
+  live.segments.push({start: at, end: at, employees: e+1, ...withName(ls, who)});
   if(live.pendingEmployees!=null) live.pendingEmployees += 1;
+  if(who && Array.isArray(live.pendingNames) && !live.pendingNames.includes(who)) live.pendingNames.push(who);
 }
-let garbageBusy = false;
-async function garbageOut(m, kind){
+let garbageBusy = false, garbagePick = null; // v159: {m, kind} — choosing who goes out
+function withName(seg, who){ const o = segNamesOf(seg); if(who && o.names && !o.names.includes(who)) o.names.push(who); return o; }
+function withoutName(seg, who){ const o = segNamesOf(seg); if(who && o.names) o.names = o.names.filter(n=>n!==who); return o; }
+function garbageTap(m, kind){
+  const live = Store.liveRuns[m], names = live ? liveNames(live) : [];
+  if(namesOn() && names.length){ garbagePick = {m, kind}; render(); return; }
+  garbageOut(m, kind);
+}
+async function garbageOut(m, kind, who){
   if(garbageBusy) return;
   const live = Store.liveRuns[m]; if(!live || live.status!=='RUNNING' || garbageOpenFor(m)) return;
   const lastSeg = live.segments[live.segments.length-1]; if(!lastSeg || (Number(lastSeg.employees)||0) < 2){ toast('Need at least 2 crew on the line'); return; }
   garbageBusy = true;
   try{
     const now = nowHHMM(), e = Number(lastSeg.employees);
-    lastSeg.end = now; live.segments.push({start: now, end:null, employees: e-1, ...segNamesOf(lastSeg)});
-    const ev = {id: uid(), machine: m, kind, start: now, end: null};
+    garbagePick = null;
+    lastSeg.end = now; live.segments.push({start: now, end:null, employees: e-1, ...withoutName(lastSeg, who)});
+    const ev = {id: uid(), machine: m, kind, start: now, end: null}; if(who) ev.who = who;
     const d = ensureDayLog(live.date||todayStr()); d.garbage = d.garbage || []; d.garbage.push(ev);
     live.gOut = ev.id;
     const ok = (await Store.saveLiveRuns()) && (await Store.saveDayLog());
     if(!ok){ toast('Save failed — check connection'); return; }
-    toast(`🗑 ${m} — 1 out on garbage (${kind}) · ${e-1} on the line`); render();
+    toast(`🗑 ${m} — ${who ? who : '1'} out on garbage (${kind}) · ${e-1} on the line`); render();
   } finally { garbageBusy = false; }
 }
 async function garbageBack(m){
@@ -1281,11 +1290,11 @@ async function garbageBack(m){
     if(ev) ev.end = toMin(now) < toMin(ev.start) ? ev.start : now;
     live.gOut = null;
     const lastSeg = live.segments[live.segments.length-1];
-    if(live.status==='RUNNING' && lastSeg){ lastSeg.end = now; live.segments.push({start: now, end:null, employees: (Number(lastSeg.employees)||0)+1, ...segNamesOf(lastSeg)}); }
-    else garbageBackWhileStopped(live, ev ? ev.end : now);
+    if(live.status==='RUNNING' && lastSeg){ lastSeg.end = now; live.segments.push({start: now, end:null, employees: (Number(lastSeg.employees)||0)+1, ...withName(lastSeg, ev && ev.who)}); }
+    else garbageBackWhileStopped(live, ev ? ev.end : now, ev && ev.who);
     const ok = (await Store.saveLiveRuns()) && (await Store.saveDayLog());
     if(!ok){ toast('Save failed — check connection'); return; }
-    toast(`${m} — back from garbage${ev?` (${fmtDur(duration(ev.start, ev.end))})`:''}`); render();
+    toast(`${m} — ${ev && ev.who ? ev.who+' ' : ''}back from garbage${ev?` (${fmtDur(duration(ev.start, ev.end))})`:''}`); render();
   } finally { garbageBusy = false; }
 }
 /* Runs after every render: a garbage run whose line finished / was cancelled ends there; a line that went on Break brings the person back (count returns when it resumes) */
@@ -1299,7 +1308,7 @@ async function syncGarbage(){
     if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='NO_WORK'){ e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null; chD = chL = true; return; }
     if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='BREAK'){
       e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null;
-      garbageBackWhileStopped(live, e.end);
+      garbageBackWhileStopped(live, e.end, e.who);
       chD = chL = true;
     } });
   if(!chD) return;
@@ -1309,11 +1318,16 @@ async function syncGarbage(){
 function garbageCardHTML(m, live, isRunning, lastSeg){
   const ev = garbageOpenFor(m);
   if(ev) return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--change);border-radius:10px;display:flex;align-items:center;gap:10px;">
-      <div style="flex:1;font-size:13.5px;font-weight:600;color:var(--change);">🗑 1 out on garbage (${escapeHtml(ev.kind)})<div style="font-size:12px;font-weight:400;color:var(--muted);">since ${fmtTime12(ev.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(ev.start)))}</div></div>
+      <div style="flex:1;font-size:13.5px;font-weight:600;color:var(--change);">🗑 ${ev.who ? escapeHtml(ev.who) : '1'} out on garbage (${escapeHtml(ev.kind)})<div style="font-size:12px;font-weight:400;color:var(--muted);">since ${fmtTime12(ev.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(ev.start)))}</div></div>
       <button class="btn btn-primary" style="width:auto;padding:10px 16px;margin:0;" onclick="garbageBack('${m}')">↩ Back</button></div>`;
-  if(!isRunning || !lastSeg || (Number(lastSeg.employees)||0) < 2) return '';
+  if(!isRunning || !lastSeg || (Number(lastSeg.employees)||0) < 2){ if(garbagePick && garbagePick.m===m) garbagePick = null; return ''; }
+  if(garbagePick && garbagePick.m===m){ const nm = liveNames(live); pickLists.garbage = nm;
+    return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--change);border-radius:10px;">
+      <div style="font-size:12px;color:var(--change);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">🗑 GARBAGE (${escapeHtml(garbagePick.kind)}) — WHO IS GOING?</div>
+      <div class="nm-grid">${nm.map((n,i)=>`<button type="button" class="nm-chip" onclick="garbageOut('${m}', garbagePick.kind, pickLists.garbage[${i}])">${escapeHtml(n)}</button>`).join('')}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="garbagePick=null;render()">Cancel</button><button type="button" class="cb-btn" onclick="garbageOut('${m}', garbagePick.kind)">Skip name</button></div></div>`; }
   return `<div style="margin-top:10px;font-size:12px;color:var(--muted);letter-spacing:.5px;">🗑 GARBAGE RUN — 1 crew out for:</div>
-    <div class="btnrow" style="margin-top:4px;gap:6px;">${GARBAGE_KINDS.map(k=>`<button class="btn btn-secondary" style="padding:10px 4px;font-size:13px;" onclick="garbageOut('${m}','${k}')">${k}</button>`).join('')}</div>`;
+    <div class="btnrow" style="margin-top:4px;gap:6px;">${GARBAGE_KINDS.map(k=>`<button class="btn btn-secondary" style="padding:10px 4px;font-size:13px;" onclick="garbageTap('${m}','${k}')">${k}</button>`).join('')}</div>`;
 }
 /* Report rows: total + per kind + per line */
 function garbageSummary(dates){
@@ -1321,7 +1335,8 @@ function garbageSummary(dates){
   const sum = l=>l.reduce((a,e)=>a+e.min,0);
   const kinds = GARBAGE_KINDS.map(k=>{ const l = all.filter(e=>e.kind===k); return l.length ? `${k} ${l.length} (${fmtDur(sum(l))})` : ''; }).filter(Boolean);
   const lines = [...new Set(all.map(e=>e.machine))].sort().map(m=>{ const l = all.filter(e=>e.machine===m); return `${m} ×${l.length} (${fmtDur(sum(l))})`; });
-  return {n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind!=='Packaging').length, kinds, lines};
+  const who = [...new Set(all.filter(e=>e.who).map(e=>e.who))].map(w=>{ const l = all.filter(e=>e.who===w); return `${w} ×${l.length} (${fmtDur(sum(l))})`; });
+  return {who, n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind!=='Packaging').length, kinds, lines};
 }
 let sideBreakBusy = false;
 async function syncSideBreaks(){
@@ -1613,7 +1628,7 @@ function dayLogSections(date, opts){
   });
   const gs = garbageSummary([date]);
   if(gs.n){ crew.push({k:'Garbage runs', v:`${gs.n} · ${fmtDur(gs.min)} off the line · ${gs.kinds.join(' · ')}`, red: gs.trimN>0});
-    crew.push({k:'', sub:true, v: gs.lines.join(' · ')}); }
+    crew.push({k:'', sub:true, v: gs.lines.join(' · ')}); if(gs.who.length) crew.push({k:'', sub:true, v: 'Who went: ' + gs.who.join(' · ')}); }
   out.push({title:'CREW', rows:crew});
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
   const side = [];
@@ -1856,12 +1871,13 @@ function nextNamesOf(live){ if(Array.isArray(live.pendingNames)) return {names: 
 function liveNames(live){ if(!live) return []; if(Array.isArray(live.pendingNames) && live.status!=='RUNNING') return live.pendingNames.slice(); const ls = (live.segments||[]).slice(-1)[0]; return ls && Array.isArray(ls.names) ? ls.names.slice() : []; }
 function sideNamesOf(x){ const o = {}; if(Array.isArray(x.names)) o.names = x.names.slice(); if(Array.isArray(x.trainNames) && x.trainNames.length) o.trainNames = x.trainNames.slice(); if(Array.isArray(x.trimNames) && x.trimNames.length) o.trimNames = x.trimNames.slice(); return o; }
 function shortM(m){ return m.replace('Variovac ','V').replace('Manual Pack','Manual'); }
-function shortWhere(w){ if(!w) return ''; if(MACHINES.includes(w)) return 'on '+shortM(w); const p = PLACES.find(x=>x.w===w); return p ? p.s : 'on '+w; }
+function shortWhere(w){ if(!w) return ''; if(w==='Garbage run') return 'garbage'; if(MACHINES.includes(w)) return 'on '+shortM(w); const p = PLACES.find(x=>x.w===w); return p ? p.s : 'on '+w; }
 /* where every packaging person is right now (today only), from the live entries */
 function whereNowMap(){
   const map = {}, T = todayStr();
   MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || !(l.segments||[]).length) return; liveNames(l).forEach(n=>{ map[n] = m; }); });
   openSideRuns(T).forEach(s=>(s.names||[]).forEach(n=>{ map[n] = s.machine; }));
+  garbageEvents(T).forEach(e=>{ if(!e.end && e.who){ const l = Store.liveRuns[e.machine]; if(l && l.gOut===e.id) map[e.who] = 'Garbage run'; } });
   return map;
 }
 function whereOf(n){ const m = whereNowMap()[n]; if(m) return m; const p = ((dayLogFor(todayStr())||{}).place||{})[n]; return p ? p.w : ''; }
@@ -2042,6 +2058,7 @@ function personDay(date){
       else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         if(!iv && brk[i]){ k='Break'; g='Break'; } else if(wt){ k=`${w} waiting for trimmers`; g='Side machines'; } else { k = w; g='Side machines'; } }
+      else if(w==='Garbage run'){ k = 'Garbage run'; g = 'Garbage run'; }
       else if(w){ const p = PLACES.find(x=>x.w===w); k = w; g = p ? p.g : 'Other'; }
       else if(brk[i]){ k='Break'; g='Break'; } else { k='Not recorded'; g='Not recorded'; }
       tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
@@ -2066,7 +2083,7 @@ function personRangeSection(start, end){
   const acc = {}; let nDays = 0;
   days.forEach(d=>{ const pd = personDay(d); if(!pd) return; nDays++; pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, total:0, grp:{}}); a.days++; a.total += p.total; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); }); });
   const names = Object.keys(acc); if(!names.length) return null;
-  const order = ['Lines running','Lines stopped','Side machines','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
+  const order = ['Lines running','Lines stopped','Side machines','Garbage run','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
   const roster = crewRoster(); names.sort((a,b)=>(roster.indexOf(a)<0?99:roster.indexOf(a))-(roster.indexOf(b)<0?99:roster.indexOf(b)));
   const rows = [{k:'Days with names', v:`${nDays}`}];
   names.forEach(n=>{ const a = acc[n]; rows.push({k:n, v:`${a.days} day${a.days===1?'':'s'} · `+order.filter(g=>a.grp[g]).map(g=>`${g} ${fmtShort(a.grp[g])} (${Math.round(a.grp[g]/a.total*100)}%)`).join(' · ')}); });
