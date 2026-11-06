@@ -222,7 +222,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v154 - 2026-11-02 (One-tap Start Break / End Break for all lines, each back to its own status; Garbage button on Variovac cards (Packaging / Trimmer / Burger Room): 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v24)';
+const APP_VERSION = 'v158 - 2026-11-05 (Side machine output comes from finished jobs only — old output menu removed, reminder for jobs missing QTY / LBS; Side-machine jobs: End → Switch to Packaging or Finish with QTY/LBS, job PLH = sealing + packing hours, PLH filter Lines only / Side machines only, Ribeye (Eye); Labour hours show exact minutes beside them, e.g. 1.8 · 1h 46m (106 min); Accuracy check: run notes always match the numbers, Dashboard totals include lines still open, garbage-run crew not counted as spare; One-tap Start Break / End Break for all lines, each back to its own status; Garbage button on Variovac cards (Packaging / Trimmer / Burger Room): 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v25)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -299,6 +299,17 @@ function renameReasonsDeep(obj){
   if(Array.isArray(obj)){ obj.forEach((v,i)=>{ if(typeof v==='string' && REASON_RENAMES[v]){ obj[i]=REASON_RENAMES[v]; n++; } else if(v && typeof v==='object') n+=renameReasonsDeep(v); }); }
   else if(obj && typeof obj==='object'){ Object.keys(obj).forEach(k=>{ const v=obj[k]; if(typeof v==='string' && REASON_RENAMES[v]){ obj[k]=REASON_RENAMES[v]; n++; } else if(v && typeof v==='object') n+=renameReasonsDeep(v); }); }
   return n;
+}
+/* v157: Vacuum Sealer product "Ribeye" is now "Ribeye (Eye)" — older day logs are renamed once so trends stay under one name */
+async function migrateRibeyeEye(){
+  try{
+    if(!Store.ready) return; let n = 0;
+    Object.values(Store.dayLog||{}).forEach(d=>{ if(!d) return;
+      (d.side||[]).forEach(x=>{ if(x.product==='Ribeye'){ x.product='Ribeye (Eye)'; n++; } });
+      if(d.output && d.output['Vacuum Sealer|Ribeye']){ if(!d.output['Vacuum Sealer|Ribeye (Eye)']) d.output['Vacuum Sealer|Ribeye (Eye)'] = d.output['Vacuum Sealer|Ribeye']; delete d.output['Vacuum Sealer|Ribeye']; n++; } });
+    let m = 0; (Store.records||[]).forEach(r=>{ if(r.side && r.product==='Ribeye'){ r.product='Ribeye (Eye)'; if(r.plh) r.plh.product='Ribeye (Eye)'; m++; } });
+    if(n) await Store.saveDayLog(); if(m) await Store.saveRecords();
+  }catch(e){ console.error('ribeye rename failed', e); }
 }
 async function migrateReasonLabels(){
   try{
@@ -596,13 +607,16 @@ function toMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); ret
 function duration(start,end){ let s=toMin(start), e=toMin(end); if(s==null||e==null) return 0; const d=e-s; return d>0 ? d : 0; }
 /* v116: an entry left open on an earlier day is closed at the 4:30 PM shift end (or at its own start if it began after that) — never stretched overnight */
 function pastOpenEnd(start){ return toMin(start) >= 16*60+30 ? start : '16:30'; }
+/* v156: labour hours with their exact minutes, so anyone can check PLH by hand (the hours shown are rounded to 0.1) */
+function shownSegs(segs){ return (segs||[]).filter(sg=>!sg.end || sg.end!==sg.start); } // v156: hide 0-minute marker segments from staffing lists (they never change any number)
+function labMin(h){ const m = Math.round((Number(h)||0)*60); return m>=60 ? `${fmtDur(m)} (${m.toLocaleString()} min)` : `${m} min`; }
 function fmtDur(min){ min=Math.round(min); const h=Math.floor(min/60), m=min%60; return h>0? `${h}h ${m}m` : `${m}m`; }
 function fmtTime12(t){ if(!t) return '--'; const parts=t.split(':'); let h=Number(parts[0]), m=Number(parts[1]); if(isNaN(h)||isNaN(m)) return '--'; const ap=h>=12?'PM':'AM'; h=h%12; if(h===0)h=12; return `${h}:${String(m).padStart(2,'0')} ${ap}`; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1600); }
 function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
 /* ============ AGGREGATION HELPERS ============ */
-function recordsForDate(date){ return Store.records.filter(r=>r.date===date); }
+function recordsForDate(date){ return Store.records.filter(r=>r.date===date && !r.side); } // v157: side-machine jobs (r.side) only show in PLH
 function machineTotals(recs, machine){
   const t = {RUNNING:0,CHANGEOVER:0,WAITING:0,NO_WORK:0,BREAK:0,PLANNED:0, upstream:0, internal:0};
   recs.filter(r=>r.machine===machine).forEach(r=>{
@@ -661,7 +675,7 @@ function dayTotals(recs){
 }
 /* Groups all Waiting/Changeover time across a date range by specific reason (not per-machine, unless a machine filter is applied) — this is what lets a plant-wide recurring pattern like "MAREL Switching Product" show its true combined impact instead of being hidden across 3 separate machine totals. Tracks which machines it actually hit so an isolated-machine issue is still distinguishable from a systemic one. */
 function computeDowntimeAnalysis(start, end, machineFilter){
-  let recs = Store.records.filter(r=>r.date>=start && r.date<=end && (r.status==='WAITING'||r.status==='CHANGEOVER'));
+  let recs = Store.records.filter(r=>!r.side && r.date>=start && r.date<=end && (r.status==='WAITING'||r.status==='CHANGEOVER'));
   if(machineFilter) recs = recs.filter(r=>r.machine===machineFilter);
   const groups = {};
   recs.forEach(r=>{
@@ -766,14 +780,14 @@ const SHIFT_END_MIN = 16*60+30;
 let sideSetup = null;      // {machine, pack, trim, changeId, product, productNote, covering}
 /* v135: Vacuum Sealer product pick, Variovac-breakdown link, "waiting for trimmers" pause on side machines, and QTY / LBS output per machine per day.
    side entry: {..., product, productNote, covering:'Variovac 2'|'' , waits:[{start,end}]}; dayLog[date].output = {'Fajita':{qty,lbs}, 'Vacuum Sealer|CHK Muscle':{qty,lbs}} */
-const VAC_PRODUCTS = ['Birds (Chicken / Turkey)','Bone-In','CHK Muscle','Ground Pork','Diced','Steaks','Tomahawk','Ribeye','Other']; // v141: Tomahawk + Ribeye
+const VAC_PRODUCTS = ['Birds (Chicken / Turkey)','Bone-In','CHK Muscle','Ground Pork','Diced','Steaks','Tomahawk','Ribeye (Eye)','Other']; // v141: Tomahawk + Ribeye · v157: Ribeye → Ribeye (Eye)
 function sideProdLabel(s){ return s.product==='Other' ? ((s.productNote||'').trim() || 'Other') : (s.product||''); }
 function machineBreakdownsNow(){
   return MACHINES.filter(m=>{ const l = Store.liveRuns && Store.liveRuns[m]; if(!l) return false; const seg = (l.downtimeSegments||[]).slice(-1)[0]; return !!(seg && !seg.end && seg.reasonCategory==='Machine / Equipment'); });
 }
 function sideOpenWait(s){ return (s.waits||[]).find(w=>!w.end) || null; }
 function closeSideWaits(s, at){ (s.waits||[]).forEach(w=>{ if(!w.end) w.end = at; }); }
-function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.coverEnd ? '' : (x.covering||''), train: x.train||0, trainName: x.trainName||''}; }
+function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.coverEnd ? '' : (x.covering||''), train: x.train||0, trainName: x.trainName||'', jobId: x.jobId||x.id, phase: x.phase||'seal'}; }
 /* v144: cover time = sealer running time while that Variovac was still down (ends when it runs again), minus waits for trimmers */
 function coverMin(s){ const end = s.coverEnd ? Math.min(s.b, Math.max(s.a, toMin(s.coverEnd))) : s.b;
   const w = (s.waits||[]).reduce((t,x)=>{ const wa=toMin(x.start), wb = x.end ? toMin(x.end) : s.b; return t + Math.max(0, Math.min(wb,end) - Math.max(wa,s.a)); }, 0);
@@ -792,6 +806,22 @@ async function setSideOutput(date, key, field, val){
   else { const n = parseFloat(val); o.lbs = val==='' ? '' : (isNaN(n)||n<0 ? o.lbs : String(val)); }
   if(!o.qty && !o.lbs) delete d.output[key];
   const ok = await Store.saveDayLog(); if(ok){ render(); toast('Output saved'); }
+}
+/* v157: day output per side machine (and per Vacuum Sealer product) = what was typed in, otherwise the total of that day's finished side jobs */
+function sideJobsOut(date, key){
+  const [mach, lab] = key.split('|');
+  const js = Store.records.filter(r=>r.side && r.date===date && r.machine===mach && (!lab || (r.product||'')===lab) && r.plh && (r.plh.weightLbs>0 || r.plh.quantity>0));
+  if(!js.length) return null;
+  const q = js.reduce((a,r)=>a+(parseInt(r.plh.quantity,10)||0),0), l = js.reduce((a,r)=>a+(parseFloat(r.plh.weightLbs)||0),0);
+  return {qty: q?String(q):'', lbs: l?l.toFixed(3):'', fromJobs: js.length};
+}
+/* v158: a day with side-machine jobs takes its output from the jobs only; days before jobs existed keep the QTY / LBS typed in then (read-only) */
+function effOut(date, key){ if(Store.records.some(r=>r.side && r.date===date)) return sideJobsOut(date, key); const o = ((dayLogFor(date)||{}).output||{})[key]; return (o && (o.qty || o.lbs)) ? o : null; }
+function sideJobsNeedWeightHTML(date){
+  const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && r.plh.grossPLH==null);
+  if(!miss.length) return '';
+  const go = miss.length===1 ? `openAddPLHData('${miss[0].id}')` : `plhKind='side';try{localStorage.setItem('pct_plh_kind','side')}catch(e){};plhLogDetailId=null;plhLogRange={preset:'today',...plhPresetRange('today')};Router.go('plhLog')`;
+  return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>`;
 }
 function outText(o){
   if(!o || (!o.qty && !o.lbs)) return 'output not entered';
@@ -813,11 +843,11 @@ function sideOutputEditorHTML(date, forReport){
   const g = sideOutputGroups(date); if(!g.length) return '';
   const out = (dayLogFor(date)||{}).output || {};
   return `<div ${forReport?'class="card" style="border-left:3px solid var(--amber);"':'style="margin-top:8px;"'}>${forReport?'<h3>Side Machine Output — QTY / LBS</h3>':'<div class="cb-lbl" style="margin-top:4px;">SIDE MACHINE OUTPUT (QTY / LBS)</div>'}
-    ${g.map(x=>{ const o = out[x.key]||{}; const nm = x.label ? `${x.machine} · ${escapeHtml(x.label)}` : x.machine;
+    ${g.map(x=>{ const o = out[x.key]||{}, jo = sideJobsOut(date, x.key); const nm = x.label ? `${x.machine} · ${escapeHtml(x.label)}` : x.machine;
       return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm" style="font-size:13px;">${nm} <span class="cb-mut">ran ${fmtDur(x.act)}${x.open?' · still running':''}</span></span>
-        <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" placeholder="boxes" value="${escapeHtml(o.qty||'')}" onchange="setSideOutput('${date}', decodeURIComponent('${qEsc(x.key)}'), 'qty', this.value)" style="padding:8px;flex:1;min-width:0;">
-        <span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.001" placeholder="0.000" value="${escapeHtml(o.lbs||'')}" onchange="setSideOutput('${date}', decodeURIComponent('${qEsc(x.key)}'), 'lbs', this.value)" style="padding:8px;flex:1.3;min-width:0;"></span></div>`; }).join('')}
-    <div class="cb-mut" style="font-size:11.5px;margin-top:4px;">Enter the total for the day — any time, even the next day. It shows in the Daily and Upstream reports.</div></div>`;
+        <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" placeholder="${jo&&jo.qty?escapeHtml(jo.qty)+' (jobs)':'boxes'}" value="${escapeHtml(o.qty||'')}" onchange="setSideOutput('${date}', decodeURIComponent('${qEsc(x.key)}'), 'qty', this.value)" style="padding:8px;flex:1;min-width:0;">
+        <span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.001" placeholder="${jo&&jo.lbs?escapeHtml(jo.lbs)+' (jobs)':'0.000'}" value="${escapeHtml(o.lbs||'')}" onchange="setSideOutput('${date}', decodeURIComponent('${qEsc(x.key)}'), 'lbs', this.value)" style="padding:8px;flex:1.3;min-width:0;"></span></div>`; }).join('')}
+    <div class="cb-mut" style="font-size:11.5px;margin-top:4px;">Filled in from finished jobs (grey). Type a number only to override the day's total — any time, even the next day.</div></div>`;
 }
 async function sideWait(id){
   const d = ensureDayLog(todayStr()), cur = (d.side||[]).find(x=>x.id===id); if(!cur || cur.end || sideOpenWait(cur)) return;
@@ -830,6 +860,104 @@ async function sideWaitEnd(id){
   if(toMin(w.end) < toMin(w.start)) w.end = w.start;
   await saveDayLogNow(); toast(`${cur.machine} — meat arrived, running again`);
 }
+
+/* ============ v157: SIDE-MACHINE JOBS ============
+A job = one product on one side machine, from Start to Finish: every crew change, the break pause and the
+"Switch to Packaging" step stay in the same job (entry.jobId, entry.phase 'seal' | 'pack').
+At Finish (weight entered once, at the end) it is saved as ONE PLH record {side:true} — sealing + packing hours together.
+Side records only show in PLH (filter "Side machines only"); line downtime / efficiency / upstream reports never include them. */
+const SIDE_PACK_SWITCH = ['Vacuum Sealer','Fajita','Slicer'];
+let sideEnd = null; // {id, qty, lbs} while the End choices are open
+const m2h = m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+function sideJobLabel(x){ return sideProdLabel(x) || x.machine; }
+function sideJobEntries(date, jobId){ const d = dayLogFor(date); return d ? (d.side||[]).filter(x=>(x.jobId||x.id)===jobId).sort((a,b)=>toMin(a.start)-toMin(b.start)) : []; }
+function sidePieces(e, endAt){ // running pieces and "waiting for trimmers" pieces inside one entry, in minutes
+  const a = toMin(e.start), b = Math.max(a, toMin(endAt));
+  const ws = (e.waits||[]).map(w=>({a:Math.max(a,toMin(w.start)), b:Math.min(b, toMin(w.end||endAt))})).filter(w=>w.b>w.a).sort((x,y)=>x.a-y.a);
+  const run = [], wait = []; let t = a;
+  ws.forEach(w=>{ if(w.a>t) run.push([t,w.a]); if(w.b>Math.max(w.a,t)) wait.push([Math.max(w.a,t), w.b]); t = Math.max(t,w.b); });
+  if(b>t) run.push([t,b]);
+  return {run, wait};
+}
+function buildSideJobRecord(date, jobId, opt){
+  const es = sideJobEntries(date, jobId).filter(e=>e.end); if(!es.length) return null;
+  const segs = [], dts = [];
+  es.forEach((e,i)=>{ const ph = e.phase||'seal', pc = sidePieces(e, e.end);
+    segs.push({start:e.start, end:e.start, employees:e.pack||0, trim:e.trim||0, train:e.train||0, phase:ph}); // 0-min marker: crew at the start of this entry (counts any wait that opens it)
+    pc.run.forEach(([a,b])=>segs.push({start:m2h(a), end:m2h(b), employees:e.pack||0, trim:e.trim||0, train:e.train||0, phase:ph}));
+    pc.wait.forEach(([a,b])=>dts.push({start:m2h(a), end:m2h(b), status:'WAITING', reason:'Waiting for trimmers', phase:ph}));
+    const nx = es[i+1]; if(e.breakPaused && nx && toMin(nx.start)>toMin(e.end)) dts.push({start:e.end, end:nx.start, status:'BREAK', reason:'Break', phase:ph});
+  });
+  segs.sort((x,y)=>toMin(x.start)-toMin(y.start) || (toMin(x.end)-toMin(x.start)) - (toMin(y.end)-toMin(y.start)));
+  const first = es[0], last = es[es.length-1], machine = first.machine, product = sideJobLabel(first);
+  const lab = runLabourMinutes(segs, dts, paidBreakLeftFor(date, machine, first.start));
+  const w = parseFloat(opt && opt.weight)||0, q = parseInt(opt && opt.qty,10)||0;
+  const gH = lab.gross/60, nH = lab.net/60;
+  const plh = {weightLbs: w, quantity: q, grossLaborHours: gH, netLaborHours: nH,
+    grossPLH: (w>0 && gH>0) ? w/gH : null, netPLH: (w>0 && nH>0) ? w/nH : null, targetPLH: null,
+    productId:'', product, machine, side:true, segments: segs, downtimeSegments: dts};
+  const runMin = segs.reduce((t,x)=>t+duration(x.start,x.end),0);
+  const packs = [...new Set(es.map(e=>e.pack||0))], hasPack = es.some(e=>e.phase==='pack');
+  const crewNote = packs.length===1 ? `${packs[0]} packaging on station` : `${Math.min(...packs)}–${Math.max(...packs)} packaging on station (crew changed)`;
+  const notes = [`${crewNote} (Side machine${hasPack?' · sealing then packing':''})`, ...plhNoteExtras(plh), (opt && opt.notes)||''].filter(Boolean).join(' · ');
+  return {id:'side-'+jobId, side:true, jobId, date, machine, product, startTime:first.start, endTime:last.end, durationMin:runMin,
+    status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes, source:'side', createdAt: Date.now(), plh};
+}
+async function saveSideJob(date, jobId, opt){
+  const old = Store.records.find(r=>r.id==='side-'+jobId);
+  if(old && old.plh && !(opt && (opt.weight||opt.qty))) opt = {qty: old.plh.quantity||'', weight: old.plh.weightLbs||'', ...(opt||{})}; // keep a weight already entered
+  const rec = buildSideJobRecord(date, jobId, opt||{}); if(!rec) return null;
+  await Store.refreshRecords();
+  const i = Store.records.findIndex(r=>r.id===rec.id); if(i>-1){ rec.createdAt = Store.records[i].createdAt||rec.createdAt; Store.records[i] = rec; } else Store.records.push(rec);
+  const ok = await Store.saveRecords(); if(!ok){ toast('Save failed — check connection'); return null; }
+  render(); return rec;
+}
+/* every finished job of the day that has no PLH record yet (e.g. left off after a break, or closed at End Shift) gets one, without weight */
+async function saveLooseSideJobs(date){
+  const d = dayLogFor(date); if(!d) return;
+  const ids = [...new Set((d.side||[]).filter(x=>x.jobId).map(x=>x.jobId))];
+  for(const j of ids){ const es = sideJobEntries(date, j); if(es.some(e=>!e.end)) continue;
+    if(d.breakPause && es.some(e=>(d.breakPause.ids||[]).includes(e.id))) continue; // still coming back after break
+    if(!Store.records.some(r=>r.id==='side-'+j)) await saveSideJob(date, j, {}); }
+}
+function openSideEnd(id){ sideEnd = {id, qty:'', lbs:''}; sideSetup = null; render(); }
+function openSwitchToPack(id){
+  const cur = (dayLogFor(todayStr()).side||[]).find(x=>x.id===id); if(!cur) return;
+  sideEnd = null; openSideSetup(cur.machine, id); sideSetup.phase = 'pack'; render();
+}
+async function finishSideJob(id){
+  const d = ensureDayLog(todayStr()), cur = (d.side||[]).find(x=>x.id===id); if(!cur) return;
+  const qty = (sideEnd && sideEnd.qty)||'', lbs = (sideEnd && sideEnd.lbs)||'';
+  if(lbs!=='' && !(parseFloat(lbs)>0)){ toast('Weight must be more than 0 — or leave it empty and add it later'); return; }
+  if(!cur.end){ cur.end = openEndToday(cur.start); closeSideWaits(cur, cur.end); }
+  if(!cur.jobId) cur.jobId = cur.id;
+  sideEnd = null;
+  if(!(await saveDayLogNow())) return;
+  const rec = await saveSideJob(todayStr(), cur.jobId, {qty, weight: lbs});
+  toast(rec && rec.plh.grossPLH!=null ? `${cur.machine} · ${rec.product} — finished, ${rec.plh.grossPLH.toFixed(0)} PLH` : `${cur.machine} finished — add Qty/Weight later in History for PLH`);
+}
+function sideEndHTML(run){
+  const e = sideEnd, sw = SIDE_PACK_SWITCH.includes(run.machine) && run.phase!=='pack';
+  return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--wait);"><span class="cb-nm">End ${run.machine} · ${escapeHtml(sideJobLabel(run))}</span>
+    ${sw?`<button class="cb-btn" style="width:100%;border-color:var(--brk);color:var(--brk);font-weight:700;padding:12px;" onclick="openSwitchToPack('${run.id}')">📦 Switch to Packaging</button>
+    <div class="cb-mut" style="width:100%;">Sealing stops and a packing step starts now for the same product and crew. Weight is entered once, when packing finishes.</div>`:''}
+    <span class="cb-mut" style="width:100%;margin-top:4px;">Finish the job${sw?' here (no packing step)':''} — packed QTY / LBS</span>
+    <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" id="sideEndQty" placeholder="boxes" value="${escapeHtml(e.qty)}" oninput="sideEnd.qty=this.value" style="padding:8px;flex:1;min-width:0;">
+      <span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.01" id="sideEndLbs" placeholder="0.00" value="${escapeHtml(e.lbs)}" oninput="sideEnd.lbs=this.value" style="padding:8px;flex:1.3;min-width:0;"></span>
+    <div class="cb-mut" style="width:100%;font-size:11.5px;">Optional now — you can add QTY / LBS later from History. PLH shows once the weight is in.</div>
+    <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideEnd=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--run);color:var(--run);font-weight:700;" onclick="finishSideJob('${run.id}')">✓ Finish job</button></div></div>`;
+}
+/* PLH split by step: sealing (or running) vs packing, gross labour minutes — adds up to the job's total */
+function sideStages(r){
+  const p = r && r.plh; if(!p || !p.side) return null;
+  let left = paidBreakLeftFor(r.date, r.machine, r.startTime); const out = {};
+  ['seal','pack'].forEach(ph=>{ const sg = (p.segments||[]).filter(x=>(x.phase||'seal')===ph), dt = (p.downtimeSegments||[]).filter(x=>(x.phase||'seal')===ph);
+    if(!sg.length && !dt.length) return; const l = runLabourMinutes(sg.length?sg:[{start:'00:00',end:'00:00',employees:0}], dt, left); left = l.paidLeft;
+    const t0 = [...sg,...dt].map(x=>x.start).sort()[0], t1 = [...sg,...dt].map(x=>x.end).sort().slice(-1)[0];
+    out[ph] = {gross:l.gross, net:l.net, from:t0, to:t1}; });
+  return out;
+}
+const sideStageName = (m, ph)=> ph==='pack' ? 'Packing' : (m==='Vacuum Sealer' ? 'Sealing' : 'Running');
 /* v110: Lead hand and yield operator are off-line roles (management wants them off the line). When they step in, it's logged On/Off with where they went — stored in dayLog[date].offline = [{id, role, where, start, end}]. Shown separately; not part of the crew count. */
 const OFFLINE_ROLES = ['Lead Hand','Yield Operator'];
 const OFFLINE_WHERE = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','MAREL']; // v133: MAREL added
@@ -948,8 +1076,9 @@ function crewSnapshot(){
   const crew = crewNowFor(date);
   // v116: lead hand / yield operator working a line are inside that line's headcount but not in the crew number, so add them back
   const offOnLines = Math.min(onLines, openOffline(date).filter(o=>!o.where || MACHINES.includes(o.where)).length); // v137: On line = on a packaging line (older entries kept their station)
-  const spare = crew!=null ? crew - (onLines - offOnLines) - sidePack : null;
-  return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, shortLines, notEntered, crew, spare, idleLines};
+  const gOut = MACHINES.filter(m=>{ const l = Store.liveRuns[m]; return l && !isStaleLive(l) && !!garbageOpenFor(m); }).length; // v155: out on a garbage run = busy, not spare
+  const spare = crew!=null ? crew - (onLines - offOnLines) - sidePack - gOut : null;
+  return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, shortLines, notEntered, crew, spare, idleLines, gOut};
 }
 async function saveDayLogNow(){ const ok = await Store.saveDayLog(); if(ok) render(); return ok; }
 async function setCrew(n){ // first crew number of the day — counted from the 8:00 AM shift start (editable in the log)
@@ -1015,21 +1144,29 @@ async function confirmSide(){
   if(vac && s.product==='Other' && !(s.productNote||'').trim()){ toast('Type what is being packed'); return; }
   const d = ensureDayLog(todayStr()), now = nowHHMM();
   let wasWaiting = false;
-  if(s.changeId){ const cur = d.side.find(x=>x.id===s.changeId); if(cur && !cur.end){ wasWaiting = !!sideOpenWait(cur); closeSideWaits(cur, now); cur.end = now; } } // change = close the old entry, open a new one, so hours split exactly at the change
+  const prev = s.changeId ? d.side.find(x=>x.id===s.changeId) : null;
+  if(prev){ if(!prev.end){ wasWaiting = !!sideOpenWait(prev); closeSideWaits(prev, now); prev.end = now; } if(!prev.jobId) prev.jobId = prev.id; } // change = close the old entry, open a new one, so hours split exactly at the change
   const e = {id: uid(), machine: s.machine, start: now, end: null, pack: s.pack, trim: s.trim};
+  if(s.phase==='pack') wasWaiting = false; // packing starts fresh
   if(s.train){ e.train = s.train; if((s.trainName||'').trim()) e.trainName = s.trainName.trim().slice(0,30); }
   if(vac){ e.product = s.product; if(s.product==='Other') e.productNote = (s.productNote||'').trim(); if(s.covering) e.covering = s.covering; }
   if(wasWaiting) e.waits = [{start: now, end: null}];
+  // v157: same product = same job (crew change / switch to packaging); a new product starts a new job and closes the old one
+  let closedJob = null;
+  if(prev && (s.phase==='pack' || sideJobLabel(prev)===sideJobLabel(e))){ e.jobId = prev.jobId; e.phase = s.phase==='pack' ? 'pack' : (prev.phase||'seal'); }
+  else { e.jobId = e.id; e.phase = 'seal'; if(prev) closedJob = prev.jobId; }
   d.side.push(e);
   sideSetup = null;
   await saveDayLogNow();
+  if(closedJob) await saveSideJob(todayStr(), closedJob, {});
+  if(s.phase==='pack'){ toast(`📦 ${s.machine} — packing ${sideJobLabel(e)} · ${s.pack} packaging${s.trim?` + ${s.trim} trimmer`:''}`); return; }
   toast(`${s.machine} ${s.changeId?'changed':'started'} — ${s.pack} packaging${e.train?` (${e.train} in training)`:''}${s.trim?` + ${s.trim} trimmer`:''}${vac?` · ${sideProdLabel(e)}`:''}${e.covering?` · covering ${e.covering}`:''}`);
 }
 async function stopSide(id){
   const d = ensureDayLog(todayStr()), cur = d.side.find(x=>x.id===id);
   if(!cur) return;
-  cur.end = openEndToday(cur.start); closeSideWaits(cur, cur.end);
-  await saveDayLogNow();
+  cur.end = openEndToday(cur.start); closeSideWaits(cur, cur.end); if(!cur.jobId) cur.jobId = cur.id;
+  await saveDayLogNow(); await saveSideJob(todayStr(), cur.jobId, {});
   toast(cur.end!==nowHHMM() ? `${cur.machine} — set to 4:30 PM; fix the time in the log if needed` : `${cur.machine} stopped`);
 }
 async function editSideTime(id, field, val){ const d = ensureDayLog(todayStr()); const cur = d.side.find(x=>x.id===id); if(!cur || !val) return; cur[field] = val; await saveDayLogNow(); }
@@ -1147,6 +1284,7 @@ async function syncGarbage(){
   evs.forEach(e=>{ const live = Store.liveRuns[e.machine];
     if(!live || live.gOut!==e.id){ e.end = openEndToday(e.start); chD = true; return; }
     const dt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
+    if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='NO_WORK'){ e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null; chD = chL = true; return; }
     if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='BREAK'){
       e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null;
       garbageBackWhileStopped(live, e.end);
@@ -1220,6 +1358,7 @@ async function dontRestartSide(id){
   d.breakPause.offIds = (d.breakPause.offIds||[]).filter(x=>x!==id);
   if(breakPauseEmpty(d)) d.breakPause = null;
   await saveDayLogNow(); toast('Will stay off after break');
+  const x = (d.side||[]).find(y=>y.id===id); if(x){ if(!x.jobId) x.jobId = x.id; await saveSideJob(todayStr(), x.jobId, {}); }
 }
 async function restartSideNow(id){
   const d = ensureDayLog(todayStr()), x = (d.side||[]).find(y=>y.id===id);
@@ -1300,6 +1439,7 @@ function renderCrewBoard(){
     const todayMin = sideMinutesToday(sm.name);
     const tag = todayMin>0 ? `<span class="cb-tag">${fmtShort(todayMin)} today</span>` : '';
     if(sideSetup && sideSetup.machine===sm.name) return renderSideSetup(sm);
+    if(run && sideEnd && sideEnd.id===run.id) return sideEndHTML(run);
     const bp = !run && breakPausedRun(todayStr(), sm.name);
     if(bp){
       const ppl = `${bp.pack} packaging${bp.trim?` + ${bp.trim} trimmer`:''}`;
@@ -1310,13 +1450,13 @@ function renderCrewBoard(){
     if(run){
       const dots = []; for(let i=0;i<run.pack;i++) dots.push(personDot(i>=run.pack-(run.train||0)?'trn':'side')); for(let i=0;i<run.trim;i++) dots.push(personDot('tr'));
       const w = sideOpenWait(run), vac = sm.name==='Vacuum Sealer';
-      const info = [vac ? `<b style="color:var(--text);">${escapeHtml(sideProdLabel(run)||'product not picked')}</b>` : '', run.train ? `<span style="color:#F2C14E;">${escapeHtml(trainText(run))}</span>` : '', run.covering && !run.coverEnd ? `<span style="color:var(--wait);">covering ${run.covering} breakdown</span>` : ''].filter(Boolean).join(' · ');
+      const info = [run.phase==='pack' ? `<b style="color:var(--brk);">📦 Packing${vac?'':' · '+escapeHtml(sideJobLabel(run))}</b>` : '', vac ? `<b style="color:var(--text);">${escapeHtml(sideProdLabel(run)||'product not picked')}</b>` : '', run.train ? `<span style="color:#F2C14E;">${escapeHtml(trainText(run))}</span>` : '', run.covering && !run.coverEnd ? `<span style="color:var(--wait);">covering ${run.covering} breakdown</span>` : ''].filter(Boolean).join(' · ');
       return `<div class="cb-row" style="border-color:${w?'var(--change)':'var(--amber)'};flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
         ${info?`<div class="cb-mut" style="width:100%;">${info}</div>`:''}
         ${w?`<div style="width:100%;font-size:12.5px;color:var(--change);font-weight:600;">⏸ Waiting for trimmers since ${fmtTime12(w.start)} — not counted as running time</div>`:''}
         <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">${vac?'Change product / crew':'Change crew'}</button>
         ${w?`<button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="sideWaitEnd('${run.id}')">▶ Meat arrived</button>`:`<button class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="sideWait('${run.id}')">⏸ Waiting for trimmers</button>`}
-        <button class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="stopSide('${run.id}')">■ Stop</button></div></div>`;
+        <button class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="openSideEnd('${run.id}')">■ End</button></div></div>`;
     }
     return `<div class="cb-row"><span class="cb-nm">${sm.name} ${tag}</span><button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></div>`;
   }).join('');
@@ -1358,7 +1498,7 @@ function renderCrewBoard(){
     ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
     <div class="cb-lbl">OFF-LINE ROLES — STEPPING IN</div>${renderOfflineRows()}
-    <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}${sideOutputEditorHTML(todayStr(), false)}
+    <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}${sideJobsNeedWeightHTML(todayStr())}
     <div class="cb-lbl">TODAY</div>${crewRow}${marelRow}
     <div class="cb-legend"><span>${personDot('ok')} on line</span><span>${personDot('miss')} empty spot</span><span>${personDot('side')} packaging on side machine</span><span>${personDot('trn')} in training</span><span>${personDot('tr')} trimmer helping</span></div>
     ${dayLogFor(todayStr()) ? `<div style="text-align:center;margin-top:10px;"><span class="cb-link" style="color:var(--wait);" onclick="resetTodayCrewBoard()">Clear today's Crew Board entries</span></div>` : ''}
@@ -1368,13 +1508,14 @@ function renderCrewBoard(){
 function renderSideSetup(sm){
   const s = sideSetup;
   const opts = (key, label)=>`<div style="display:flex;align-items:center;gap:8px;width:100%;"><span class="cb-mut" style="width:78px;">${label}</span>${Array.from({length:(key==='pack'?SIDE_PACK_MAX:SIDE_TRIM_MAX)+1},(_,n)=>`<button class="cb-btn" style="flex:1;${s[key]===n?'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);':''}" onclick="sideSetup.${key}=${n};if(sideSetup.train>sideSetup.pack)sideSetup.train=sideSetup.pack;render()">${n}</button>`).join('')}</div>`;
-  return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--amber);"><span class="cb-nm">${s.changeId?'Change crew — ':''}${sm.name} <span class="cb-mut">(up to ${SIDE_PACK_MAX} packaging + ${SIDE_TRIM_MAX} trimmers)</span></span>
+  return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--amber);"><span class="cb-nm">${s.phase==='pack'?'📦 Switch to Packaging — ':(s.changeId?'Change crew — ':'')}${sm.name} <span class="cb-mut">(up to ${SIDE_PACK_MAX} packaging + ${SIDE_TRIM_MAX} trimmers)</span></span>
     ${opts('pack','Packaging')}
     ${s.pack>0?`<div style="display:flex;align-items:center;gap:8px;width:100%;"><span class="cb-mut" style="width:78px;">In training</span>${Array.from({length:s.pack+1},(_,n)=>`<button class="cb-btn" style="flex:1;${Math.min(s.train||0,s.pack)===n?'border-color:#F2C14E;color:#F2C14E;background:rgba(242,193,78,0.15);':''}" onclick="sideSetup.train=${n};render()">${n}</button>`).join('')}</div>`:''}
     ${(s.train||0)>0&&s.pack>0?`<input type="text" id="sideTrainName" maxlength="30" placeholder="Trainee name (optional)" value="${escapeHtml(s.trainName||'')}" oninput="sideSetup.trainName=this.value" style="padding:8px;width:100%;">`:''}
     ${opts('trim','Trimmers')}
-    ${sm.name==='Vacuum Sealer' ? vacSetupHTML(s) : ''}
-    <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="confirmSide()">${s.changeId?'Save change':'▶ Start'}</button></div></div>`;
+    ${sm.name==='Vacuum Sealer' && s.phase!=='pack' ? vacSetupHTML(s) : ''}
+    ${s.phase==='pack'?`<div class="cb-mut" style="width:100%;">Same crew pre-filled — change it if fewer or more people pack. Product stays <b style="color:var(--text);">${escapeHtml(sideJobLabel(s))}</b>.</div>`:''}
+    <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="confirmSide()">${s.phase==='pack'?'📦 Start packaging':s.changeId?'Save change':'▶ Start'}</button></div></div>`;
 }
 function vacSetupHTML(s){
   const sel = 'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);';
@@ -1469,13 +1610,13 @@ function dayLogSections(date, opts){
     const act = mine.reduce((a,s)=>a+s.act,0), wait = mine.reduce((a,s)=>a+s.waitMin,0);
     const trainMin = mine.reduce((a,s)=>a+s.act*Math.min(s.train||0,s.pack||0),0), names = [...new Set(mine.filter(s=>s.train&&s.trainName).map(s=>s.trainName))];
     const base = `ran ${fmtDur(act)} · ${fmtDur(pm.packMin)} labour${trainMin?` (incl. ${fmtDur(trainMin)} training${names.length?`: ${names.join(', ')}`:''})`:''}${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}${wait?` · waited for trimmers ${fmtDur(wait)}`:''}`;
-    if(m.name!=='Vacuum Sealer'){ side.push({k:m.name, v:`${base} · ${outText(outp[m.name])}`}); return; }
+    if(m.name!=='Vacuum Sealer'){ side.push({k:m.name, v:`${base} · ${outText(effOut(date, m.name))}`}); return; }
     const vg = sideOutputGroups(date).filter(g=>g.machine==='Vacuum Sealer');
-    const withOut = vg.filter(g=>outp[g.key] && (outp[g.key].qty || outp[g.key].lbs)), missing = vg.filter(g=>!withOut.includes(g)).map(g=>g.label);
-    const tq = withOut.reduce((a,g)=>a+(parseInt(outp[g.key].qty,10)||0),0), tl = withOut.reduce((a,g)=>a+(parseFloat(outp[g.key].lbs)||0),0);
+    const withOut = vg.filter(g=>{ const o = effOut(date, g.key); return o && (o.qty || o.lbs); }), missing = vg.filter(g=>!withOut.includes(g)).map(g=>g.label);
+    const tq = withOut.reduce((a,g)=>a+(parseInt(effOut(date, g.key).qty,10)||0),0), tl = withOut.reduce((a,g)=>a+(parseFloat(effOut(date, g.key).lbs)||0),0);
     const tot = withOut.length ? ` · ${tq} box${tq===1?'':'es'} · ${tl.toFixed(3)} lbs${missing.length?` (${missing.join(', ')} output not entered)`:''}` : ' · output not entered';
-    side.push({k:'Vacuum Sealer · total', v: base + (vg.length>1 ? tot : ` · ${outText(outp[vg[0] ? vg[0].key : ''])}`), bold:false});
-    if(vg.length>1) vg.forEach(g=>side.push({k:`↳ ${g.label}`, sub:true, v:`ran ${fmtDur(g.act)} · ${outText(outp[g.key])}`}));
+    side.push({k:'Vacuum Sealer · total', v: base + (vg.length>1 ? tot : ` · ${outText(effOut(date, vg[0] ? vg[0].key : ''))}`), bold:false});
+    if(vg.length>1) vg.forEach(g=>side.push({k:`↳ ${g.label}`, sub:true, v:`ran ${fmtDur(g.act)} · ${outText(effOut(date, g.key))}`}));
     else if(vg.length===1) side[side.length-1].k = `Vacuum Sealer · ${vg[0].label}`;
     [...new Set(mine.filter(s=>s.covering).map(s=>s.covering))].forEach(c=>side.push({k:`↳ covering ${c} breakdown`, sub:true, v: fmtDur(mine.filter(s=>s.covering===c).reduce((a,s)=>a+coverMin(s),0)), red:true}));
   });
@@ -1714,7 +1855,7 @@ function linesWaitingOn(dept){
 /* Today's waiting minutes on a department: saved records + downtime inside runs still open on the Live Floor */
 function deptWaitToday(dept){
   const today = todayStr();
-  let min = Store.records.filter(r=>r.date===today && r.status==='WAITING' && upstreamDeptFor(r.reason)===dept).reduce((a,r)=>a+(r.durationMin||0),0);
+  let min = Store.records.filter(r=>!r.side && r.date===today && r.status==='WAITING' && upstreamDeptFor(r.reason)===dept).reduce((a,r)=>a+(r.durationMin||0),0);
   MACHINES.forEach(m=>{ const live = Store.liveRuns[m]; if(!live || live.date!==today) return;
     (live.downtimeSegments||[]).forEach(d=>{ if(d.status==='WAITING' && upstreamDeptFor(d.reason)===dept) min += d.end ? duration(d.start,d.end) : elapsedMinutesSince(d.start); }); });
   return min;
@@ -1765,7 +1906,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v24';
+const FLOOR3D_REV = 'v25';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -1858,8 +1999,19 @@ function renderFloorPanel(recs){
     ${title}${body}</div></div>`;
 }
 /* ============ DASHBOARD ============ */
+/* v155: today's finished records + the part of each open Live Floor run done so far (not saved — Dashboard only) */
+function liveSoFarRecords(){
+  const T = todayStr(), out = [];
+  MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T)) return;
+    const end = x=>x.end || openEndToday(x.start);
+    const run = (l.segments||[]).reduce((a,sg)=>a+duration(sg.start, end(sg)),0);
+    if(run>0) out.push({id:'live-'+m, live:true, date:T, machine:m, product:l.product||'', status:'RUNNING', startTime:l.segments[0].start, endTime:end(l.segments[l.segments.length-1]), durationMin:run, reasonCategory:'', reason:'', classification:'', notes:''});
+    (l.downtimeSegments||[]).forEach((d,i)=>{ const dur = duration(d.start, end(d)); if(dur>0) out.push({id:'live-'+m+'-'+i, live:true, date:T, machine:m, product:l.product||'', status:d.status, startTime:d.start, endTime:end(d), durationMin:dur, reasonCategory:d.reasonCategory||'', reason:d.reason||'', classification:d.classification||'', notes:d.notes||''}); });
+  });
+  return out;
+}
 function renderDashboard(){
-  const recs = recordsForDate(todayStr());
+  const recs = recordsForDate(todayStr()).concat(liveSoFarRecords());
   const dt = dayTotals(recs);
   const bn = bottlenecks(recs,3);
   const mmw = machineMostWaiting(recs);
@@ -1904,12 +2056,14 @@ function renderDashboard(){
 /* ============ LIVE FLOOR TRACKING ============ */
 function nowHHMM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 /* ---- PLH Reporting (aggregates the structured plh data attached to finished Live Entry runs) ---- */
-function plhRecordsInRange(startDate, endDate){
-  return Store.records.filter(r=>r.plh && r.plh.grossPLH!=null && r.date>=startDate && r.date<=endDate);
+/* v157: kind 'lines' (default — Variovacs + Manual Pack, same as before) or 'side' (side-machine jobs: sealing + packing) */
+const plhKindOk = (r, kind)=> (kind==='side') ? !!r.side : !r.side;
+function plhRecordsInRange(startDate, endDate, kind){
+  return Store.records.filter(r=>r.plh && r.plh.grossPLH!=null && r.date>=startDate && r.date<=endDate && plhKindOk(r, kind));
 }
 /* Live Entry runs that finished without Quantity/Weight entered — still have full staffing/timing detail preserved, just missing the numbers needed to compute PLH */
-function incompletePLHRecordsInRange(startDate, endDate){
-  return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.date>=startDate && r.date<=endDate);
+function incompletePLHRecordsInRange(startDate, endDate, kind){
+  return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.date>=startDate && r.date<=endDate && plhKindOk(r, kind));
 }
 /* v99: Same product run in several pieces on the same machine on the same day (e.g. stopped waiting for strogi/trim, then restarted) is ONE job. Runs are combined by date + machine + product (product ID if set, otherwise the product name). Combined PLH = total lbs ÷ total labour hours across all its runs — never an average of the runs' PLH, so a short run can't skew it. Each run is still kept (job.runs) so its time window and staffing stay visible. Single runs pass through unchanged. */
 function plhJobKey(r){
@@ -1978,7 +2132,7 @@ function renderPLHCard(summary, title){
     </div>
     <div class="statrow"><span class="lbl">Total Pounds</span><span class="val">${Math.round(summary.totalWeight)}</span></div>
     <div class="statrow"><span class="lbl">Total Quantity</span><span class="val">${Math.round(summary.totalQty)}</span></div>
-    <div class="statrow"><span class="lbl">Labour Hours (gross)</span><span class="val">${summary.totalGrossHours.toFixed(1)}</span></div>
+    <div class="statrow"><span class="lbl">Labour Hours (gross)</span><span class="val">${summary.totalGrossHours.toFixed(1)} <span style="font-size:12px;font-weight:400;color:var(--muted);">· ${labMin(summary.totalGrossHours)}</span></span></div>
     <div class="statrow"><span class="lbl">Jobs</span><span class="val">${summary.runCount}${summary.rawRunCount>summary.runCount?` <span style="color:var(--muted);font-size:11px;">(${summary.rawRunCount} runs)</span>`:''}</span></div>
     ${summary.best ? `<div class="statrow"><span class="lbl">Best Product</span><span class="val" style="color:var(--run);font-size:12px;">${escapeHtml(summary.best.plh.product||summary.best.product||'')} — ${summary.best.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
     ${summary.worst && summary.worst!==summary.best ? `<div class="statrow"><span class="lbl">Lowest Product</span><span class="val" style="color:var(--wait);font-size:12px;">${escapeHtml(summary.worst.plh.product||summary.worst.product||'')} — ${summary.worst.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
@@ -2059,6 +2213,9 @@ function renderDowntimeAnalysisView(){
   </div>`;
 }
 let plhLogFilters = {machine:'', product:''};
+let plhKind = (()=>{ try{ return localStorage.getItem('pct_plh_kind')==='side' ? 'side' : 'lines'; }catch(e){ return 'lines'; } })(); // v157
+function setPLHKind(k){ plhKind = k; plhLogFilters.machine=''; plhLogFilters.product=''; try{ localStorage.setItem('pct_plh_kind', k); }catch(e){} render(); }
+const plhMachinesFor = k=> k==='side' ? SIDE_MACHINES.map(m=>m.name) : MACHINES;
 let plhLogDetailId = null;
 function plhPresetRange(preset){
   const now = new Date(); const today = localDateStr(now);
@@ -2077,7 +2234,8 @@ function togglePLHJob(key){ if(plhLogExpanded.has(key)) plhLogExpanded.delete(ke
 function renderPLHLogView(){
   if(!plhLogRange) plhLogRange = {preset:'today', ...plhPresetRange('today')};
   if(plhLogDetailId) return renderPLHRunDetail(plhLogDetailId);
-  const allRecs = plhRecordsInRange(plhLogRange.start, plhLogRange.end);
+  const allRecs = plhRecordsInRange(plhLogRange.start, plhLogRange.end, plhKind);
+  const missingW = incompletePLHRecordsInRange(plhLogRange.start, plhLogRange.end, plhKind);
   let recs = allRecs;
   if(plhLogFilters.machine) recs = recs.filter(r=>r.machine===plhLogFilters.machine);
   if(plhLogFilters.product) recs = recs.filter(r=>r.plh.product===plhLogFilters.product);
@@ -2103,10 +2261,13 @@ function renderPLHLogView(){
     ${open ? j.runs.map(r=>runRow(r, true)).join('') : ''}`;
   }).join('') : '<div class="empty">No finished runs in this range.</div>';
 
+  const kindBar = `<div class="filterbar">${[['lines','Lines only'],['side','Side machines only']].map(([k,l])=>`<div class="mchip ${plhKind===k?'sel':''}" style="flex:1;padding:9px 12px;font-size:12.5px;text-align:center;" onclick="setPLHKind('${k}')">${l}</div>`).join('')}</div>`;
+  const missRows = missingW.length ? `<div class="card" style="border-color:var(--change);"><h3 style="color:var(--change);">Weight not entered — ${missingW.length} job${missingW.length===1?'':'s'}</h3>${missingW.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(r=>`<div class="statrow" style="cursor:pointer;" onclick="openAddPLHData('${r.id}')"><span class="lbl">${fmtDate(r.date)} · ${r.machine} · ${escapeHtml(r.plh.product||r.product||'')}</span><span class="val" style="color:var(--brk);">Add →</span></div>`).join('')}<div style="font-size:12px;color:var(--muted);margin-top:6px;">Not in PLH until QTY / LBS are added.</div></div>` : '';
   return `
+  ${kindBar}
   <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${plhLogRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setPLHLogPreset('${v}')">${l}</div>`).join('')}</div>
   <div class="filterbar">
-    <select onchange="plhLogFilters.machine=this.value; render()"><option value="">All Machines</option>${MACHINES.map(m=>`<option ${plhLogFilters.machine===m?'selected':''}>${m}</option>`).join('')}</select>
+    <select onchange="plhLogFilters.machine=this.value; render()"><option value="">All Machines</option>${plhMachinesFor(plhKind).map(m=>`<option ${plhLogFilters.machine===m?'selected':''}>${m}</option>`).join('')}</select>
     <select onchange="plhLogFilters.product=this.value; render()"><option value="">All Products</option>${uniqueProducts.map(p=>`<option value="${escapeHtml(p)}" ${plhLogFilters.product===p?'selected':''}>${escapeHtml(p)}</option>`).join('')}</select>
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2116,6 +2277,7 @@ function renderPLHLogView(){
       <button class="btn btn-primary" style="width:auto;padding:8px 14px;font-size:12px;" onclick="exportPLHReportPDF()">📄 PDF Report</button>
     </div>
   </div>
+  ${missRows}
   ${rows}`;
 }
 /* ---- PLH Report PDF — a polished, print-ready report for handing to management, grouped by machine with full per-job detail (not a trimmed summary) ---- */
@@ -2124,7 +2286,7 @@ function plhJobBlockHTML(r){
   const multi = r.runs && r.runs.length>1;
   const runTag = x => (multi && x.run) ? `Run ${x.run} · ` : '';
   const runRows = multi ? r.runs.map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>Run ${i+1}: ${fmtTime12(x.startTime)}–${fmtTime12(x.endTime)}</span><span style="font-weight:600;">${(x.plh.weightLbs||0).toFixed(1)} lbs · ${(x.plh.grossPLH||0).toFixed(1)} PLH</span></div>`).join('') : '';
-  const segRows = (p.segments||[]).map((seg,i)=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>${runTag(seg)}Segment ${multi ? (p.segments.slice(0,i).filter(x=>x.run===seg.run).length+1) : i+1}: ${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span style="font-weight:600;">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
+  const segRows = shownSegs(p.segments).map((seg,i)=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>${runTag(seg)}Segment ${multi ? (shownSegs(p.segments).slice(0,i).filter(x=>x.run===seg.run).length+1) : i+1}: ${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span style="font-weight:600;">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
   const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid #eee;"><span>${runTag(d)}${escapeHtml(d.reason||d.status)}</span><span style="font-weight:600;">${fmtTime12(d.start)}–${fmtTime12(d.end)}</span></div>`).join('') : '<div style="font-size:11.5px;color:#999;">No downtime recorded.</div>';
   const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
   const stat = (label,val)=>`<div style="flex:1;min-width:0;"><div style="font-size:9.5px;color:#888;text-transform:uppercase;letter-spacing:0.06em;">${label}</div><div style="font-size:17px;font-weight:700;color:#1a1a2e;">${val}</div></div>`;
@@ -2140,8 +2302,8 @@ function plhJobBlockHTML(r){
       ${stat('Net PLH', p.netPLH!=null ? p.netPLH.toFixed(1) : '—')}
     </div>
     <div style="display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
-      ${stat('Labour Hrs (Gross)', p.grossLaborHours.toFixed(1))}
-      ${stat('Labour Hrs (Net)', p.netLaborHours.toFixed(1))}
+      ${stat('Labour Hrs (Gross)', `${p.grossLaborHours.toFixed(1)} <span style="font-size:11px;font-weight:400;color:#666;">${labMin(p.grossLaborHours)}</span>`)}
+      ${stat('Labour Hrs (Net)', `${p.netLaborHours.toFixed(1)} <span style="font-size:11px;font-weight:400;color:#666;">${labMin(p.netLaborHours)}</span>`)}
       ${stat('Downtime', fmtDur(downtimeMin))}
       ${stat('Target PLH', p.targetPLH ? p.targetPLH : '—')}
     </div>
@@ -2152,9 +2314,9 @@ function plhJobBlockHTML(r){
     ${dtRows}
   </div>`;
 }
-function renderPLHReportHTML(startDate, endDate, machineFilter){
-  const allRecs = plhRecordsInRange(startDate, endDate).filter(r=>!machineFilter || r.machine===machineFilter);
-  const incomplete = incompletePLHRecordsInRange(startDate, endDate).filter(r=>!machineFilter || r.machine===machineFilter);
+function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
+  const allRecs = plhRecordsInRange(startDate, endDate, kind).filter(r=>!machineFilter || r.machine===machineFilter);
+  const incomplete = incompletePLHRecordsInRange(startDate, endDate, kind).filter(r=>!machineFilter || r.machine===machineFilter);
   const summary = computePLHSummary(allRecs);
   const dateLabel = startDate===endDate ? fmtDate(startDate) : `${fmtDate(startDate)} – ${fmtDate(endDate)}`;
   const byMachine = {};
@@ -2197,7 +2359,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter){
       </div>
       <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
         ${statCard('Total Lbs Produced', Math.round(summary.totalWeight))}
-        ${statCard('Total Labour Hrs (Gross)', summary.totalGrossHours.toFixed(1))}
+        ${statCard('Total Labour Hrs (Gross)', `${summary.totalGrossHours.toFixed(1)} <span style="font-size:12px;font-weight:400;color:#666;">${labMin(summary.totalGrossHours)}</span>`)}
         ${statCard('Avg Gross PLH', summary.grossPLH.toFixed(1))}
       </div>
       <div style="display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap;">
@@ -2273,7 +2435,7 @@ async function buildHtmlReportPDF(html, filename){
 }
 async function exportPLHReportPDF(){
   const startDate = plhLogRange.start, endDate = plhLogRange.end;
-  const html = renderPLHReportHTML(startDate, endDate, plhLogFilters.machine);
+  const html = renderPLHReportHTML(startDate, endDate, plhLogFilters.machine, plhKind);
   await buildHtmlReportPDF(html, `PLH-Report-${startDate}${endDate!==startDate?'_to_'+endDate:''}.pdf`);
 }
 /* Safari (iOS and macOS alike) is unreliable at rendering a PDF purely from an in-memory blob: URL, whether embedded in an iframe or opened directly in a new tab — confirmed blank on both approaches, on both devices, even with pop-ups explicitly allowed. The one thing that's always been reliable is a real file: triggering an actual download, so Preview.app / the Files app / the iOS share sheet are handling a genuine saved PDF rather than a transient in-browser reference. */
@@ -2288,12 +2450,20 @@ function showPLHReportPreview(blob, filename){
   setTimeout(()=>URL.revokeObjectURL(url), 5000);
   toast('PDF saved — open it from Downloads (Mac) or your Files app (iPhone)');
 }
+function sideStagesCardHTML(r){
+  const st = sideStages(r); if(!st) return ''; const p = r.plh, keys = Object.keys(st);
+  const rows = keys.map(ph=>`<div class="statrow"><span class="lbl">${sideStageName(r.machine, ph)} · ${fmtTime12(st[ph].from)}–${fmtTime12(st[ph].to)}</span><span class="val">${(st[ph].gross/60).toFixed(1)} h <span style="color:var(--muted);font-size:11px;">${labMin(st[ph].gross/60)}</span></span></div>`).join('');
+  const sum = keys.map(ph=>`${sideStageName(r.machine, ph).toLowerCase()} ${(st[ph].gross/60).toFixed(1)} h`).join(' + ');
+  return `<div class="card"><h3>Job steps (gross labour)</h3>${rows}
+    <div style="font-size:12.5px;margin-top:8px;">${keys.length>1?`${sum} = <b>${p.grossLaborHours.toFixed(1)} h</b>`:`<b>${p.grossLaborHours.toFixed(1)} h</b>`}${p.grossPLH!=null?` · ${Math.round(p.weightLbs*100)/100} lbs → <b style="color:var(--brk);">${p.grossPLH.toFixed(1)} PLH</b>`:''}</div></div>`;
+}
 function renderPLHRunDetail(id){
   const r = Store.records.find(x=>x.id===id);
   if(!r || !r.plh){ plhLogDetailId=null; return renderPLHLogView(); }
   const p = r.plh;
   const downtimeMin = (p.downtimeSegments||[]).reduce((a,d)=>a+duration(d.start,d.end),0);
-  const segRows = (p.segments||[]).map((seg,i)=>`<div class="statrow"><span class="lbl">Segment ${i+1}: ${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span class="val">${seg.employees} employee${seg.employees===1?'':'s'}</span></div>`).join('');
+  const crewTxt = seg=> p.side ? `${seg.employees} packaging${seg.train?` (${seg.train} training)`:''}${seg.trim?` + ${seg.trim} trimmer${seg.trim===1?'':'s'}`:''}` : `${seg.employees} employee${seg.employees===1?'':'s'}`;
+  const segRows = shownSegs(p.segments).map((seg,i)=>`<div class="statrow"><span class="lbl">${p.side?`${sideStageName(r.machine, seg.phase||'seal')}: `:`Segment ${i+1}: `}${fmtTime12(seg.start)}–${fmtTime12(seg.end)}</span><span class="val">${crewTxt(seg)}</span></div>`).join('');
   const dtRows = (p.downtimeSegments||[]).length ? p.downtimeSegments.map(d=>`<div class="statrow"><span class="lbl">${d.reason||d.status}</span><span class="val">${fmtTime12(d.start)}–${fmtTime12(d.end)}</span></div>`).join('') : '<div class="empty">No downtime recorded.</div>';
   return `
   <div class="card" style="text-align:center;">
@@ -2308,15 +2478,16 @@ function renderPLHRunDetail(id){
     <div class="card"><h3>Weight</h3><div class="bignum">${p.weightLbs} <span style="font-size:14px;">lbs</span></div></div>
     <div class="card"><h3>Gross PLH</h3><div class="bignum" style="color:var(--brk);">${p.grossPLH.toFixed(1)}</div></div>
     <div class="card"><h3>Net PLH</h3><div class="bignum">${p.netPLH!=null?p.netPLH.toFixed(1):'—'}</div></div>
-    <div class="card"><h3>Labour Hrs (Gross)</h3><div class="bignum">${p.grossLaborHours.toFixed(1)}</div></div>
-    <div class="card"><h3>Labour Hrs (Net)</h3><div class="bignum">${p.netLaborHours.toFixed(1)}</div></div>
+    <div class="card"><h3>Labour Hrs (Gross)</h3><div class="bignum">${p.grossLaborHours.toFixed(1)}</div><div style="font-size:13px;color:var(--muted);margin-top:6px;">${labMin(p.grossLaborHours)}</div></div>
+    <div class="card"><h3>Labour Hrs (Net)</h3><div class="bignum">${p.netLaborHours.toFixed(1)}</div><div style="font-size:13px;color:var(--muted);margin-top:6px;">${labMin(p.netLaborHours)}</div></div>
     <div class="card"><h3>Downtime</h3><div class="bignum">${fmtDur(downtimeMin)}</div></div>
     <div class="card"><h3>Target PLH</h3><div class="bignum">${p.targetPLH||'—'}</div></div>
   </div>
-  <div class="card"><h3>Staffing Timeline</h3>${segRows||'<div class="empty">No staffing data.</div>'}</div>
+  ${p.side ? sideStagesCardHTML(r) : ''}
+  <div class="card"><h3>${p.side?'Crew at the station':'Staffing Timeline'}</h3>${segRows||'<div class="empty">No staffing data.</div>'}${p.side?'<div style="font-size:12px;color:var(--muted);margin-top:6px;">Packaging labour only; trimmers are shown but not counted.</div>':''}</div>
   <div class="card"><h3>Downtime</h3>${dtRows}</div>
   <div class="btnrow">
-    <button class="btn btn-secondary" onclick="plhLogDetailId=null; editRecord('${r.id}')">Edit</button>
+    ${p.side ? `<button class="btn btn-secondary" onclick="plhLogDetailId=null; openAddPLHData('${r.id}')">Edit Qty / Weight</button>` : `<button class="btn btn-secondary" onclick="plhLogDetailId=null; editRecord('${r.id}')">Edit</button>`}
     <button class="btn btn-danger" onclick="deletePLHRun('${r.id}')">Delete</button>
   </div>
   <button class="btn btn-ghost" style="margin-top:8px;" onclick="plhLogDetailId=null; render()">Close</button>`;
@@ -2331,7 +2502,7 @@ async function deletePLHRun(id){
   render();
 }
 function exportPLHLogCSV(){
-  const allRecs = plhRecordsInRange(plhLogRange.start, plhLogRange.end);
+  const allRecs = plhRecordsInRange(plhLogRange.start, plhLogRange.end, plhKind);
   let recs = allRecs;
   if(plhLogFilters.machine) recs = recs.filter(r=>r.machine===plhLogFilters.machine);
   if(plhLogFilters.product) recs = recs.filter(r=>r.plh.product===plhLogFilters.product);
@@ -2886,7 +3057,7 @@ function renderLiveActiveCard(m, live){
   const isPlanned = !isRunning && lastDt && lastDt.status==='PLANNED' && !lastDt.end;
   const elapsed = elapsedMinutesSince(live.startedAt);
   const lastSeg = hasNoSegmentsYet ? null : live.segments[live.segments.length-1];
-  const segRows = live.segments.map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
+  const segRows = shownSegs(live.segments).map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
   const dtRows = (live.downtimeSegments||[]).map(d=>`<div class="live-segrow">${d.status==='NO_WORK'?'No Work Scheduled':(d.status==='PLANNED'?'Planned Stop ('+escapeHtml(d.reason||'')+')':'Downtime ('+(d.reason||d.status)+')')}: ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
   return `<div class="live-card ${isRunning?'running':(isNoWork?'':'downtime')}" ${isNoWork?'style="border-color:var(--nowork);"':''}>
     <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -2969,7 +3140,7 @@ function dtCatColor(c){ const x = DT_CATS.find(y=>y[0]===c); return x ? x[2] : '
 function dtTopReasons(m){
   const d = new Date(todayStr()+'T00:00:00'); d.setDate(d.getDate()-14); const since = localDateStr(d);
   const map = {}; let last = null;
-  Store.records.filter(r=>r.machine===m && r.date>=since && (r.status==='WAITING'||r.status==='CHANGEOVER')).forEach(r=>{
+  Store.records.filter(r=>!r.side && r.machine===m && r.date>=since && (r.status==='WAITING'||r.status==='CHANGEOVER')).forEach(r=>{
     const reason = REASON_RENAMES[r.reason] || r.reason; if(!reason || reason==='Other') return;
     const cat = r.status==='WAITING' ? (r.reasonCategory||'') : '';
     if(r.status==='WAITING'){ if(!WAITING_CATEGORIES[cat] || !WAITING_CATEGORIES[cat].reasons.includes(reason) || !reasonAllowedForMachine(reason, m)) return; }
@@ -3215,7 +3386,8 @@ function applyPaidBreakRule(recs){
     list.sort((a,b)=>toMin(a.startTime)-toMin(b.startTime)); let left = PAID_BREAK_MIN;
     list.forEach(r=>{ const p = r.plh; const lab = runLabourMinutes(p.segments, p.downtimeSegments, left, p.garbageMin); left = lab.paidLeft;
       p.grossLaborHours = lab.gross/60;
-      if(p.weightLbs>0) p.grossPLH = p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null; });
+      if(p.weightLbs>0) p.grossPLH = p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null;
+      if(/Labour: |PLH: /.test(r.notes||'')){ const nn = refreshPlhNote(r.notes, p); if(nn!==r.notes) r.notes = nn; } });
   });
 }
 
@@ -3225,11 +3397,22 @@ function plhNoteExtras(p){
   if(p.quantity) extras.push(`Qty: ${p.quantity}`);
   if(p.weightLbs) extras.push(`Weight: ${p.weightLbs} lbs`);
   if(p.grossPLH!=null){
-    extras.push(`Labour: ${p.grossLaborHours.toFixed(1)}h gross / ${p.netLaborHours.toFixed(1)}h net`);
+    extras.push(`Labour: ${p.grossLaborHours.toFixed(1)}h gross (${Math.round(p.grossLaborHours*60)} min) / ${p.netLaborHours.toFixed(1)}h net (${Math.round(p.netLaborHours*60)} min)`);
     extras.push(`PLH: ${p.grossPLH.toFixed(0)} gross${p.netPLH!=null?' / '+p.netPLH.toFixed(0)+' net':''}`);
     if(p.targetPLH){ const v=p.grossPLH-p.targetPLH, pct=v/p.targetPLH*100; extras.push(`vs Target ${p.targetPLH}: ${v>=0?'+':''}${v.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
   } else extras.push('Qty/Weight not entered yet — add later from History');
   return extras;
+}
+/* v155: rewrites only the generated Qty / Weight / Labour / PLH / vs Target pieces of a run's note so it always matches the current numbers — the operator's own words stay where they were */
+const PLH_NOTE_PART = /^(Qty: |Weight: |Labour: |PLH: |vs Target |Qty\/Weight not entered yet)/;
+function refreshPlhNote(notes, p){
+  const parts = String(notes||'').split(' · ').map(x=>x.trim()).filter(Boolean);
+  const at = parts.findIndex(x=>PLH_NOTE_PART.test(x));
+  const keep = parts.filter(x=>!PLH_NOTE_PART.test(x));
+  const gen = plhNoteExtras(p);
+  const pos = at<0 ? keep.length : parts.slice(0,at).filter(x=>!PLH_NOTE_PART.test(x)).length;
+  keep.splice(pos, 0, ...gen);
+  return keep.join(' · ');
 }
 function stripPlhNote(notes){
   let n = (notes||'').replace('Qty/Weight not entered yet — add later from History', '');
@@ -3247,7 +3430,8 @@ function recalcLiveRunRecord(rec, newStart, newEnd){
   const clip = x=>{ const a=Math.max(toMin(x.start),ns), b=Math.min(toMin(x.end),ne); if(b<=a) return null; const hh=v=>String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); return {...x, start:hh(a), end:hh(b)}; };
   segs = segs.map(clip).filter(Boolean);
   const dts = (p.downtimeSegments||[]).map(clip).filter(Boolean);
-  const lab = runLabourMinutes(segs, dts);
+  if(p.garbageMin) p.garbageMin = garbageMinFor(rec.date, rec.machine, newStart, newEnd);
+  const lab = runLabourMinutes(segs, dts, null, p.garbageMin);
   p.segments = segs; p.downtimeSegments = dts;
   p.netLaborHours = lab.net/60; p.grossLaborHours = lab.gross/60;
   p.grossPLH = p.weightLbs>0 && p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null;
@@ -3280,7 +3464,7 @@ async function closeOutLiveRun(m, opts){
   if(opts.quantity) extras.push(`Qty: ${opts.quantity}`);
   if(opts.weight) extras.push(`Weight: ${opts.weight} lbs`);
   if(grossPLH!=null){
-    extras.push(`Labour: ${grossLaborHours.toFixed(1)}h gross / ${netLaborHours.toFixed(1)}h net`);
+    extras.push(`Labour: ${grossLaborHours.toFixed(1)}h gross (${Math.round(grossLaborHours*60)} min) / ${netLaborHours.toFixed(1)}h net (${Math.round(netLaborHours*60)} min)`);
     extras.push(`PLH: ${grossPLH.toFixed(0)} gross${netPLH!=null?' / '+netPLH.toFixed(0)+' net':''}`);
     if(target && target.targetPLH){
       const variance = grossPLH - target.targetPLH;
@@ -3564,7 +3748,7 @@ function toggleTimeline(id){
 }
 function renderTimelineRows(r){
   const p = r.plh;
-  const segRows = (p.segments||[]).map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
+  const segRows = shownSegs(p.segments).map((seg,i)=>`<div class="live-segrow">Segment ${i+1}: ${fmtTime12(seg.start)}–${seg.end?fmtTime12(seg.end):'now'} · ${seg.employees} emp</div>`).join('');
   const dtRows = (p.downtimeSegments||[]).map(d=>`<div class="live-segrow">Downtime (${d.reason||d.status}): ${fmtTime12(d.start)}–${d.end?fmtTime12(d.end):'now'}</div>`).join('');
   return `<div style="background:var(--panel2);border-radius:8px;padding:10px 12px;margin-top:8px;">${segRows}${dtRows}</div>`;
 }
@@ -3624,7 +3808,7 @@ function renderAddPLHDataForm(){
   const productId = r.plh ? r.plh.productId : '';
   const target = productId ? Store.productLibrary.find(p=>p.id===productId) : null;
   const laborLine = hasSegments
-    ? `Labour: ${r.plh.grossLaborHours.toFixed(1)}h gross / ${r.plh.netLaborHours.toFixed(1)}h net`
+    ? `Labour: ${r.plh.grossLaborHours.toFixed(1)}h gross (${labMin(r.plh.grossLaborHours)}) / ${r.plh.netLaborHours.toFixed(1)}h net (${labMin(r.plh.netLaborHours)})`
     : `Duration: ${fmtDur(r.durationMin)} — no staffing captured for this record yet, set it below`;
   return `
   <div class="card">
@@ -3666,15 +3850,7 @@ async function confirmAddPLHData(){
   const netPLH = p.netLaborHours>0 ? weightNum/p.netLaborHours : null;
   const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH};
   // Strip any previously-generated summary (the placeholder text, or a prior real Qty/Weight/Labour/PLH block from an earlier edit) so correcting a value replaces it cleanly instead of stacking a second, conflicting summary alongside the old one
-  let notes = (r.notes||'').replace('Qty/Weight not entered yet — add later from History', '');
-  notes = notes.replace(/\s*·?\s*Qty:.*$/s, '').replace(/ · $/,'').replace(/^ · /,'').trim();
-  const extras = [`Qty: ${qtyNum}`, `Weight: ${weightNum} lbs`, `Labour: ${p.grossLaborHours.toFixed(1)}h gross / ${p.netLaborHours.toFixed(1)}h net`, `PLH: ${grossPLH.toFixed(0)} gross${netPLH!=null?' / '+netPLH.toFixed(0)+' net':''}`];
-  if(updatedPLH.targetPLH){
-    const variance = grossPLH - updatedPLH.targetPLH;
-    const pct = variance/updatedPLH.targetPLH*100;
-    extras.push(`vs Target ${updatedPLH.targetPLH}: ${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`);
-  }
-  notes = notes ? `${notes} · ${extras.join(' · ')}` : extras.join(' · ');
+  const notes = refreshPlhNote(r.notes, updatedPLH);
   Store.records[idx] = {...r, plh: updatedPLH, notes};
   const ok = await Store.saveRecords();
   if(!ok) return;
@@ -3691,6 +3867,7 @@ async function deleteRecord(id){
   render();
 }
 function editRecord(id){
+  { const sr = Store.records.find(x=>x.id===id); if(sr && sr.side){ openAddPLHData(id); return; } } // v157: side-machine job times come from the Crew Board log
   const r = Store.records.find(r=>r.id===id);
   if(!r) return;
   const isCustomChangeover = r.status==='CHANGEOVER' && !CHANGEOVER_REASONS.includes(r.reason);
@@ -3733,8 +3910,7 @@ saveRecord = async function(){
             const rc = recalcLiveRunRecord({...old, plh}, draft.startTime, draft.endTime);
             if(rc.durationMin<=0){ toast('No running time left in that window'); return; }
             upd = {...upd, plh: rc.plh, durationMin: rc.durationMin, startTime: rc.startTime, endTime: rc.endTime};
-            const base = stripPlhNote(upd.notes);
-            upd.notes = [base, ...plhNoteExtras(upd.plh)].filter(Boolean).join(' · ');
+            upd.notes = refreshPlhNote(upd.notes, upd.plh);
           }
         } else if(isLiveRun && draft.status!=='RUNNING'){
           delete upd.plh; // no longer a production run, so it must not feed PLH
@@ -3791,7 +3967,7 @@ function getReportForView(date){
 }
 /* ============ WEEKLY / RANGE SUMMARY ============ */
 function recordsInRange(startDate, endDate){
-  return Store.records.filter(r=>r.date>=startDate && r.date<=endDate);
+  return Store.records.filter(r=>r.date>=startDate && r.date<=endDate && !r.side);
 }
 function buildRangeReport(startDate, endDate){
   const recs = recordsInRange(startDate, endDate);
@@ -4134,7 +4310,7 @@ function exportWeeklyPDF(){
       row('Net PLH (lbs/labour-hr)', plhSummary.netPLH.toFixed(0));
       row('Total Pounds', Math.round(plhSummary.totalWeight));
       row('Total Quantity', Math.round(plhSummary.totalQty));
-      row('Labour Hours (gross)', plhSummary.totalGrossHours.toFixed(1));
+      row('Labour Hours (gross)', `${plhSummary.totalGrossHours.toFixed(1)} · ${labMin(plhSummary.totalGrossHours)}`);
       row('Jobs', plhSummary.runCount);
       if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
       if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
@@ -4176,7 +4352,9 @@ async function closeAllOpenForEndShift(){
     o.offl.forEach(x=>{ x.end = openEndToday(x.start); });
     (d.garbage||[]).forEach(x=>{ if(!x.end) x.end = openEndToday(x.start); });
     d.breakPause = null; // nothing restarts after End Shift
+    (d.side||[]).forEach(x=>{ if(!x.jobId) x.jobId = x.id; });
     if(!(await Store.saveDayLog())) return false;
+    await saveLooseSideJobs(todayStr()); // v157: side-machine jobs closed here are saved for PLH (weight can be added in History)
   }
   return true;
 }
@@ -4188,6 +4366,7 @@ async function confirmEndShift(){
   try{
     const n = endShiftOpenItems().n;
     if(!(await closeAllOpenForEndShift())){ toast('Save failed — check connection'); if(btn){ btn.disabled=false; btn.textContent='Try again'; } return; }
+    { const dd = dayLogFor(todayStr()); if(dd && dd.breakPause){ dd.breakPause = null; await Store.saveDayLog(); } await saveLooseSideJobs(todayStr()); } // v157: side jobs left off after a break are saved too
     await endShiftReport(n);
   } finally { endingShift = false; }
 }
@@ -4272,7 +4451,6 @@ function renderReportView(date){
     <div class="obs">${rep.observation}</div>
   </div>
   ${(()=>{ const secs=dayLogSections(rep.date); return secs.length ? `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3>${sectionsHTML(secs)}</div>` : ''; })()}
-  ${sideOutputEditorHTML(rep.date, true)}
   ${(()=>{ const h=plhHeadline(rep.date); return `<div class="card" style="border-left:3px solid var(--brk);"><div style="font-size:14px;line-height:1.5;"><b style="color:var(--brk);">${h.main}</b>${h.note?` <span style="color:var(--muted);font-style:italic;">${h.note}</span>`:''}</div></div>`; })()}
   <div class="card">
     <h3>Action for Tomorrow</h3>
@@ -4816,7 +4994,7 @@ function upstreamDeptFor(reason){
   return d ? d.name : UPSTREAM_OTHERS;
 }
 function upstreamRecordsInRange(start, end){
-  return Store.records.filter(r=>r.date>=start && r.date<=end && r.status==='WAITING' && r.classification==='upstream');
+  return Store.records.filter(r=>!r.side && r.date>=start && r.date<=end && r.status==='WAITING' && r.classification==='upstream');
 }
 function previousPeriod(start, end){
   const s = new Date(start+'T00:00:00'), e = new Date(end+'T00:00:00');
@@ -4827,12 +5005,12 @@ function previousPeriod(start, end){
 }
 function computeUpstreamImpact(start, end){
   const recs = upstreamRecordsInRange(start, end);
-  const allDown = Store.records.filter(r=>r.date>=start && r.date<=end && (r.status==='WAITING'||r.status==='CHANGEOVER'));
+  const allDown = Store.records.filter(r=>!r.side && r.date>=start && r.date<=end && (r.status==='WAITING'||r.status==='CHANGEOVER'));
   const allDownMin = allDown.reduce((a,r)=>a+(r.durationMin||0),0);
   const prev = previousPeriod(start, end);
   const prevByDept = {};
   upstreamRecordsInRange(prev.start, prev.end).forEach(r=>{ const d=upstreamDeptFor(r.reason); prevByDept[d]=(prevByDept[d]||0)+(r.durationMin||0); });
-  const prevHasData = Store.records.some(r=>r.date>=prev.start && r.date<=prev.end);
+  const prevHasData = Store.records.some(r=>!r.side && r.date>=prev.start && r.date<=prev.end);
   const depts = {};
   recs.forEach(r=>{
     const name = upstreamDeptFor(r.reason);
@@ -5162,6 +5340,7 @@ async function startApp(){
   await Store.init();
   try{ const w = storageUsage().filter(r=>r.pct>=80); const k='pct_storage_warn_'+todayStr(); if(w.length && !safeLocalGet(k)){ safeLocalSet(k,'1'); setTimeout(()=>toast(`Storage: ${w[0].name} is ${w[0].pct.toFixed(0)}% full — see Settings`), 2500); } }catch(e){}
   await migrateReasonLabels();
+  await migrateRibeyeEye();
   await repairOvernightRecords();
   render();
   if(!safeLocalGet(TOUR_SEEN_KEY)) openTour(true);

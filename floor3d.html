@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v24 · CI Tracker</title>
+<title>3D Floor · v25 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -1726,7 +1726,7 @@ function localDate(d=new Date()){return d.getFullYear()+"-"+String(d.getMonth()+
 function t12(hhmm){if(!hhmm)return"";const [h,m]=hhmm.split(":").map(Number);return ((h%12)||12)+":"+String(m).padStart(2,"0")+(h<12?" am":" pm")}
 function todayPLH(name){
   const today=localDate();let lbs=0,gh=0,runs=0;
-  records.forEach(r=>{if(r.date===today&&r.plh&&(!name||r.machine===name)&&r.plh.grossLaborHours>0){lbs+=r.plh.weightLbs||0;gh+=r.plh.grossLaborHours;runs++}});
+  records.forEach(r=>{if(r.date===today&&!r.side&&r.plh&&(!name||r.machine===name)&&r.plh.grossLaborHours>0){lbs+=r.plh.weightLbs||0;gh+=r.plh.grossLaborHours;runs++}});
   return {lbs,gh,runs,plh:gh>0?lbs/gh:null};
 }
 const fmt=n=>Math.round(n).toLocaleString("en-CA");
@@ -1966,7 +1966,7 @@ const ICO={
   rank:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>'
 };
 const SHORT={"Variovac 1":"Variovac 1","Variovac 2":"Variovac 2","Variovac 3":"Variovac 3","Manual Pack":"Manual Pack"};
-function panelRecords(){return (records||[]).filter(r=>r.date===localDate()&&r.status&&typeof r.durationMin==="number")}
+function panelRecords(){return (records||[]).filter(r=>r.date===localDate()&&!r.side&&r.status&&typeof r.durationMin==="number")}
 function renderPanels(){
   const rail=document.getElementById("rail"),kpis=document.getElementById("kpis");if(!rail||!kpis)return;
   const recs=panelRecords();
@@ -2189,7 +2189,7 @@ function camStop(){clearTimeout(camHold.timer);cancelAnimationFrame(camHold.raf)
 })();
 /* 3D floor v5: opened as its own window from the tracker → "← CI Tracker" closes this window and brings the tracker back,
    instead of loading a second copy of the tracker here (two copies starting at once can upset the data connection). */
-const FLOOR3D_VERSION="v24";
+const FLOOR3D_VERSION="v25";
 document.getElementById("sideBar").addEventListener("click",e=>{const b=e.target.closest("[data-sgo]");if(!b)return;const k=b.dataset.sgo;if(tour.on)setTour(false);
   highlight[k]=performance.now()/1000;const g=FOCUS[k];if(g){const tgt=new THREE.Vector3(g[0],0.8,g[1]);fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+6,11,g[1]+9),toT:tgt,t:0}}
   if(SIDE.some(x=>x.key===k))openSide(k)});
