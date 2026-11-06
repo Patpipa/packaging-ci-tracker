@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v25 · CI Tracker</title>
+<title>3D Floor · v26 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -2230,7 +2230,40 @@ let placed=false;
 function refresh(){syncFloor();updateGather();updateAlarmBar();
   if(machinePick&&!sideSheet.hidden)renderMachine();
   if(!placed){placed=true;workers.forEach(w=>{const s=w.spot;w.g.position.set(s[0],0,s[1]);w.path=[];w.state="work"})} // first load: everyone already at their station
-  renderCards()}
+  renderCards();try{updateNameTags()}catch(e){console.error('name tags',e)}}
+
+/* ---------- v26: name tags — who is at each station, from the names picked in the CI Tracker ---------- */
+var rawDay={};
+function lineNames(name){const l=liveRuns[name];if(!l||(l.date&&l.date!==dateKey()))return[];if(Array.isArray(l.pendingNames)&&l.status!=="RUNNING")return l.pendingNames.slice();const s=(l.segments||[]).slice(-1)[0];return s&&Array.isArray(s.names)?s.names.slice():[]}
+function sideNames(key){const d=(rawDay||{})[dateKey()]||{};const x=(d.side||[]).filter(y=>!y.end&&SIDE_KEY[y.machine]===key).slice(-1)[0];if(!x)return[];return [...(x.names||[]),...(x.trimNames||[]).map(n=>n+" (trim)")]}
+function tagColor(key){const v=view[key];if(v){if(v.state==="run")return "#1e9e57";if(v.state==="break")return "#2f6fd1";if(v.state==="down")return v.label==="Changeover"?"#d9822b":v.label==="Planned stop"?"#7b5cd6":"#d64545";return "#555"}
+  const d=(rawDay||{})[dateKey()]||{};const x=(d.side||[]).filter(y=>!y.end&&SIDE_KEY[y.machine]===key).slice(-1)[0];return x&&(x.waits||[]).some(w=>!w.end)?"#d9822b":"#c98a12"}
+function nameSprite(text,color){const c=document.createElement("canvas");c.width=320;c.height=80;const x=c.getContext("2d");x.font="bold 38px Arial";const w=Math.min(304,x.measureText(text).width+34),l=(320-w)/2;
+  x.fillStyle=color;x.beginPath();if(x.roundRect)x.roundRect(l,9,w,60,18);else x.rect(l,9,w,60);x.fill();x.strokeStyle="rgba(255,255,255,.85)";x.lineWidth=3;x.stroke();
+  x.fillStyle="#fff";x.textAlign="center";x.textBaseline="middle";x.fillText(text,160,40);
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false,depthTest:false,transparent:true}));s.scale.set(1.6,0.4,1);s.position.y=2.4;s.renderOrder=20;return s}
+function setTag(w,text,color){const k=text?text+"|"+color:"";if(w.tagKey===k)return;w.tagKey=k;if(w.tag){w.g.remove(w.tag);w.tag.material.map.dispose();w.tag.material.dispose();w.tag=null}if(text){w.tag=nameSprite(text,color);w.g.add(w.tag)}}
+function updateNameTags(){const named=new Set(),lists={};
+  MACHINES.forEach(m=>lists[m.key]=lineNames(m.name));SIDE.forEach(s=>{if(!s.marel)lists[s.key]=sideNames(s.key)});
+  Object.keys(lists).forEach(k=>{const nm=lists[k],col=tagColor(k);(crews[k]||[]).forEach((w,i)=>{if(nm[i]){setTag(w,nm[i],col);named.add(w)}})});
+  workers.forEach(w=>{if(!named.has(w))setTag(w,"","")});
+  renderWhoPanel()}
+/* who is not at a station: free (since when), garbage, cleaning, lent out, not here */
+function renderWhoPanel(){let el=document.getElementById("whoPanel");
+  const d=(rawDay||{})[dateKey()]||{},W=d.where||{},rows=[],now=(()=>{const n=new Date();return n.getHours()*60+n.getMinutes()})();
+  const toM=t=>{const p=String(t||"").split(":");return (+p[0])*60+(+p[1]||0)};
+  Object.keys(W).forEach(n=>{const lg=W[n]||[];if(!lg.length||n==="Lead Hand"||n==="Yield Operator")return;const e=lg[lg.length-1];const w=e.w||"";
+    if(w&&(/^Variovac|^Manual Pack|^Fajita|^Slicer|^Cutlet|^Vacuum Sealer/.test(w)))return;
+    const mins=Math.max(0,now-toM(e.at));
+    if(!w){const c=mins>=30?"#ff6b6b":mins>=15?"#f0a04b":"#cfd6de";rows.push({o:0,h:`<div><b>${n}</b> <span style="color:${c};font-weight:700;">free · ${mins>=60?Math.floor(mins/60)+"h ":""}${mins%60}m</span></div>`});return}
+    const lab=w==="Garbage run"?"🗑 garbage":w.startsWith("Lent")?"→ "+w.replace("Lent · ",""):w.startsWith("Not here")?w.replace("Not here · ","not here: ").toLowerCase():w;
+    rows.push({o:w==="Garbage run"?1:w.startsWith("Not here")?3:2,h:`<div><b>${n}</b> <span style="opacity:.8;">${lab}</span></div>`})});
+  if(!rows.length){if(el)el.remove();return}
+  if(!el){el=document.createElement("div");el.id="whoPanel";el.style.cssText="position:fixed;left:10px;bottom:84px;z-index:30;max-width:240px;background:rgba(10,19,34,.82);color:#e8edf3;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 10px;font:12px/1.45 Arial,sans-serif;pointer-events:auto;";
+    el.onclick=()=>{el.dataset.min=el.dataset.min==="1"?"0":"1";renderWhoPanel()};document.body.appendChild(el)}
+  rows.sort((a,b)=>a.o-b.o);
+  el.innerHTML=`<div style="font-weight:700;letter-spacing:.4px;font-size:11px;opacity:.85;">NOT AT A STATION (${rows.length}) ${el.dataset.min==="1"?"▸":"▾"}</div>`+(el.dataset.min==="1"?"":rows.map(r=>r.h).join(""))}
+setInterval(()=>{try{updateNameTags()}catch(e){}},3000);
 
 /* ---------- camera ---------- */
 let fly=null;
@@ -2299,7 +2332,7 @@ function startLive(){
     if(!user){loginEl.hidden=false;setConn("off","Signed out");return}
     loginEl.hidden=true;setConn("wait","Connecting…");
     const db=firebase.firestore();const col=db.collection("tracker");fsCol=col;
-    unsub.push(col.doc("dayLog").onSnapshot(snap=>{floorLog=floorFromDayLog(parseDoc(snap,{}));afterLogChange()},err=>console.error(err)));
+    unsub.push(col.doc("dayLog").onSnapshot(snap=>{rawDay=parseDoc(snap,{});floorLog=floorFromDayLog(rawDay);afterLogChange()},err=>console.error(err)));
     unsub.push(col.doc("liveRuns").onSnapshot({includeMetadataChanges:true},snap=>{
       liveRuns=parseDoc(snap,{});refresh();
       setConn(snap.metadata.fromCache?"off":"live",snap.metadata.fromCache?"Offline · last known":"Live · "+hhmmss());

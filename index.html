@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v163 - 2026-11-05 (Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
+const APP_VERSION = 'v164 - 2026-11-05 (Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v26)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -741,7 +741,7 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
@@ -758,6 +758,7 @@ function render(){
     case 'reports': html += renderReportsList(); break;
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
+    case 'crewHours': html += renderCrewHoursView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
     case 'upstreamImpact': html += renderUpstreamImpactView(); break;
@@ -1903,6 +1904,8 @@ async function syncWhere(){
     if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true; }
     if(!log.length) delete d.where[n];
   });
+  if(namesCrewActive(T)){ const tl = namesCrewTimeline(T).map(e=>({id:e.id, at:e.at, n:e.n, reason: e.note ? 'Other' : '', ...(e.note ? {note:e.note} : {})})); // v164: crew number from names also saved, so the 3D floor and older views see it
+    if(JSON.stringify(tl)!==JSON.stringify(d.crewLog||[])){ d.crewLog = tl; syncCrewMirror(d); ch = true; } }
   if(!ch) return;
   _whereSyncing = true; try{ await _saveDayLogRaw.call(Store); } finally { _whereSyncing = false; }
 }
@@ -2052,10 +2055,11 @@ function renderPeopleRows(){
 const DAY_FROM = 5*60, DAY_TO = 20*60; // v161: per-person shifts can start early (e.g. 7:30 AM openers) or finish late
 function lineMinuteStatus(date, m, endMin){
   const PR = {BREAK:6, WAITING:5, CHANGEOVER:4, PLANNED:3, NO_WORK:2, RUNNING:1};
-  const arr = new Array(DAY_TO-DAY_FROM).fill('');
+  const arr = new Array(DAY_TO-DAY_FROM).fill(''); arr.reason = new Array(DAY_TO-DAY_FROM).fill('');
   const recs = Store.records.filter(r=>r.date===date && r.machine===m && !r.side).concat(date===todayStr() ? liveSoFarRecords().filter(r=>r.machine===m) : []);
   recs.forEach(r=>{ if(!r.startTime || !r.endTime) return; const a = Math.max(DAY_FROM, toMin(r.startTime)), b = Math.min(endMin, DAY_TO, toMin(r.endTime));
-    for(let t=a;t<b;t++){ const i = t-DAY_FROM; if((PR[r.status]||0) > (PR[arr[i]]||0)) arr[i] = r.status; } });
+    const rs = (r.reason==='Other' && (r.notes||'').trim()) ? r.notes.trim() : (r.reason||'');
+    for(let t=a;t<b;t++){ const i = t-DAY_FROM; if((PR[r.status]||0) > (PR[arr[i]]||0)){ arr[i] = r.status; arr.reason[i] = rs; } } });
   return arr;
 }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
@@ -2090,7 +2094,7 @@ function personDay(date){
   const brk = new Array(DAY_TO-DAY_FROM).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
   const side = sideIntervals(date);
   const people = names.map(n=>{
-    const log = (where[n]||[]).slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), tot = {}, grp = {};
+    const log = (where[n]||[]).slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), tot = {}, grp = {}, segs = [];
     const win = shiftWindow(date, n, log);
     for(let t=win.a; t<win.b; t++){
       let w = ''; for(const e of log){ if(toMin(e.at)<=t) w = e.w; else break; }
@@ -2103,8 +2107,13 @@ function personDay(date){
       else if(w){ const p = PLACES.find(x=>x.w===w); k = w; g = p ? p.g : 'Other'; }
       else if(brk[i]){ k='Break'; g='Break'; } else { k='Not recorded'; g='Not recorded'; }
       tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
+      let det = '';
+      if(MACHINES.includes(w) && k!=='Break'){ const s0 = st[w][i]; if(s0 && s0!=='RUNNING') det = st[w].reason[i]||''; }
+      else if(g==='Side machines'){ const iv2 = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n)); if(iv2){ const co = [...(iv2.names||[]).filter(x=>x!==n), ...(iv2.trimNames||[]).map(x=>x+' (trimmer)')]; if(co.length) det = 'with '+co.join(', '); } }
+      const ot = t<REG_A || t>=REG_B, last = segs[segs.length-1];
+      if(last && last.k===k && last.det===det && last.ot===ot && last.b===t) last.b = t+1; else segs.push({a:t, b:t+1, k, g, det, ot, w});
     }
-    return {name:n, tot, grp, total: win.b-win.a, a: win.a, b: win.b, otA: win.otA, otB: win.otB, ot: win.otA+win.otB};
+    return {name:n, tot, grp, segs, total: win.b-win.a, a: win.a, b: win.b, otA: win.otA, otB: win.otB, ot: win.otA+win.otB};
   });
   return {people, isToday};
 }
@@ -2318,6 +2327,162 @@ function renderFreeNamesHTML(){
     <div class="cb-mut" style="font-size:11px;margin-top:5px;">Amber after 15 min, red after 30. Tap a name to place them, or Move → to send a stopped line's crew.</div></div>`;
 }
 
+/* ============ v164: CREW HOURS & POSITIONS REPORT ============
+Reports → 👥 Crew Hours. One day: summary table, crew timeline chart, where the crew's hours went, each person line by line,
+each position (who was on it and when), lent to other departments. A date range: totals per person, OT per day.
+Everything comes from the names picked on the Live Floor / Crew Board — nothing is estimated. Same "paper" page on screen and in the PDF. */
+let crewRange = null; // {start, end, preset}
+function crewRangeNow(){ if(!crewRange){ const t = todayStr(); crewRange = {start:t, end:t, preset:'today'}; } return crewRange; }
+function setCrewPreset(p){ const d = new Date(), t = localDateStr(d);
+  if(p==='today') crewRange = {start:t, end:t, preset:p};
+  else if(p==='yesterday'){ d.setDate(d.getDate()-1); const y = localDateStr(d); crewRange = {start:y, end:y, preset:p}; }
+  else { const n = p==='7' ? 7 : 30; const s0 = new Date(); s0.setDate(s0.getDate()-(n-1)); crewRange = {start: localDateStr(s0), end: t, preset:p}; }
+  render(); }
+function setCrewDate(which, v){ if(!v) return; const r = crewRangeNow(); r[which] = v; r.preset = ''; if(r.end < r.start){ if(which==='start') r.end = v; else r.start = v; } render(); }
+function openCrewHours(date){ crewRange = {start:date, end:date, preset: date===todayStr() ? 'today' : ''}; Router.go('crewHours'); }
+const CH_COL = {run:'#2e9d5b', waiting:'#d64545', changeover:'#e08a2b', planned:'#7b5cd6', nowork:'#8a94a3', noentry:'#b9c0c9', brk:'#3b7dd8', side:'#d6a21e', garbage:'#8d6e4c', clean:'#2aa198', lent:'#a05bc4', setup:'#4f9fb0', away:'#c9ced6', nr:'#e74c3c', other:'#999999'};
+function chColor(sg){ const k = sg.k, g = sg.g;
+  if(g==='Lines running') return CH_COL.run;
+  if(g==='Lines stopped') return /waiting/.test(k) ? CH_COL.waiting : /changeover/.test(k) ? CH_COL.changeover : /planned/.test(k) ? CH_COL.planned : /no work/.test(k) ? CH_COL.nowork : CH_COL.noentry;
+  return {Break:CH_COL.brk, 'Side machines':CH_COL.side, 'Garbage run':CH_COL.garbage, 'Cleaning / Sanitation':CH_COL.clean, 'Lent to other dept':CH_COL.lent, 'Setup / Opening':CH_COL.setup, 'Not here':CH_COL.away, 'Not recorded':CH_COL.nr}[g] || CH_COL.other;
+}
+const chFmt = m=>m2t(m).replace(':00 ',' ');
+function chDur(m){ const h = Math.floor(m/60), mm = m%60; return h ? `${h}h ${String(mm).padStart(2,'0')}m` : `${mm}m`; }
+function chWorked(p){ return p.total - (p.grp['Break']||0) - (p.grp['Not here']||0) - (p.grp['Not recorded']||0); }
+/* who was on each position, minute by minute, from the names log */
+function positionDay(date, pd){
+  const d = dayLogFor(date) || {}, W = d.where || {}, out = [];
+  const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, DAY_TO));
+  const people = pd.people.map(p=>({n:p.name, log:(W[p.name]||[]).slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), a:p.a, b:p.b}));
+  const posAt = (pp, t)=>{ if(t<pp.a || t>=pp.b) return ''; let w=''; for(const e of pp.log){ if(toMin(e.at)<=t) w=e.w; else break; } return w; };
+  const side = sideIntervals(date);
+  [...MACHINES, ...SIDE_MACHINES.map(x=>x.name)].forEach(P=>{
+    const segs = [];
+    for(let t=DAY_FROM; t<DAY_TO; t++){
+      const nm = people.filter(pp=>posAt(pp,t)===P).map(pp=>pp.n);
+      let trim = [];
+      if(!MACHINES.includes(P)){ const iv = side.find(x=>x.machine===P && x.a<=t && t<x.b); if(iv) trim = (iv.trimNames||[]); }
+      const stt = MACHINES.includes(P) ? (st[P][t-DAY_FROM]||'') : '';
+      if(!nm.length && !trim.length){ const l = segs[segs.length-1]; if(l && !l.closed) l.closed = true; continue; }
+      const key = nm.join(',')+'|'+trim.join(',')+'|'+stt+'|'+(t<REG_A||t>=REG_B?'ot':'');
+      const l = segs[segs.length-1];
+      if(l && !l.closed && l.key===key && l.b===t) l.b = t+1; else segs.push({a:t, b:t+1, key, names:nm, trim, st:stt, reason: MACHINES.includes(P) ? (st[P].reason[t-DAY_FROM]||'') : '', ot: t<REG_A||t>=REG_B});
+    }
+    if(segs.length) out.push({P, segs});
+  });
+  return out;
+}
+function crewReportHTML(start, end, forPdf){
+  const single = start===end, H = [];
+  const card = `background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};`;
+  const scroll = h=>forPdf ? h : `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><div style="min-width:640px;">${h}</div></div>`;
+  const hd = t=>`<div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin:22px 0 10px;text-transform:uppercase;">${t}</div>`;
+  const th = 'text-align:left;font-size:10.5px;color:#666;text-transform:uppercase;letter-spacing:.04em;padding:6px 6px;border-bottom:1px solid #ddd;';
+  const td = 'padding:6px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;';
+  const red = 'color:#c0392b;font-weight:700;';
+  const dateLabel = single ? new Date(start+'T00:00:00').toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'}) : `${fmtDate(start)} – ${fmtDate(end)}`;
+  H.push(`<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;"><div><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Crew Hours & Positions</div><div style="font-size:13px;color:#555;margin-top:2px;">Packaging · ${dateLabel}</div></div><div style="font-size:10.5px;color:#888;text-align:right;">CI Tracker · made ${fmtTime12(nowHHMM())}<br>Regular shift 8:00 AM – 4:30 PM</div></div>`);
+  if(single){
+    const pd = personDay(start);
+    if(!pd){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No names recorded for this day. Pick crew by name on Start Run / Change Staff / side machines and Where Everyone Is on the Crew Board.</div></div>`); return H.join(''); }
+    const P = pd.people;
+    const sum = (f)=>P.reduce((t,p)=>t+f(p),0);
+    // 1. summary table
+    H.push(hd('1 · Crew summary'));
+    H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Name</th><th style="${th}">Start</th><th style="${th}">Finish</th><th style="${th}">Worked</th><th style="${th}">Break</th><th style="${th}">Overtime</th><th style="${th}">Not recorded</th></tr>
+      ${P.map(p=>{ const nr = p.tot['Not recorded']||0, nh = p.grp['Not here']||0;
+        return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td style="${td}${p.a<REG_A?red:''}">${chFmt(p.a)}</td><td style="${td}${p.b>REG_B?red:''}">${chFmt(p.b)}${pd.isToday && p.b>=toMin(nowHHMM())?' (so far)':''}</td><td style="${td}">${chDur(chWorked(p))}${nh?`<div style="font-size:10.5px;color:#888;">not here ${chDur(nh)}</div>`:''}</td><td style="${td}">${chDur(p.grp['Break']||0)}</td><td style="${td}${p.ot?red:'color:#aaa;'}">${p.ot?chDur(p.ot):'—'}</td><td style="${td}${nr?red:'color:#aaa;'}">${nr?chDur(nr):'—'}</td></tr>`; }).join('')}
+      <tr><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">Total · ${P.length}</td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(chWorked))}</td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(p=>p.grp['Break']||0))}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.ot)?red:''}">${sum(p=>p.ot)?chDur(sum(p=>p.ot)):'—'}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.tot['Not recorded']||0)?red:''}">${sum(p=>p.tot['Not recorded']||0)?chDur(sum(p=>p.tot['Not recorded']||0)):'—'}</td></tr></table>`));
+    // 2. timeline chart
+    const a0 = Math.floor(Math.min(REG_A, ...P.map(p=>p.a))/60)*60, b0 = Math.ceil(Math.max(REG_B, ...P.map(p=>p.b))/60)*60;
+    const W = 740, L = 92, R = 8, rowH = 24, top = 22, Wd = W-L-R, x = m=>L + (m-a0)/(b0-a0)*Wd, Hh = top + P.length*rowH + 6;
+    let svg = `<svg width="100%" viewBox="0 0 ${W} ${Hh}" style="display:block;font-family:Arial;"><defs><pattern id="nrh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fde2df"/><line x1="0" y1="0" x2="0" y2="6" stroke="#e74c3c" stroke-width="2.5"/></pattern></defs>`;
+    if(a0<REG_A) svg += `<rect x="${x(a0)}" y="${top-4}" width="${x(REG_A)-x(a0)}" height="${Hh-top+4}" fill="#fdecea"/>`;
+    if(b0>REG_B) svg += `<rect x="${x(REG_B)}" y="${top-4}" width="${x(b0)-x(REG_B)}" height="${Hh-top+4}" fill="#fdecea"/><text x="${(x(REG_B)+x(b0))/2}" y="${Hh-2}" font-size="9" fill="#c0392b" text-anchor="middle">OT</text>`;
+    for(let h=a0; h<=b0; h+=60){ svg += `<line x1="${x(h)}" y1="${top-4}" x2="${x(h)}" y2="${Hh}" stroke="#e3e3e3"/><text x="${x(h)}" y="${top-9}" font-size="10" fill="#777" text-anchor="middle">${(h/60)%12||12}${h<720?'a':'p'}</text>`; }
+    P.forEach((p,i)=>{ const y = top + i*rowH;
+      svg += `<text x="${L-6}" y="${y+15}" font-size="11.5" font-weight="700" fill="#1a1a2e" text-anchor="end">${escapeHtml(p.name)}</text>`;
+      p.segs.forEach(sg=>{ const fill = sg.g==='Not recorded' ? 'url(#nrh)' : chColor(sg); svg += `<rect x="${x(sg.a)}" y="${y+3}" width="${Math.max(0.8, x(sg.b)-x(sg.a))}" height="${rowH-7}" fill="${fill}"><title>${escapeHtml(`${p.name} · ${m2t(sg.a)}–${m2t(sg.b)} · ${sg.k}`)}</title></rect>`; }); });
+    svg += `<line x1="${x(REG_A)}" y1="${top-4}" x2="${x(REG_A)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/><line x1="${x(REG_B)}" y1="${top-4}" x2="${x(REG_B)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/></svg>`;
+    const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
+    H.push(hd('2 · Crew timeline'));
+    H.push(scroll(svg) + (forPdf?'':`<div style="font-size:10.5px;color:#888;margin-top:2px;">← swipe the chart sideways →</div>`) + `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:10.5px;color:#555;">${lg.map(([t,c])=>`<span><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;vertical-align:-1px;margin-right:4px;"></span>${t}</span>`).join('')}<span><span style="display:inline-block;width:10px;height:10px;background:repeating-linear-gradient(45deg,#e74c3c 0 2px,#fde2df 2px 5px);vertical-align:-1px;margin-right:4px;"></span>Not recorded</span><span style="color:#c0392b;">Red shading = overtime (before 8:00 AM / after 4:30 PM)</span></div>`);
+    // 3. where the crew's hours went
+    const G = {}; P.forEach(p=>Object.keys(p.grp).forEach(g=>G[g]=(G[g]||0)+p.grp[g]));
+    const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
+    const gc = {'Lines running':CH_COL.run,'Lines stopped':CH_COL.waiting,'Side machines':CH_COL.side,'Garbage run':CH_COL.garbage,'Setup / Opening':CH_COL.setup,'Cleaning / Sanitation':CH_COL.clean,'Lent to other dept':CH_COL.lent,'Break':CH_COL.brk,'Not here':CH_COL.away,'Other':CH_COL.other,'Not recorded':CH_COL.nr};
+    const tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
+    H.push(hd(`3 · Where the crew's hours went — ${chDur(tot)} in total`));
+    H.push(`<div style="display:flex;height:22px;border-radius:5px;overflow:hidden;">${order.filter(g=>G[g]).map(g=>`<div style="width:${G[g]/tot*100}%;background:${gc[g]};"></div>`).join('')}</div>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}"><span style="display:inline-block;width:10px;height:10px;background:${gc[g]};border-radius:2px;margin-right:6px;"></span>${g==='Lines stopped'?'Lines stopped (waiting / changeover / planned / no work)':g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
+    // 4. each person, line by line
+    H.push(hd('4 · Each person — where they were'));
+    P.forEach(p=>{
+      const pos = {}; p.segs.forEach(sg=>{ if(sg.g==='Break'||sg.g==='Not recorded'||sg.g==='Not here') return; const key = MACHINES.includes(sg.w) ? sg.w : (sg.g==='Side machines' ? sg.w : sg.k); pos[key] = (pos[key]||0) + (sg.b-sg.a); });
+      H.push(`<div style="page-break-inside:avoid;margin-bottom:14px;"><div style="background:#f2f5f9;border-left:4px solid #1e3a5f;padding:6px 10px;font-size:13px;"><b>${escapeHtml(p.name.toUpperCase())}</b> · ${chFmt(p.a)} – ${chFmt(p.b)} · worked ${chDur(chWorked(p))}${p.ot?` · <span style="${red}">OT ${chDur(p.ot)}</span>`:''}${(p.tot['Not recorded']||0)?` · <span style="${red}">not recorded ${chDur(p.tot['Not recorded'])}</span>`:''}</div>
+        <table style="width:100%;border-collapse:collapse;">${p.segs.map(sg=>{ const bad = sg.g==='Not recorded'; const c = bad || sg.ot ? red : '';
+          return `<tr><td style="${td}width:150px;white-space:nowrap;${c}">${m2t(sg.a)} – ${m2t(sg.b)}</td><td style="${td}${c}"><span style="display:inline-block;width:9px;height:9px;background:${chColor(sg)};border-radius:2px;margin-right:6px;"></span>${escapeHtml(sg.k)}${sg.det?` <span style="color:#777;font-weight:400;">· ${escapeHtml(sg.det)}</span>`:''}</td><td style="${td}text-align:right;width:70px;${c}">${chDur(sg.b-sg.a)}</td><td style="${td}width:30px;${red}">${sg.ot?'OT':''}</td></tr>`; }).join('')}</table>
+        <div style="font-size:11px;color:#555;padding:4px 6px;">Positions: ${Object.keys(pos).sort((a,b)=>pos[b]-pos[a]).map(k=>`${escapeHtml(k)} ${chDur(pos[k])}`).join(' · ') || '—'}</div></div>`);
+    });
+    // 5. each position
+    const PP = positionDay(start, pd);
+    H.push(hd('5 · Each position — who was on it'));
+    if(!PP.length) H.push(`<div style="font-size:12.5px;color:#777;">No machine had names on it.</div>`);
+    PP.forEach(x=>{ const need = LINE_NEED[x.P]||0, isLine = MACHINES.includes(x.P), a = x.segs[0].a, b = x.segs[x.segs.length-1].b;
+      H.push(`<div style="page-break-inside:avoid;margin-bottom:12px;"><div style="background:#f2f5f9;border-left:4px solid ${isLine?'#2e9d5b':'#d6a21e'};padding:6px 10px;font-size:13px;"><b>${escapeHtml(x.P.toUpperCase())}</b> · ${chFmt(a)} – ${chFmt(b)}</div>
+        <table style="width:100%;border-collapse:collapse;">${x.segs.map(sg=>{ const n = sg.names.length, short = isLine && sg.st==='RUNNING' && n<need;
+          const stl = isLine ? ({RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work', BREAK:'break'}[sg.st]||'no entry') : '';
+          return `<tr><td style="${td}width:150px;white-space:nowrap;${sg.ot?red:''}">${m2t(sg.a)} – ${m2t(sg.b)}</td><td style="${td}"><b>${escapeHtml(sg.names.join(', ')||'—')}</b>${sg.trim.length?` <span style="color:#777;">+ ${escapeHtml(sg.trim.join(', '))} (trimmer)</span>`:''}</td><td style="${td}white-space:nowrap;${short?red:'color:#555;'}">${isLine?`${n} of ${need}${short?` · short ${need-n}`:''}`:`${n} packaging`}</td><td style="${td}color:#555;">${stl}${sg.reason&&sg.st!=='RUNNING'?` — ${escapeHtml(sg.reason)}`:''}${sg.ot?` <span style="${red}">OT</span>`:''}</td></tr>`; }).join('')}</table></div>`); });
+    // 6. lent out
+    const lent = []; P.forEach(p=>p.segs.forEach(sg=>{ if(sg.g==='Lent to other dept') lent.push({n:p.name, dep: sg.k.replace('Lent · ',''), a:sg.a, b:sg.b}); }));
+    H.push(hd('6 · Lent to other departments'));
+    H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`);
+  } else {
+    const days = []; for(let d = new Date(start+'T00:00:00'); localDateStr(d) <= end; d.setDate(d.getDate()+1)) days.push(localDateStr(d));
+    const acc = {}, otByDay = [];
+    days.forEach(dt=>{ const pd = personDay(dt); if(!pd) return; let dayOt = 0;
+      pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, worked:0, brk:0, ot:0, nr:0, nh:0, grp:{}}); a.days++; a.worked += chWorked(p); a.brk += p.grp['Break']||0; a.ot += p.ot; a.nr += p.tot['Not recorded']||0; a.nh += p.grp['Not here']||0; dayOt += p.ot; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); });
+      otByDay.push({dt, ot: dayOt, n: pd.people.filter(p=>p.ot).length}); });
+    const names = Object.keys(acc);
+    if(!names.length){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No names recorded in this range.</div></div>`); return H.join(''); }
+    const roster = crewRoster(); names.sort((a,b)=>(roster.indexOf(a)<0?99:roster.indexOf(a))-(roster.indexOf(b)<0?99:roster.indexOf(b)));
+    H.push(hd(`1 · Crew summary — ${otByDay.length} day${otByDay.length===1?'':'s'} with names`));
+    H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Name</th><th style="${th}">Days</th><th style="${th}">Worked</th><th style="${th}">Break</th><th style="${th}">Not here</th><th style="${th}">Overtime</th><th style="${th}">Not recorded</th></tr>
+      ${names.map(n=>{ const a = acc[n]; return `<tr><td style="${td}font-weight:700;">${escapeHtml(n)}</td><td style="${td}">${a.days}</td><td style="${td}">${chDur(a.worked)}</td><td style="${td}">${chDur(a.brk)}</td><td style="${td}">${a.nh?chDur(a.nh):'—'}</td><td style="${td}${a.ot?red:'color:#aaa;'}">${a.ot?chDur(a.ot):'—'}</td><td style="${td}${a.nr?red:'color:#aaa;'}">${a.nr?chDur(a.nr):'—'}</td></tr>`; }).join('')}</table>`));
+    const G = {}; names.forEach(n=>Object.keys(acc[n].grp).forEach(g=>G[g]=(G[g]||0)+acc[n].grp[g]));
+    const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
+    H.push(hd(`2 · Where the crew's hours went — ${chDur(tot)} in total`));
+    H.push(`<table style="width:100%;border-collapse:collapse;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}">${g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
+    H.push(hd('3 · Overtime by day'));
+    H.push(`<table style="width:100%;border-collapse:collapse;">${otByDay.map(o=>`<tr><td style="${td}">${fmtDate(o.dt)}</td><td style="${td}${o.ot?red:'color:#aaa;'}">${o.ot?`${chDur(o.ot)} · ${o.n} ${o.n===1?'person':'people'}`:'—'}</td><td style="${td}text-align:right;"><span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openCrewHours('${o.dt}')">day →</span></td></tr>`).join('')}</table>`);
+  }
+  H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">From the names picked on the Live Floor (Start Run, Change Staff, side machines, Move crew, Garbage) and Where Everyone Is. Break, Waiting and Changeover come from each line's own entries. Overtime = time before 8:00 AM or after 4:30 PM. A finish after 4:30 PM comes from the person still being on a machine or place, until it finished or they were marked Not here · Went home. Not recorded = time in the shift with no position entered.</div></div>`);
+  return H.join('');
+}
+function renderCrewHoursView(){
+  const r = crewRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setCrewPreset('${p}')">${l}</button>`;
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
+  <div class="card"><h3>👥 Crew Hours & Positions</h3>
+    <div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('yesterday','Yesterday')}${pb('7','Last 7')}${pb('30','Last 30')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setCrewDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setCrewDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
+    <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="exportCrewHoursPDF()">Export PDF</button><button class="btn btn-secondary" onclick="copyCrewHours()">Copy text</button></div>
+  </div>
+  <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${crewReportHTML(r.start, r.end)}</div>`;
+}
+async function exportCrewHoursPDF(){ const r = crewRangeNow(); await buildHtmlReportPDF(crewReportHTML(r.start, r.end, true), `Crew-Hours-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
+function crewHoursText(start, end){
+  const L = [];
+  if(start!==end){ const el = document.createElement('div'); el.innerHTML = crewReportHTML(start, end); return el.innerText; }
+  const pd = personDay(start); L.push(`CREW HOURS & POSITIONS — ${fmtDate(start)}`); L.push('Regular shift 8:00 AM – 4:30 PM');
+  if(!pd){ L.push('No names recorded.'); return L.join('\n'); }
+  const ot = pd.people.reduce((t,p)=>t+p.ot,0); if(ot) L.push(`Overtime: ${chDur(ot)} · ${pd.people.filter(p=>p.ot).length} people`);
+  pd.people.forEach(p=>{ L.push(''); L.push(`${p.name.toUpperCase()} · ${m2t(p.a)} – ${m2t(p.b)} · worked ${chDur(chWorked(p))}${p.ot?` · OT ${chDur(p.ot)}`:''}${(p.tot['Not recorded']||0)?` · NOT RECORDED ${chDur(p.tot['Not recorded'])}`:''}`);
+    p.segs.forEach(sg=>L.push(`  ${m2t(sg.a)} – ${m2t(sg.b)}  ${sg.k}${sg.det?` (${sg.det})`:''}  ${chDur(sg.b-sg.a)}${sg.ot?'  OT':''}`)); });
+  return L.join('\n');
+}
+async function copyCrewHours(){ const r = crewRangeNow(), t = crewHoursText(r.start, r.end);
+  try{ await navigator.clipboard.writeText(t); toast('Crew hours copied'); }catch(e){ prompt('Copy the crew hours:', t); } }
+
 /* ============ FLOOR VIEW (v113) ============
 The Dashboard's machine section shows the real packaging floor (floorplan.jpg, uploaded next to index.html) with live markers placed by % so they stay on the right machine on any screen. Tap a marker for the full details. Every marker reads only existing live entries (Live Floor runs, downtime reasons, Crew Board) — nothing new to enter. A Floor / Cards switch keeps the old cards available, and Cards is used automatically if the image can't load. */
 const FLOOR_SPOTS = [
@@ -2409,7 +2574,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v25';
+const FLOOR3D_REV = 'v26';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }
@@ -4900,7 +5065,8 @@ async function endShiftReport(closedN){
 function renderReportsList(){
   const list = Store.dailyReports.slice().sort((a,b)=>b.date.localeCompare(a.date));
   let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
-  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="openCrewHours(todayStr())">👥 Crew Hours & Positions</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('upstreamImpact')">🏭 Upstream Impact Summary</button>`;
   if(!list.length){ html += '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>'; return html; }
@@ -4967,7 +5133,7 @@ function renderReportView(date){
     <h3>Continuous Improvement Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
-  ${(()=>{ const secs=dayLogSections(rep.date); return secs.length ? `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3>${sectionsHTML(secs)}</div>` : ''; })()}
+  ${(()=>{ const secs=dayLogSections(rep.date); return secs.length ? `<div class="card" style="border-left:3px solid var(--amber);"><h3>Crew · MAREL · Side Machines</h3>${sectionsHTML(secs)}${personDay(rep.date)?`<button class="btn btn-secondary" style="margin-top:10px;" onclick="openCrewHours('${rep.date}')">👥 Full Crew Hours & Positions →</button>`:''}</div>` : ''; })()}
   ${(()=>{ const h=plhHeadline(rep.date); return `<div class="card" style="border-left:3px solid var(--brk);"><div style="font-size:14px;line-height:1.5;"><b style="color:var(--brk);">${h.main}</b>${h.note?` <span style="color:var(--muted);font-style:italic;">${h.note}</span>`:''}</div></div>`; })()}
   <div class="card">
     <h3>Action for Tomorrow</h3>
