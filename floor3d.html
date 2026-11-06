@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v26 · CI Tracker</title>
+<title>3D Floor · v27 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -586,7 +586,7 @@ function label(text,x,y,z,scale=1,parent){
   const L={text,canvas:c,tex:t,s,kind};LABELS.push(L);drawLabel(L);
   const k=kind==="minor"?0.85:1;s.scale.set(5.2*scale*k,1.14*scale*k,1);s.position.set(x,y,z);(parent||scene).add(s);return s;
 }
-document.fonts&&document.fonts.ready.then(()=>LABELS.forEach(drawLabel)); // redraw once the fonts have loaded
+document.fonts&&document.fonts.ready.then(()=>{LABELS.forEach(drawLabel);workers.forEach(w=>{w.tagKey=null});try{updateNameTags()}catch(e){}}); // v27: name tags redrawn once Oswald has loaded // redraw once the fonts have loaded
 
 /* ---------- equipment ---------- */
 function table(w,d,x,z,rotY=0,mat=mats.steel){
@@ -2238,15 +2238,16 @@ function lineNames(name){const l=liveRuns[name];if(!l||(l.date&&l.date!==dateKey
 function sideNames(key){const d=(rawDay||{})[dateKey()]||{};const x=(d.side||[]).filter(y=>!y.end&&SIDE_KEY[y.machine]===key).slice(-1)[0];if(!x)return[];return [...(x.names||[]),...(x.trimNames||[]).map(n=>n+" (trim)")]}
 function tagColor(key){const v=view[key];if(v){if(v.state==="run")return "#1e9e57";if(v.state==="break")return "#2f6fd1";if(v.state==="down")return v.label==="Changeover"?"#d9822b":v.label==="Planned stop"?"#7b5cd6":"#d64545";return "#555"}
   const d=(rawDay||{})[dateKey()]||{};const x=(d.side||[]).filter(y=>!y.end&&SIDE_KEY[y.machine]===key).slice(-1)[0];return x&&(x.waits||[]).some(w=>!w.end)?"#d9822b":"#c98a12"}
-function nameSprite(text,color){const c=document.createElement("canvas");c.width=320;c.height=80;const x=c.getContext("2d");x.font="bold 38px Arial";const w=Math.min(304,x.measureText(text).width+34),l=(320-w)/2;
-  x.fillStyle=color;x.beginPath();if(x.roundRect)x.roundRect(l,9,w,60,18);else x.rect(l,9,w,60);x.fill();x.strokeStyle="rgba(255,255,255,.85)";x.lineWidth=3;x.stroke();
-  x.fillStyle="#fff";x.textAlign="center";x.textBaseline="middle";x.fillText(text,160,40);
-  const t=new THREE.CanvasTexture(c);t.anisotropy=4;const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false,depthTest:false,transparent:true}));s.scale.set(1.6,0.4,1);s.position.y=2.4;s.renderOrder=20;return s}
+function nameSprite(text,color){const c=document.createElement("canvas");c.width=512;c.height=112;const x=c.getContext("2d");x.font="700 66px Oswald, 'Arial Narrow', Arial";const w=Math.min(500,x.measureText(text).width+48),h=84,l=(512-w)/2,y0=(112-h)/2;
+  x.fillStyle=color;x.beginPath();if(x.roundRect)x.roundRect(l,y0,w,h,h/2);else x.rect(l,y0,w,h);x.fill();x.strokeStyle="rgba(255,255,255,.9)";x.lineWidth=4;x.stroke();
+  x.fillStyle="#fff";x.textAlign="center";x.textBaseline="middle";x.fillText(text,256,58);
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthWrite:false,depthTest:false,transparent:true}));s.scale.set(2.4,0.53,1);s.position.y=2.55;s.renderOrder=20;return s} // v27: same size as the old Mandy sign
 function setTag(w,text,color){const k=text?text+"|"+color:"";if(w.tagKey===k)return;w.tagKey=k;if(w.tag){w.g.remove(w.tag);w.tag.material.map.dispose();w.tag.material.dispose();w.tag=null}if(text){w.tag=nameSprite(text,color);w.g.add(w.tag)}}
 function updateNameTags(){const named=new Set(),lists={};
   MACHINES.forEach(m=>lists[m.key]=lineNames(m.name));SIDE.forEach(s=>{if(!s.marel)lists[s.key]=sideNames(s.key)});
   Object.keys(lists).forEach(k=>{const nm=lists[k],col=tagColor(k);(crews[k]||[]).forEach((w,i)=>{if(nm[i]){setTag(w,nm[i],col);named.add(w)}})});
   workers.forEach(w=>{if(!named.has(w))setTag(w,"","")});
+  try{placeMandy()}catch(e){}
   renderWhoPanel()}
 /* who is not at a station: free (since when), garbage, cleaning, lent out, not here */
 function renderWhoPanel(){let el=document.getElementById("whoPanel");
@@ -2412,14 +2413,14 @@ function buildMandy(){
   const paint=()=>{x.fillStyle="#f4f6f7";x.fillRect(0,0,1024,96);x.fillStyle="#1d2a3a";x.font="700 64px Oswald, 'Arial Narrow', Arial";x.textAlign="center";x.textBaseline="middle";
     [128,384,640,896].forEach(px=>x.fillText("MANDY",px,52));tex.needsUpdate=true};
   const tex=new THREE.CanvasTexture(c);tex.anisotropy=4;paint();document.fonts&&document.fonts.ready.then(paint);
-  const band=new THREE.Mesh(new THREE.CylinderGeometry(0.188,0.19,0.075,32,1,true),new THREE.MeshStandardMaterial({map:tex,roughness:.4}));band.position.set(0,1.835,0);g.add(band);
-  label("Mandy",0,2.3,0,.42,g);
+  const band=new THREE.Mesh(new THREE.CylinderGeometry(0.188,0.19,0.075,32,1,true),new THREE.MeshStandardMaterial({map:tex,roughness:.4}));band.position.set(0,1.835,0);g.add(band); // v27: the big "Mandy" sign is gone — the name tag shows who she is
   return {g,host:null};
 }
 function placeMandy(){
   if(!MANDY)return;
   const order=["v1","v2","v3","mp","trimmer","marel","trim","bs1","dicer"];
-  let w=null;for(const k of order){const c=crews[k];if(c&&c[0]&&!c[0].leaving){w=c[0];break}}
+  let w=workers.find(x=>x.tagKey&&x.tagKey.startsWith("Mandy|"))||null; // v27: Mandy's look goes on the worker tagged Mandy
+  if(!w&&!workers.some(x=>x.tagKey))for(const k of order){const c=crews[k];if(c&&c[0]&&!c[0].leaving){w=c[0];break}}
   if(w===MANDY.host)return;
   if(MANDY.host)MANDY.host.net.visible=true;
   MANDY.host=w;if(!w){scene.remove(MANDY.g);return}
