@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v161 - 2026-11-05 (Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
+const APP_VERSION = 'v162 - 2026-11-05 (Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1051,7 +1051,7 @@ function rolesLabel(date){
   return OFFLINE_ROLES.filter(r=>roleIn(date,r)).map(r=>{ const o = date===todayStr() ? openOffline(date).find(x=>x.role===r) : null; return o ? `${r} (on the line)` : r; }).join(' + ');
 }
 /* v119: an entry still open today stops counting at the 4:30 PM shift end — the real time can be fixed in the log */
-function openEndToday(start){ const n = nowHHMM(); return (toMin(n) > SHIFT_END_MIN && toMin(start) < SHIFT_END_MIN) ? '16:30' : n; }
+function openEndToday(start){ return nowHHMM(); } // v162: overtime is normal — anything still on keeps counting to the real time (was capped at 4:30 PM). Left open overnight still closes at 4:30 PM next day (pastOpenEnd).
 function openAfterShift(){
   if(toMin(nowHHMM()) <= SHIFT_END_MIN) return [];
   const t = todayStr();
@@ -1208,7 +1208,7 @@ const CREW_FOOTNOTE_LINES = [
   'Packaging crew changes during the day (someone goes home, arrives late) are logged with the time, so the reports show e.g. 6 from 8:00 AM → 5 from 10:15 AM.',
   'A line with no headcount entered shows "not entered" and is not counted either way.',
   'Lead hand and yield operator are off-line roles, marked in or off today. When either steps in to help, tap On line / Off line and add them to that line\'s headcount on the Live Floor. Their hours are shown separately. They are not part of the crew count.',
-  'Anything left switched on after the 4:30 PM shift end stops counting at 4:30 PM; the real time can be fixed in the log.',
+  'Anything still on after the 4:30 PM shift end keeps counting to the real time (overtime) until it is switched off; a reminder shows on the Crew Board. Anything left on overnight closes at 4:30 PM that day.',
   'Line headcounts include whoever is actually working the line, so a line can show as covered only because the lead hand or yield operator stepped in.',
   'Spare = crew minus packaging staff on lines and side machines. When there is spare, the bar says why, e.g. a line not running or on No Work Scheduled. A lead hand or yield operator working a line is not taken off the spare count, since they are not part of the crew.',
   'Waiting for trimmers: a side machine can be paused while it waits for trimmed meat. That time is shown as "waited for trimmers" and is not counted as running time or labour.',
@@ -1523,7 +1523,7 @@ function renderCrewBoard(){
       <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
   return `<div class="card cb" style="border-color:${colors[0]};">
     <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub" style="font-weight:600;color:var(--text);">${subLine1}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div>${stopHtml}</div></div>
-    ${openAfterShift().length?`<div style="font-size:12px;color:var(--wait);margin:-4px 0 8px;line-height:1.4;">⚠ Still on after 4:30 PM: ${openAfterShift().join(', ')}. Counting stopped at 4:30 PM — tap Off, or fix the time in the log.</div>`:''}
+    ${openAfterShift().length?`<div style="font-size:12px;color:var(--wait);margin:-4px 0 8px;line-height:1.4;">⚠ Still on after 4:30 PM: ${openAfterShift().join(', ')}. Still counting as overtime — tap Off / End when the job is done, or fix the time in the log.</div>`:''}
     ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
     <div class="cb-lbl">OFF-LINE ROLES — STEPPING IN</div>${renderOfflineRows()}
@@ -2019,10 +2019,9 @@ async function savePlace(){
 async function saveShift(reset){
   const p = placeSetup; if(!p) return; const d = ensureDayLog(todayStr()); d.shift = d.shift || {};
   if(reset) delete d.shift[p.name];
-  else { const a = (document.getElementById('shStart')||{}).value || '08:00', b = (document.getElementById('shEnd')||{}).value || '16:30';
-    if(toMin(b) <= toMin(a)){ toast('Finish must be after start'); return; }
-    if(a==='08:00' && b==='16:30') delete d.shift[p.name]; else d.shift[p.name] = {start:a, end:b}; }
-  placeSetup = null; if(await Store.saveDayLog()){ render(); toast(reset ? `${p.name} — back to 8:00 AM–4:30 PM` : `${p.name} — shift ${fmtTime12((d.shift[p.name]||{start:'08:00'}).start)}–${fmtTime12((d.shift[p.name]||{end:'16:30'}).end)} today`); }
+  else { const a = (document.getElementById('shStart')||{}).value || '08:00';
+    if(a==='08:00') delete d.shift[p.name]; else d.shift[p.name] = {start:a}; }
+  placeSetup = null; if(await Store.saveDayLog()){ render(); toast(reset || !d.shift[p.name] ? `${p.name} — starts 8:00 AM` : `${p.name} — started ${fmtTime12(d.shift[p.name].start)} today`); }
 }
 function renderPeopleRows(){
   if(!namesOn()) return '';
@@ -2035,12 +2034,13 @@ function renderPeopleRows(){
         <button type="button" class="cb-btn" style="flex:1 1 100%;font-size:12px;${p.w==='__none'?sel:''}" onclick="placeSetup.w='__none';render()">Not on anything (free / spare)</button></div>
         <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">From</span><input type="time" id="placeAt" value="${p.at}" style="padding:8px;flex:1;min-width:0;"></span>
         <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="placeSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="savePlace()">Save</button></div>
-        <div style="width:100%;border-top:1px solid var(--line);margin-top:6px;padding-top:8px;"><span class="cb-mut">${escapeHtml(n)}'s shift today (e.g. opening at 7:30 AM)</span>
-        <span style="display:flex;gap:6px;align-items:center;width:100%;margin-top:4px;"><span class="cb-mut">Start</span><input type="time" id="shStart" value="${shiftOf(todayStr(),n).start}" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">Finish</span><input type="time" id="shEnd" value="${shiftOf(todayStr(),n).end}" style="padding:8px;flex:1;min-width:0;"></span>
-        <div style="display:flex;gap:6px;width:100%;margin-top:6px;">${shiftOf(todayStr(),n).set?`<button type="button" class="cb-btn" onclick="saveShift(true)">Back to 8:00–4:30</button>`:''}<button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="saveShift(false)">Save shift times</button></div></div></div>`; }
+        <div style="width:100%;border-top:1px solid var(--line);margin-top:6px;padding-top:8px;"><span class="cb-mut">${escapeHtml(n)} started early today? (e.g. opening at 7:30 AM — counted as overtime)</span>
+        <span style="display:flex;gap:6px;align-items:center;width:100%;margin-top:4px;"><span class="cb-mut">Started</span><input type="time" id="shStart" value="${shiftOf(todayStr(),n).start}" style="padding:8px;flex:1;min-width:0;"></span>
+        <div style="display:flex;gap:6px;width:100%;margin-top:6px;">${shiftOf(todayStr(),n).set?`<button type="button" class="cb-btn" onclick="saveShift(true)">Back to 8:00 AM</button>`:''}<button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="saveShift(false)">Save start time</button></div>
+        <div class="cb-mut" style="font-size:11.5px;margin-top:4px;">No finish time needed: after 4:30 PM their time keeps counting as overtime while they are on a machine or place, and ends when that machine finishes or you tap Not here · Went home.</div></div></div>`; }
     const w = map[n] || (placed[n] ? placed[n].w : '');
     const sh = shiftOf(todayStr(), n);
-    const since = (!map[n] && placed[n] ? ` · since ${fmtTime12(placed[n].at)}` : '') + (sh.set ? ` · shift ${fmtTime12(sh.start)}–${fmtTime12(sh.end)}` : '');
+    const since = (!map[n] && placed[n] ? ` · since ${fmtTime12(placed[n].at)}` : '') + (sh.set ? ` · started ${fmtTime12(sh.start)}` : '');
     const col = map[n] ? 'var(--run)' : (w.startsWith('Not here') ? 'var(--muted)' : (w ? 'var(--amber)' : 'var(--change)'));
     return `<div class="cb-row" style="cursor:pointer;" onclick="openPlace(${i})"><span class="cb-nm">${escapeHtml(n)}</span><span class="cb-mut" style="color:${col};font-weight:600;">${w ? escapeHtml(w)+since : 'not on anything'} ›</span></div>`;
   }).join('');
@@ -2057,14 +2057,26 @@ function lineMinuteStatus(date, m, endMin){
   return arr;
 }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
-/* v161: each person's shift for the day — 8:00 AM–4:30 PM unless set on Where Everyone Is (e.g. Mandy opening at 7:30).
-   Starts earlier on its own if the person was put on a machine before their start time. */
-function shiftOf(date, n){ const x = (((dayLogFor(date)||{}).shift)||{})[n] || {}; return {start: x.start || '08:00', end: x.end || '16:30', set: !!(x.start || x.end)}; }
+/* v162: each person's day. Regular shift 8:00 AM–4:30 PM; anything outside it is overtime (OT), shown in red.
+   Start = their start time if set on Where Everyone Is (e.g. Mandy opening at 7:30), or earlier if they were put on something earlier.
+   Finish = 4:30 PM, or later if they were still on a machine / a place after 4:30 PM — until they come off it (machine finished,
+   "Not here · Went home", End Shift). Leaving before 4:30 PM shows as Not here inside the regular shift. No finish time to type. */
+const REG_A = 8*60, REG_B = 16*60+30;
+function shiftOf(date, n){ const x = (((dayLogFor(date)||{}).shift)||{})[n] || {}; return {start: x.start || '08:00', set: !!x.start}; }
+const isActiveW = w=>!!w && !w.startsWith('Not here');
 function shiftWindow(date, n, log){
-  const sh = shiftOf(date, n); let a = toMin(sh.start), b = toMin(sh.end);
+  const isToday = date===todayStr(), nowM = toMin(nowHHMM());
+  let a = Math.min(REG_A, toMin(shiftOf(date, n).start));
   if(log && log.length && toMin(log[0].at) < a) a = Math.max(DAY_FROM, toMin(log[0].at));
-  if(date===todayStr()) b = Math.min(b, Math.max(a, toMin(nowHHMM())));
-  if(b < a) b = a; return {a, b: Math.min(b, DAY_TO), full: toMin(sh.end) - a};
+  let b = REG_B;
+  (log||[]).forEach((e,i)=>{ if(!isActiveW(e.w)) return;
+    const next = log[i+1]; const end = next ? toMin(next.at) : (isToday ? nowM : Math.max(REG_B, toMin(e.at)));
+    if(end > b) b = end; });
+  b = Math.min(b, DAY_TO);
+  if(isToday) b = Math.min(b, Math.max(a, nowM));
+  if(b < a) b = a;
+  const otA = Math.max(0, Math.min(REG_A, b) - a), otB = Math.max(0, b - Math.max(REG_B, a));
+  return {a, b, otA, otB};
 }
 function personDay(date){
   const d = dayLogFor(date); if(!d || (!d.where && !d.shift)) return null;
@@ -2090,20 +2102,23 @@ function personDay(date){
       else if(brk[i]){ k='Break'; g='Break'; } else { k='Not recorded'; g='Not recorded'; }
       tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
     }
-    return {name:n, tot, grp, total: win.b-win.a, a: win.a, b: win.b, full: win.full, custom: win.a!==480 || shiftOf(date,n).end!=='16:30'};
+    return {name:n, tot, grp, total: win.b-win.a, a: win.a, b: win.b, otA: win.otA, otB: win.otB, ot: win.otA+win.otB};
   });
   return {people, isToday};
 }
+function m2t(x){ return fmtTime12(String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0')); }
 function personDaySection(date){
   const pd = personDay(date); if(!pd) return null;
   const now = pd.isToday && toMin(nowHHMM()) < SHIFT_END_MIN;
-  const m2t = x=>fmtTime12(String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'));
-  const rows = [{k:'Shift', v: `8:00 AM – 4:30 PM (8h 30m incl. breaks) unless shown for the person${now?` · so far, up to ${fmtTime12(nowHHMM())}`:''}`}];
+  const rows = [{k:'Regular shift', v: `8:00 AM – 4:30 PM (8h 30m incl. breaks)${now?` · so far, up to ${fmtTime12(nowHHMM())}`:''}`}];
+  const otP = pd.people.filter(p=>p.ot>0), otTot = otP.reduce((t,p)=>t+p.ot,0);
+  if(otTot) rows.push({k:'Overtime', red:true, v:`${fmtShort(otTot)} in total · ${otP.length} ${otP.length===1?'person':'people'}`});
   pd.people.forEach(p=>{
     const keys = Object.keys(p.tot).filter(k=>k!=='Not recorded').sort((a,b)=>p.tot[b]-p.tot[a]);
     const nr = p.tot['Not recorded']||0;
-    const sh = shiftOf(date, p.name);
-    rows.push({k: p.name, v: (p.custom ? `[${m2t(p.a)} – ${fmtTime12(sh.end)}] ` : '') + (keys.map(k=>`${k} ${fmtShort(p.tot[k])}`).join(' · ') || '—')});
+    const custom = p.a!==REG_A || p.b!==REG_B;
+    rows.push({k: p.name, v: (custom && !(pd.isToday && p.b===toMin(nowHHMM()) && p.a===REG_A) ? `[${m2t(p.a)} – ${m2t(p.b)}] ` : '') + (keys.map(k=>`${k} ${fmtShort(p.tot[k])}`).join(' · ') || '—')});
+    if(p.ot) rows.push({k:'', sub:true, red:true, v:`⏱ Overtime ${fmtShort(p.ot)} — ${[p.otA?`${m2t(p.a)}–8:00 AM (${fmtShort(p.otA)})`:'', p.otB?`4:30–${m2t(p.b)} (${fmtShort(p.otB)})`:''].filter(Boolean).join(' · ')}`});
     if(nr) rows.push({k:'', sub:true, red:true, v:`Not recorded ${fmtShort(nr)} — accounted ${fmtShort(p.total-nr)} of ${fmtShort(p.total)}`});
   });
   return {title:'CREW HOURS — WHERE EACH PERSON WAS', rows};
@@ -2111,12 +2126,15 @@ function personDaySection(date){
 function personRangeSection(start, end){
   const days = Object.keys(Store.dayLog||{}).filter(d=>d>=start && d<=end && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   const acc = {}; let nDays = 0;
-  days.forEach(d=>{ const pd = personDay(d); if(!pd) return; nDays++; pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, total:0, grp:{}}); a.days++; a.total += p.total; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); }); });
+  days.forEach(d=>{ const pd = personDay(d); if(!pd) return; nDays++; pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, total:0, ot:0, otDays:0, grp:{}}); a.days++; a.total += p.total; a.ot += p.ot; if(p.ot) a.otDays++; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); }); });
   const names = Object.keys(acc); if(!names.length) return null;
   const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
   const roster = crewRoster(); names.sort((a,b)=>(roster.indexOf(a)<0?99:roster.indexOf(a))-(roster.indexOf(b)<0?99:roster.indexOf(b)));
   const rows = [{k:'Days with names', v:`${nDays}`}];
-  names.forEach(n=>{ const a = acc[n]; rows.push({k:n, v:`${a.days} day${a.days===1?'':'s'} · `+order.filter(g=>a.grp[g]).map(g=>`${g} ${fmtShort(a.grp[g])} (${Math.round(a.grp[g]/a.total*100)}%)`).join(' · ')}); });
+  const otTot = names.reduce((t,n)=>t+acc[n].ot,0);
+  if(otTot) rows.push({k:'Overtime', red:true, v:`${fmtShort(otTot)} in total · ${names.filter(n=>acc[n].ot).length} people`});
+  names.forEach(n=>{ const a = acc[n]; rows.push({k:n, v:`${a.days} day${a.days===1?'':'s'} · `+order.filter(g=>a.grp[g]).map(g=>`${g} ${fmtShort(a.grp[g])} (${Math.round(a.grp[g]/a.total*100)}%)`).join(' · ')});
+    if(a.ot) rows.push({k:'', sub:true, red:true, v:`⏱ Overtime ${fmtShort(a.ot)} on ${a.otDays} day${a.otDays===1?'':'s'}`}); });
   return {title:'CREW HOURS BY PERSON', rows};
 }
 /* ---- Settings: crew list ---- */
