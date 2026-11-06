@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v160 - 2026-11-05 (Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
+const APP_VERSION = 'v161 - 2026-11-05 (Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1303,7 +1303,9 @@ async function syncGarbage(){
   const date = todayStr(), evs = garbageEvents(date).filter(e=>!e.end); if(!evs.length) return;
   let chD = false, chL = false; const now = nowHHMM();
   evs.forEach(e=>{ const live = Store.liveRuns[e.machine];
-    if(!live || live.gOut!==e.id){ e.end = openEndToday(e.start); chD = true; return; }
+    if(!live || live.gOut!==e.id){ e.end = openEndToday(e.start); chD = true;
+      if(e.who && !whereNowMap()[e.who]){ const dd = ensureDayLog(date); dd.place = dd.place || {}; if(!dd.place[e.who]) dd.place[e.who] = {w:'Garbage run', at: e.end}; } // v161: line finished while out — still on garbage until placed
+      return; }
     const dt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
     if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='NO_WORK'){ e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null; chD = chL = true; return; }
     if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='BREAK'){
@@ -1857,6 +1859,7 @@ picked, so PLH, the Crew Board and every report count exactly as before.
 - With no names in the crew list (Settings), everything works by count, exactly like v158. */
 const DEFAULT_ROSTER = ['Mandy','Harpreet','Stanley','Winston','Sandeep','Krishan','Mohamad','Jeevan'];
 const PLACES = [
+  {w:'Setup / Opening', g:'Setup / Opening', s:'Setup'},
   {w:'Cleaning / Sanitation', g:'Cleaning / Sanitation', s:'Cleaning'},
   {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
   {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
@@ -2013,6 +2016,14 @@ async function savePlace(){
   placeSetup = null;
   const ok = await Store.saveDayLog(); if(ok){ render(); toast(`${p.name} — ${w || 'not on anything'} from ${fmtTime12(p.at)}`); }
 }
+async function saveShift(reset){
+  const p = placeSetup; if(!p) return; const d = ensureDayLog(todayStr()); d.shift = d.shift || {};
+  if(reset) delete d.shift[p.name];
+  else { const a = (document.getElementById('shStart')||{}).value || '08:00', b = (document.getElementById('shEnd')||{}).value || '16:30';
+    if(toMin(b) <= toMin(a)){ toast('Finish must be after start'); return; }
+    if(a==='08:00' && b==='16:30') delete d.shift[p.name]; else d.shift[p.name] = {start:a, end:b}; }
+  placeSetup = null; if(await Store.saveDayLog()){ render(); toast(reset ? `${p.name} — back to 8:00 AM–4:30 PM` : `${p.name} — shift ${fmtTime12((d.shift[p.name]||{start:'08:00'}).start)}–${fmtTime12((d.shift[p.name]||{end:'16:30'}).end)} today`); }
+}
 function renderPeopleRows(){
   if(!namesOn()) return '';
   const map = whereNowMap(), placed = (dayLogFor(todayStr())||{}).place || {}, roster = crewRoster();
@@ -2023,37 +2034,53 @@ function renderPeopleRows(){
         <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${PLACES.map((x,j)=>`<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;${p.w===x.w?sel:''}" onclick="placeSetup.w=PLACES[${j}].w;render()">${escapeHtml(x.w)}</button>`).join('')}
         <button type="button" class="cb-btn" style="flex:1 1 100%;font-size:12px;${p.w==='__none'?sel:''}" onclick="placeSetup.w='__none';render()">Not on anything (free / spare)</button></div>
         <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">From</span><input type="time" id="placeAt" value="${p.at}" style="padding:8px;flex:1;min-width:0;"></span>
-        <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="placeSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="savePlace()">Save</button></div></div>`; }
+        <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="placeSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="savePlace()">Save</button></div>
+        <div style="width:100%;border-top:1px solid var(--line);margin-top:6px;padding-top:8px;"><span class="cb-mut">${escapeHtml(n)}'s shift today (e.g. opening at 7:30 AM)</span>
+        <span style="display:flex;gap:6px;align-items:center;width:100%;margin-top:4px;"><span class="cb-mut">Start</span><input type="time" id="shStart" value="${shiftOf(todayStr(),n).start}" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">Finish</span><input type="time" id="shEnd" value="${shiftOf(todayStr(),n).end}" style="padding:8px;flex:1;min-width:0;"></span>
+        <div style="display:flex;gap:6px;width:100%;margin-top:6px;">${shiftOf(todayStr(),n).set?`<button type="button" class="cb-btn" onclick="saveShift(true)">Back to 8:00–4:30</button>`:''}<button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="saveShift(false)">Save shift times</button></div></div></div>`; }
     const w = map[n] || (placed[n] ? placed[n].w : '');
-    const since = !map[n] && placed[n] ? ` · since ${fmtTime12(placed[n].at)}` : '';
+    const sh = shiftOf(todayStr(), n);
+    const since = (!map[n] && placed[n] ? ` · since ${fmtTime12(placed[n].at)}` : '') + (sh.set ? ` · shift ${fmtTime12(sh.start)}–${fmtTime12(sh.end)}` : '');
     const col = map[n] ? 'var(--run)' : (w.startsWith('Not here') ? 'var(--muted)' : (w ? 'var(--amber)' : 'var(--change)'));
     return `<div class="cb-row" style="cursor:pointer;" onclick="openPlace(${i})"><span class="cb-nm">${escapeHtml(n)}</span><span class="cb-mut" style="color:${col};font-weight:600;">${w ? escapeHtml(w)+since : 'not on anything'} ›</span></div>`;
   }).join('');
   return `<div class="cb-lbl">WHERE EVERYONE IS</div>${rows}<div class="cb-mut" style="font-size:11.5px;margin:2px 0 6px;">Machines fill this in by themselves when you pick names on Start Run / Change Staff / side machines. Tap a name for cleaning, lent out, or not here.</div>`;
 }
 /* ---- report: where each person's shift went ---- */
+const DAY_FROM = 5*60, DAY_TO = 20*60; // v161: per-person shifts can start early (e.g. 7:30 AM openers) or finish late
 function lineMinuteStatus(date, m, endMin){
   const PR = {BREAK:6, WAITING:5, CHANGEOVER:4, PLANNED:3, NO_WORK:2, RUNNING:1};
-  const arr = new Array(SHIFT_END_MIN-SHIFT_START_MIN).fill('');
+  const arr = new Array(DAY_TO-DAY_FROM).fill('');
   const recs = Store.records.filter(r=>r.date===date && r.machine===m && !r.side).concat(date===todayStr() ? liveSoFarRecords().filter(r=>r.machine===m) : []);
-  recs.forEach(r=>{ if(!r.startTime || !r.endTime) return; const a = Math.max(SHIFT_START_MIN, toMin(r.startTime)), b = Math.min(endMin, toMin(r.endTime));
-    for(let t=a;t<b;t++){ const i = t-SHIFT_START_MIN; if((PR[r.status]||0) > (PR[arr[i]]||0)) arr[i] = r.status; } });
+  recs.forEach(r=>{ if(!r.startTime || !r.endTime) return; const a = Math.max(DAY_FROM, toMin(r.startTime)), b = Math.min(endMin, DAY_TO, toMin(r.endTime));
+    for(let t=a;t<b;t++){ const i = t-DAY_FROM; if((PR[r.status]||0) > (PR[arr[i]]||0)) arr[i] = r.status; } });
   return arr;
 }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
+/* v161: each person's shift for the day — 8:00 AM–4:30 PM unless set on Where Everyone Is (e.g. Mandy opening at 7:30).
+   Starts earlier on its own if the person was put on a machine before their start time. */
+function shiftOf(date, n){ const x = (((dayLogFor(date)||{}).shift)||{})[n] || {}; return {start: x.start || '08:00', end: x.end || '16:30', set: !!(x.start || x.end)}; }
+function shiftWindow(date, n, log){
+  const sh = shiftOf(date, n); let a = toMin(sh.start), b = toMin(sh.end);
+  if(log && log.length && toMin(log[0].at) < a) a = Math.max(DAY_FROM, toMin(log[0].at));
+  if(date===todayStr()) b = Math.min(b, Math.max(a, toMin(nowHHMM())));
+  if(b < a) b = a; return {a, b: Math.min(b, DAY_TO), full: toMin(sh.end) - a};
+}
 function personDay(date){
-  const d = dayLogFor(date); if(!d || !d.where) return null;
-  const roster = crewRoster(), names = [...roster, ...Object.keys(d.where).filter(n=>!roster.includes(n))].filter(n=>d.where[n] && d.where[n].length && !OFFLINE_ROLES.includes(n));
+  const d = dayLogFor(date); if(!d || (!d.where && !d.shift)) return null;
+  const where = d.where || {}, roster = crewRoster();
+  const names = [...roster, ...Object.keys(where).filter(n=>!roster.includes(n))].filter(n=>((where[n] && where[n].length) || (d.shift && d.shift[n])) && !OFFLINE_ROLES.includes(n));
   if(!names.length) return null;
-  const isToday = date===todayStr(), endMin = isToday ? Math.min(SHIFT_END_MIN, Math.max(SHIFT_START_MIN, toMin(nowHHMM()))) : SHIFT_END_MIN;
-  const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, endMin));
-  const brk = new Array(SHIFT_END_MIN-SHIFT_START_MIN).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
+  const isToday = date===todayStr();
+  const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, DAY_TO));
+  const brk = new Array(DAY_TO-DAY_FROM).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
   const side = sideIntervals(date);
   const people = names.map(n=>{
-    const log = d.where[n].slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), tot = {}, grp = {};
-    for(let t=SHIFT_START_MIN; t<endMin; t++){
+    const log = (where[n]||[]).slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), tot = {}, grp = {};
+    const win = shiftWindow(date, n, log);
+    for(let t=win.a; t<win.b; t++){
       let w = ''; for(const e of log){ if(toMin(e.at)<=t) w = e.w; else break; }
-      const i = t-SHIFT_START_MIN; let k, g;
+      const i = t-DAY_FROM; let k, g;
       if(MACHINES.includes(w)){ const s = st[w][i]; if(s==='BREAK'){ k='Break'; g='Break'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
       else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
@@ -2063,17 +2090,20 @@ function personDay(date){
       else if(brk[i]){ k='Break'; g='Break'; } else { k='Not recorded'; g='Not recorded'; }
       tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
     }
-    return {name:n, tot, grp, total: endMin-SHIFT_START_MIN};
+    return {name:n, tot, grp, total: win.b-win.a, a: win.a, b: win.b, full: win.full, custom: win.a!==480 || shiftOf(date,n).end!=='16:30'};
   });
-  return {people, endMin, isToday};
+  return {people, isToday};
 }
 function personDaySection(date){
   const pd = personDay(date); if(!pd) return null;
-  const rows = [{k:'Shift', v: pd.isToday && pd.endMin<SHIFT_END_MIN ? `8:00 AM – now (${fmtTime12(nowHHMM())}) · so far` : '8:00 AM – 4:30 PM (8h 30m incl. breaks)'}];
+  const now = pd.isToday && toMin(nowHHMM()) < SHIFT_END_MIN;
+  const m2t = x=>fmtTime12(String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'));
+  const rows = [{k:'Shift', v: `8:00 AM – 4:30 PM (8h 30m incl. breaks) unless shown for the person${now?` · so far, up to ${fmtTime12(nowHHMM())}`:''}`}];
   pd.people.forEach(p=>{
     const keys = Object.keys(p.tot).filter(k=>k!=='Not recorded').sort((a,b)=>p.tot[b]-p.tot[a]);
     const nr = p.tot['Not recorded']||0;
-    rows.push({k: p.name, v: keys.map(k=>`${k} ${fmtShort(p.tot[k])}`).join(' · ') || '—'});
+    const sh = shiftOf(date, p.name);
+    rows.push({k: p.name, v: (p.custom ? `[${m2t(p.a)} – ${fmtTime12(sh.end)}] ` : '') + (keys.map(k=>`${k} ${fmtShort(p.tot[k])}`).join(' · ') || '—')});
     if(nr) rows.push({k:'', sub:true, red:true, v:`Not recorded ${fmtShort(nr)} — accounted ${fmtShort(p.total-nr)} of ${fmtShort(p.total)}`});
   });
   return {title:'CREW HOURS — WHERE EACH PERSON WAS', rows};
@@ -2083,7 +2113,7 @@ function personRangeSection(start, end){
   const acc = {}; let nDays = 0;
   days.forEach(d=>{ const pd = personDay(d); if(!pd) return; nDays++; pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, total:0, grp:{}}); a.days++; a.total += p.total; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); }); });
   const names = Object.keys(acc); if(!names.length) return null;
-  const order = ['Lines running','Lines stopped','Side machines','Garbage run','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
+  const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
   const roster = crewRoster(); names.sort((a,b)=>(roster.indexOf(a)<0?99:roster.indexOf(a))-(roster.indexOf(b)<0?99:roster.indexOf(b)));
   const rows = [{k:'Days with names', v:`${nDays}`}];
   names.forEach(n=>{ const a = acc[n]; rows.push({k:n, v:`${a.days} day${a.days===1?'':'s'} · `+order.filter(g=>a.grp[g]).map(g=>`${g} ${fmtShort(a.grp[g])} (${Math.round(a.grp[g]/a.total*100)}%)`).join(' · ')}); });
