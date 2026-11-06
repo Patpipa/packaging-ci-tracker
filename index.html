@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v162 - 2026-11-05 (Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
+const APP_VERSION = 'v163 - 2026-11-05 (Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1509,6 +1509,7 @@ function renderCrewBoard(){
       <div style="margin:-2px 0 6px;"><span class="cb-link" onclick="crewLogOpen=!crewLogOpen;render()">${crewLogOpen?'▲ Hide':'▼ Show'} crew log (${ctl.length})</span>
       ${crewLogOpen ? ctl.map((e,i)=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;font-size:12px;"><span style="display:flex;gap:4px;align-items:center;">From <input type="time" value="${e.at}" onchange="editCrewEntry('${e.id}','at',this.value)" style="padding:6px;width:auto;font-size:12px;"> crew <select onchange="editCrewEntry('${e.id}','n',this.value)" style="padding:6px 26px 6px 10px;width:auto;min-width:64px;font-size:12px;">${Array.from({length:15},(_,k)=>k+1).map(n=>`<option ${n===e.n?'selected':''}>${n}</option>`).join('')}</select></span><span style="display:flex;gap:6px;align-items:center;">${i>0?`<span class="cb-mut">${escapeHtml(e.reason||'')}</span><span class="cb-link" style="color:var(--wait);" onclick="deleteCrewEntry('${e.id}')">✕</span>`:'<span class="cb-mut">start</span>'}</span>${i>0 && e.reason==='Other'?`<input type="text" maxlength="60" placeholder="Note — what happened?" value="${escapeHtml(e.note||'')}" onchange="editCrewEntry('${e.id}','note',this.value)" style="padding:6px;width:100%;font-size:12px;">`:''}</div>`).join('') : ''}</div>`;
   }
+  if(namesCrewActive(todayStr())) crewRow = namesCrewRowHTML(); // v163: crew comes from the names
   const late = d.marelEnd && toMin(d.marelEnd) > SHIFT_END_MIN;
   const marelRow = `<div class="cb-row" style="flex-wrap:wrap;gap:8px;"><span class="cb-nm">MAREL cutting</span>
       <span class="cb-mut">${d.marelStart?`Start ${fmtTime12(d.marelStart)}`:'Start —'} · ${d.marelEnd?`<span style="${late?'color:var(--wait);font-weight:700;':''}">Finish ${fmtTime12(d.marelEnd)}</span>`:'Finish —'}</span>
@@ -1523,6 +1524,7 @@ function renderCrewBoard(){
       <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
   return `<div class="card cb" style="border-color:${colors[0]};">
     <div class="cb-hd" style="background:${colors[1]};border-color:${colors[0]};"><div><div class="cb-big" style="color:${colors[0]};">${title}</div><div class="cb-sub" style="font-weight:600;color:var(--text);">${subLine1}</div><div class="cb-sub">${subParts.join(' · ')}${c.sideTrim?` · ${c.sideTrim} trimmer helping`:''}</div>${stopHtml}</div></div>
+    ${renderFreeNamesHTML()}
     ${openAfterShift().length?`<div style="font-size:12px;color:var(--wait);margin:-4px 0 8px;line-height:1.4;">⚠ Still on after 4:30 PM: ${openAfterShift().join(', ')}. Still counting as overtime — tap Off / End when the job is done, or fix the time in the log.</div>`:''}
     ${c.notEntered.length?`<div style="font-size:11.5px;color:var(--change);margin:-4px 0 8px;">Headcount not entered: ${c.notEntered.join(', ')} — not counted.</div>`:''}
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
@@ -1912,16 +1914,16 @@ async function moveFromOthers(names, here, at, exceptSideId){
   const T = todayStr(), lines = [], sides = [], blocked = [];
   MACHINES.forEach(m=>{ if(m===here) return; const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || !(l.segments||[]).length) return;
     const cur = liveNames(l), left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
-    if(!left.length && l.status==='RUNNING') blocked.push(`${cur.join(' & ')} ${cur.length===1?'is':'are'} the only one on ${m} while it's running — finish it, stop it, or change its crew first`);
-    else lines.push({m, l, left}); });
+    if(!left.length && l.status==='RUNNING') blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${m} while it's running — finish it, stop it, or change its crew first`);
+    else lines.push({m, l, left, gone: cur.filter(n=>!left.includes(n))}); });
   openSideRuns(T).forEach(x=>{ if(x.id===exceptSideId) return; const cur = x.names||[], left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
-    if(!left.length && !(x.trim||0)) blocked.push(`${cur.join(' & ')} ${cur.length===1?'is':'are'} the only one on ${x.machine} — End it or change its crew first`);
+    if(!left.length && !(x.trim||0)) blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${x.machine} — End it or change its crew first`);
     else sides.push({x, left}); });
   if(blocked.length){ toast(blocked[0]); return false; }
   if(!lines.length && !sides.length) return true;
-  lines.forEach(({l, left})=>{ const ls = l.segments[l.segments.length-1];
+  lines.forEach(({l, left, gone})=>{ const ls = l.segments[l.segments.length-1];
     if(l.status==='RUNNING'){ ls.end = at; l.segments.push({start: at, end:null, employees: left.length, names: left}); }
-    else { l.pendingEmployees = left.length; l.pendingNames = left; } });
+    else { l.pendingEmployees = left.length; l.pendingNames = left; l.awayNames = [...new Set([...(l.awayNames||[]), ...gone])]; } }); // v163: offered back when the line resumes
   const d = ensureDayLog(T);
   sides.forEach(({x, left})=>{ const wasWaiting = !!sideOpenWait(x); closeSideWaits(x, at); x.end = at; if(!x.jobId) x.jobId = x.id;
     const tn = (x.trainNames||[]).filter(n=>left.includes(n));
@@ -2157,6 +2159,164 @@ async function removeRosterName(i){ const r = crewRoster(), n = r[i]; if(n==null
   if(!confirm(`Remove ${n} from the crew list?\n\nTheir past hours stay in the reports.`)) return;
   Store.settings = {...Store.settings, crewRoster: r.filter((_,j)=>j!==i)}; if(await Store.saveSettings()){ toast(`${n} removed`); render(); } }
 async function removeTrimmerName(i){ const t = trimmerList(); if(t[i]==null) return; Store.settings = {...Store.settings, trimmerNames: t.filter((_,j)=>j!==i)}; if(await Store.saveSettings()) render(); }
+
+/* ============ v163: MOVE CREW · BRING BACK · CREW FROM NAMES · WHO IS FREE ============ */
+let moveCrew = null;      // {m, sel:[], dest:''}
+let liveBringBack = null; // {m, names:[], sel:[]}
+function uniq(a){ return [...new Set(a)]; }
+function moveDests(m){
+  const T = todayStr(), out = [];
+  MACHINES.filter(x=>x!==m).forEach(x=>{ const l = Store.liveRuns[x]; const on = l && !isStaleLive(l) && (l.segments||[]).length;
+    out.push({key:x, grp:'Lines', label: shortM(x), sub: !on ? 'not started' : (l.status==='RUNNING' ? 'running' : 'stopped')}); });
+  SIDE_MACHINES.forEach(sm=>{ const on = openSideRuns(T).some(s=>s.machine===sm.name); out.push({key:sm.name, grp:'Side machines', label: sm.name, sub: on ? 'on' : 'off'}); });
+  PLACES.filter(p=>!p.w.startsWith('Not here') && p.w!=='Setup / Opening').forEach(p=>out.push({key:p.w, grp:'Other', label:p.w.replace('Lent · ','Lent: '), sub:''}));
+  out.push({key:'__none', grp:'Other', label:'Free / not on anything', sub:''});
+  return out;
+}
+function openMoveCrew(m){ moveCrew = {m, sel: [], dest: ''}; liveBringBack = null; render(); }
+function toggleMoveSel(i){ const mc = moveCrew; if(!mc) return; const n = liveNames(Store.liveRuns[mc.m])[i]; if(n==null) return;
+  mc.sel = mc.sel.includes(n) ? mc.sel.filter(x=>x!==n) : [...mc.sel, n]; render(); }
+function moveCrewHTML(m, live){
+  const mc = moveCrew, names = liveNames(live), dests = moveDests(m);
+  const sel = 'border-color:var(--brk);color:var(--brk);background:var(--brk-dim);';
+  const grp = g=>`<div class="cb-mut" style="margin:8px 0 4px;">${g}</div><div style="display:flex;gap:5px;flex-wrap:wrap;">${dests.map((d,i)=>d.grp!==g?'':`<button type="button" class="cb-btn" style="flex:1 1 30%;font-size:12px;${mc.dest===d.key?sel:''}" onclick="moveCrew.dest=moveDests('${m}')[${i}].key;render()">${escapeHtml(d.label)}${d.sub?`<div style="font-size:10px;opacity:.75;text-transform:none;">${d.sub}</div>`:''}</button>`).join('')}</div>`;
+  return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--brk);border-radius:10px;">
+    <div style="font-size:12px;color:var(--brk);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">👥 MOVE CREW FROM ${escapeHtml(m.toUpperCase())} — WHO IS MOVING?</div>
+    <div class="nm-grid">${names.map((n,i)=>`<button type="button" class="nm-chip${mc.sel.includes(n)?' on':''}" onclick="toggleMoveSel(${i})">${mc.sel.includes(n)?'✓ ':''}${escapeHtml(n)}</button>`).join('')}</div>
+    <div class="cb-mut" style="margin-top:8px;font-weight:700;color:var(--text);">Send them to:</div>
+    ${grp('Lines')}${grp('Side machines')}${grp('Other')}
+    <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="moveCrew=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="doMoveCrew()">Move ${mc.sel.length||''} →</button></div></div>`;
+}
+let moveBusy = false;
+async function doMoveCrew(){
+  const mc = moveCrew; if(!mc || moveBusy) return;
+  if(!mc.sel.length){ toast('Tap who is moving'); return; }
+  if(!mc.dest){ toast('Pick where they are going'); return; }
+  moveBusy = true;
+  try{
+    const sel = mc.sel.slice(), dest = mc.dest, T = todayStr();
+    if(MACHINES.includes(dest)){
+      const l2 = Store.liveRuns[dest];
+      if(l2 && !isStaleLive(l2) && (l2.segments||[]).length){
+        moveCrew = null; liveStaffSetup = {machine: dest, names: uniq([...liveNames(l2), ...sel]), employees: 0}; liveStaffSetup.employees = liveStaffSetup.names.length;
+        await confirmStaffChange(); if(liveStaffSetup){ liveStaffSetup = null; moveCrew = mc; render(); } return; }
+      moveCrew = null; startLiveRunSetup(dest); liveSetup.names = sel; liveSetup.employees = sel.length; render();
+      setTimeout(()=>{ const el = document.getElementById('live-card-'+machineIdSafe(dest)); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+      toast(`${dest} — tap ▶ Start Run (product can wait)`); return;
+    }
+    if(SIDE_MACHINES.some(x=>x.name===dest)){
+      const open = openSideRuns(T).find(s=>s.machine===dest);
+      moveCrew = null;
+      if(open){ openSideSetup(dest, open.id); const all = uniq([...(sideSetup.names||[]), ...sel]);
+        if(all.length > SIDE_PACK_MAX){ toast(`${dest} takes up to ${SIDE_PACK_MAX} packaging`); sideSetup = null; moveCrew = mc; render(); return; }
+        sideSetup.names = all; syncPickCounts('side', sideSetup); await confirmSide(); if(sideSetup){ sideSetup = null; moveCrew = mc; render(); } return; }
+      openSideSetup(dest); sideSetup.names = sel.slice(0, SIDE_PACK_MAX); syncPickCounts('side', sideSetup); render();
+      setTimeout(()=>{ const el = [...document.querySelectorAll('.cb-row')].find(x=>x.innerText.includes(dest) && x.innerText.toUpperCase().includes('WHO IS ON IT')); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
+      toast(`${dest} — ${dest==='Vacuum Sealer'?'pick the product, then ':''}tap ▶ Start`); return;
+    }
+    // a place off the machines (or free)
+    moveCrew = null;
+    for(const n of sel){ placeSetup = {name: n, w: dest, at: nowHHMM()}; await savePlace(); if(placeSetup){ placeSetup = null; break; } }
+    render();
+  } finally { moveBusy = false; }
+}
+/* Bring back: people who left a line while it was stopped are offered back when it resumes */
+function toggleBringSel(i){ const b = liveBringBack; if(!b) return; const n = b.names[i]; if(n==null) return; b.sel = b.sel.includes(n) ? b.sel.filter(x=>x!==n) : [...b.sel, n]; render(); }
+function bringBackHTML(m){
+  const b = liveBringBack; if(!b || b.m!==m) return '';
+  return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--run);border-radius:10px;">
+    <div style="font-size:12px;color:var(--run);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">▶ ${escapeHtml(m.toUpperCase())} RUNNING AGAIN — BRING BACK THE CREW THAT LEFT?</div>
+    <div class="nm-grid">${b.names.map((n,i)=>{ const w = whereOf(n); return `<button type="button" class="nm-chip${b.sel.includes(n)?' on':''}" onclick="toggleBringSel(${i})">${b.sel.includes(n)?'✓ ':''}${escapeHtml(n)}${w?`<small>${escapeHtml(shortWhere(w))}</small>`:'<small>free</small>'}</button>`; }).join('')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="liveBringBack=null;render()">Not now</button><button type="button" class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="doBringBack()">Bring back ${b.sel.length||''}</button></div></div>`;
+}
+async function doBringBack(){
+  const b = liveBringBack; if(!b) return; if(!b.sel.length){ liveBringBack = null; render(); return; }
+  const l = Store.liveRuns[b.m]; if(!l){ liveBringBack = null; render(); return; }
+  const emptied = openSideRuns(todayStr()).filter(x=>(x.names||[]).length && x.names.every(n=>b.sel.includes(n)) && !(x.trim||0));
+  if(emptied.length){
+    if(!confirm(`Bringing back ${b.sel.join(' & ')} leaves ${emptied.map(x=>x.machine).join(' & ')} with nobody.
+
+Stop ${emptied.map(x=>x.machine).join(' & ')} now? (QTY / LBS can be added later)`)) return;
+    for(const x of emptied) await stopSide(x.id);
+  }
+  liveStaffSetup = {machine: b.m, names: uniq([...liveNames(l), ...b.sel]), employees: 0}; liveStaffSetup.employees = liveStaffSetup.names.length;
+  await confirmStaffChange();
+  if(!liveStaffSetup) liveBringBack = null; else liveStaffSetup = null;
+  render();
+}
+{ const _r = resumeRun; resumeRun = async function(m){
+    const b0 = Store.liveRuns[m]; const away = b0 && Array.isArray(b0.awayNames) ? b0.awayNames.slice() : [];
+    const res = await _r(m);
+    const l = Store.liveRuns[m];
+    if(l && l.status==='RUNNING' && away.length){
+      delete l.awayNames; await _saveLiveRaw.call(Store);
+      const here = liveNames(l); const back = away.filter(n=>!here.includes(n) && !String(whereOf(n)).startsWith('Not here'));
+      if(back.length){ liveBringBack = {m, names: back, sel: back.slice()}; render(); }
+    }
+    return res; }; }
+/* ---- crew number from the names (people here today) ---- */
+const awayW = w=>!!w && (w.startsWith('Not here') || w.startsWith('Lent'));
+function namesCrewActive(date){ const d = dayLogFor(date); return namesOn() && !!(d && d.where && Object.keys(d.where).some(n=>!OFFLINE_ROLES.includes(n) && (d.where[n]||[]).length)); }
+function namesCrewTimeline(date){
+  const d = dayLogFor(date); if(!d || !d.where) return [];
+  const ppl = Object.keys(d.where).filter(n=>!OFFLINE_ROLES.includes(n) && (d.where[n]||[]).length).map(n=>({n, log: d.where[n].slice().sort((a,b)=>toMin(a.at)-toMin(b.at))}));
+  const base = Math.min(...ppl.map(p=>toMin(p.log[0].at))), startCut = Math.max(8*60+30, base+30), dayStart = Math.min(8*60, base);
+  const stateAt = (p, t)=>{ const first = p.log[0]; const from = toMin(first.at) <= startCut ? Math.min(toMin(first.at), Math.max(dayStart, base<=8*60+30 ? dayStart : base)) : toMin(first.at);
+    if(t < from) return {here:false, w:'__before'}; let w = first.w; for(const e of p.log){ if(toMin(e.at)<=t) w = e.w; else break; } return {here: !awayW(w), w}; };
+  const t0 = base<=8*60+30 ? dayStart : base;
+  const times = uniq([t0, ...ppl.flatMap(p=>p.log.map(e=>toMin(e.at)))]).filter(t=>t>=t0).sort((a,b)=>a-b);
+  const out = []; let prev = null;
+  times.forEach(t=>{ const n = ppl.filter(p=>stateAt(p,t).here).length;
+    if(prev && n===prev.n) return;
+    let reason = '';
+    if(prev){ const was = ppl.filter(p=>stateAt(p,t-1).here), now = ppl.filter(p=>stateAt(p,t).here);
+      const left = was.filter(p=>!now.includes(p)), came = now.filter(p=>!was.includes(p));
+      const why = p=>{ const w = stateAt(p,t).w; return w.startsWith('Lent') ? `${p.n} → ${w.replace('Lent · ','')}` : w==='Not here · Went home' ? `${p.n} went home` : w.startsWith('Not here') ? `${p.n} ${w.replace('Not here · ','').toLowerCase()}` : p.n; };
+      const cameWhy = p=>{ const w0 = stateAt(p,t-1).w; return w0.startsWith('Lent') ? `${p.n} back from ${w0.replace('Lent · ','')}` : `${p.n} arrived`; };
+      reason = [...left.map(why), ...came.map(cameWhy)].join(', ');
+    }
+    const hh = String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+    const e = {id:'n'+t, at: hh, n, reason: reason ? 'Other' : '', note: reason};
+    out.push(e); prev = e; });
+  return out;
+}
+{ const _ct = crewTimeline; crewTimeline = function(date){ if(namesCrewActive(date)){ const t = namesCrewTimeline(date); if(t.length) return t; } return _ct(date); }; }
+function notPlacedYet(){ const d = dayLogFor(todayStr()) || {}, w = d.where || {}, p = d.place || {}; return crewRoster().filter(n=>!(w[n]||[]).length && !p[n]); }
+function namesCrewRowHTML(){
+  const T = todayStr(), ct = crewTimeline(T), cur = ct.length ? ct[ct.length-1].n : 0, d = dayLogFor(T) || {};
+  const placed = d.place || {}, away = crewRoster().filter(n=>{ const w = whereOf(n); return awayW(w); });
+  const np = notPlacedYet();
+  return `<div class="cb-row" style="gap:10px;flex-wrap:wrap;"><span class="cb-nm">Packaging crew here</span><span style="display:flex;align-items:center;gap:8px;"><b class="mono" style="font-size:18px;">${cur}</b><span class="cb-mut">from names</span></span>
+    ${away.length?`<div class="cb-mut" style="width:100%;">${away.map(n=>`${escapeHtml(n)} — ${escapeHtml(whereOf(n).replace('Not here · ','not here: ').replace('Lent · ','lent to '))}`).join(' · ')}</div>`:''}
+    ${np.length?`<div class="cb-mut" style="width:100%;color:var(--change);">Not placed yet: ${escapeHtml(np.join(', '))} — start them on a machine, or tap their name below</div>`:''}
+    ${ct.length>1?`<div class="cb-mut" style="width:100%;font-size:11.5px;">${ct.map((e,i)=>`${fmtTime12(e.at)} ${e.n}${i&&e.note?` (${escapeHtml(e.note)})`:''}`).join(' → ')}</div>`:''}</div>`;
+}
+/* ---- who is free right now, since when, and why ---- */
+function freeWhy(n){
+  const log = (((dayLogFor(todayStr())||{}).where)||{})[n] || []; const prev = log.length>1 ? log[log.length-2].w : '';
+  if(!prev) return 'not on anything yet';
+  if(MACHINES.includes(prev)){ const l = Store.liveRuns[prev]; if(!l || isStaleLive(l)) return `${shortM(prev)} finished`;
+    if(l.status!=='RUNNING'){ const s = lineStopNow(prev); return `${shortM(prev)} ${s.st ? s.st.label.toLowerCase() : 'stopped'}${s.reason?` — ${s.reason}`:''}`; } return `moved off ${shortM(prev)}`; }
+  if(SIDE_MACHINES.some(x=>x.name===prev)) return `${prev} ended`;
+  if(prev==='Garbage run') return 'back from garbage';
+  return `back from ${prev.replace('Lent · ','')}`;
+}
+function renderFreeNamesHTML(){
+  if(!namesCrewActive(todayStr())) return '';
+  const T = todayStr(), d = dayLogFor(T) || {}, W = d.where || {}, now = toMin(nowHHMM());
+  const onBreakPause = n=>{ const lg = W[n]||[]; const pv = lg.length>1 ? lg[lg.length-2].w : ''; return SIDE_MACHINES.some(x=>x.name===pv) && !!breakPausedRun(T, pv); };
+  const free = crewRoster().filter(n=>(W[n]||[]).length && whereOf(n)==='' && !onBreakPause(n)).map(n=>{ const log = W[n]; const since = log[log.length-1].at; return {n, since, mins: Math.max(0, now - toMin(since)), why: freeWhy(n)}; });
+  const waitLines = MACHINES.map(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || l.status==='RUNNING' || !(l.segments||[]).length) return null; const nm = liveNames(l); if(!nm.length) return null;
+    const s = lineStopNow(m); if(!s.st || s.st.key==='BREAK') return null; return {m, nm, s}; }).filter(Boolean);
+  if(!free.length && !waitLines.length) return '';
+  const col = x=>x>=30 ? 'var(--wait)' : x>=15 ? 'var(--change)' : 'var(--muted)';
+  const rows = free.sort((a,b)=>b.mins-a.mins).map(f=>`<div style="display:flex;gap:8px;align-items:baseline;font-size:12.5px;margin-top:3px;cursor:pointer;" onclick="openPlace(${crewRoster().indexOf(f.n)})"><b style="min-width:72px;">${escapeHtml(f.n)}</b><span style="color:${col(f.mins)};font-weight:${f.mins>=15?700:500};">since ${fmtTime12(f.since)} · ${fmtShort(f.mins)}</span><span class="cb-mut" style="flex:1;">← ${escapeHtml(f.why)}</span></div>`).join('');
+  const wl = waitLines.map(x=>`<div style="font-size:12.5px;margin-top:3px;"><b>${escapeHtml(x.nm.join(', '))}</b> <span style="color:${x.s.st.color};font-weight:600;">on ${shortM(x.m)} · ${x.s.st.label.toLowerCase()}${x.s.reason?` — ${escapeHtml(x.s.reason)}`:''}${x.s.mins!=null?` · ${fmtShort(x.s.mins)}`:''}</span> <span class="cb-link" onclick="openMoveCrew('${x.m}')">Move →</span></div>`).join('');
+  return `<div style="border:1px solid ${free.some(f=>f.mins>=30)?'var(--wait)':free.some(f=>f.mins>=15)?'var(--change)':'var(--line)'};border-radius:10px;padding:8px 10px;margin:-2px 0 10px;">
+    ${free.length?`<div style="font-size:12px;font-weight:700;letter-spacing:.4px;color:${col(Math.max(...free.map(f=>f.mins)))};">⚠ ${free.length} FREE — NOT ON ANYTHING</div>${rows}`:''}
+    ${wl?`<div style="font-size:12px;font-weight:700;letter-spacing:.4px;color:var(--muted);margin-top:${free.length?8:0}px;">ON A STOPPED LINE</div>${wl}`:''}
+    <div class="cb-mut" style="font-size:11px;margin-top:5px;">Amber after 15 min, red after 30. Tap a name to place them, or Move → to send a stopped line's crew.</div></div>`;
+}
 
 /* ============ FLOOR VIEW (v113) ============
 The Dashboard's machine section shows the real packaging floor (floorplan.jpg, uploaded next to index.html) with live markers placed by % so they stay on the right machine on any screen. Tap a marker for the full details. Every marker reads only existing live entries (Live Floor runs, downtime reasons, Crew Board) — nothing new to enter. A Floor / Cards switch keeps the old cards available, and Cards is used automatically if the image can't load. */
@@ -3430,6 +3590,8 @@ function renderLiveActiveCard(m, live){
         ? `<button class="btn btn-secondary" onclick="openDowntimeSetup('${m}')">⏸ Downtime</button>`
         : `<button class="btn btn-primary" style="background:var(--run);" onclick="resumeRun('${m}')">▶ Resume</button>`}
     </div>
+    ${bringBackHTML(m)}
+    ${namesOn() && liveNames(live).length ? (moveCrew && moveCrew.m===m ? moveCrewHTML(m, live) : `<button class="btn btn-secondary" style="margin-top:8px;border-color:var(--brk);color:var(--brk);" onclick="openMoveCrew('${m}')">👥 Move crew${!isRunning?' (line stopped)':''}</button>`) : ''}
     ${garbageCardHTML(m, live, isRunning, lastSeg)}
     ${METAL_DETECTOR_MACHINES.includes(m) && !inMetalCheck(live) ? `<button class="btn btn-secondary" style="margin-top:8px;border-color:var(--planned);color:var(--planned);" onclick="quickMetalDetector('${m}')">🧲 Metal Detector</button>` : ''}
     <button class="btn btn-primary" style="margin-top:8px;" onclick="openFinishSetup('${m}')">✅ Finish Product</button>
@@ -3646,7 +3808,7 @@ async function resumeRun(m){
   const nextEmployees = (live.pendingEmployees!=null) ? live.pendingEmployees : lastSeg.employees;
   live.segments.push({start: now, end:null, employees: nextEmployees, ...nextNamesOf(live)});
   delete live.pendingEmployees; delete live.pendingNames;
-  if(!nextEmployees) toast(`Nobody on ${m} — tap Change Staff to pick who is on it`);
+  if(!nextEmployees && !(Array.isArray(live.awayNames) && live.awayNames.length)) toast(`Nobody on ${m} — tap Change Staff to pick who is on it`);
   live.status = 'RUNNING';
   const ok = await Store.saveLiveRuns();
   if(!ok) return;
