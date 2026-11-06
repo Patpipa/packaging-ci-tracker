@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v164 - 2026-11-05 (Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v26)';
+const APP_VERSION = 'v165 - 2026-11-05 (End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v26)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1866,8 +1866,11 @@ const PLACES = [
   {w:'Cleaning / Sanitation', g:'Cleaning / Sanitation', s:'Cleaning'},
   {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
   {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
-  {w:'Not here · Late', g:'Not here', s:'Late'}, {w:'Not here · Went home', g:'Not here', s:'Went home'}, {w:'Not here · Absent', g:'Not here', s:'Absent'}
+  {w:'Not here · Late', g:'Not here', s:'Late'}, {w:'Not here · Went home', g:'Not here', s:'Went home'}, {w:'Not here · Absent', g:'Not here', s:'Absent'},
+  {w:'Garbage run', g:'Garbage run', s:'Garbage'}, // v165: end-of-day garbage, not tied to a running line
+  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
 ];
+const PLACE_GROUPS = [['🧽 Shutdown / Clean-up', p=>p.g==='Shutdown / Clean-up'], ['Garbage · Setup · Cleaning', p=>['Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
 function crewRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.slice(); }
 function trimmerList(){ const r = Store.settings && Store.settings.trimmerNames; return Array.isArray(r) ? r : []; }
@@ -1926,7 +1929,8 @@ async function moveFromOthers(names, here, at, exceptSideId){
   if(!lines.length && !sides.length) return true;
   lines.forEach(({l, left, gone})=>{ const ls = l.segments[l.segments.length-1];
     if(l.status==='RUNNING'){ ls.end = at; l.segments.push({start: at, end:null, employees: left.length, names: left}); }
-    else { l.pendingEmployees = left.length; l.pendingNames = left; l.awayNames = [...new Set([...(l.awayNames||[]), ...gone])]; } }); // v163: offered back when the line resumes
+    else { l.pendingEmployees = left.length; l.pendingNames = left; l.awayNames = [...new Set([...(l.awayNames||[]), ...gone])];
+      l.segments.push({start: at, end: at, employees: left.length, names: left}); } }); // v165: 0-minute marker so the rest of the stop counts only who is still there (no double count in gross labour) // v163: offered back when the line resumes
   const d = ensureDayLog(T);
   sides.forEach(({x, left})=>{ const wasWaiting = !!sideOpenWait(x); closeSideWaits(x, at); x.end = at; if(!x.jobId) x.jobId = x.id;
     const tn = (x.trainNames||[]).filter(n=>left.includes(n));
@@ -2035,7 +2039,8 @@ function renderPeopleRows(){
     if(placeSetup && placeSetup.name===n){ const p = placeSetup, sel = 'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);';
       return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--amber);"><span class="cb-nm">${escapeHtml(n)} — where?</span>
         ${map[n]?`<div class="cb-mut" style="width:100%;">Now on ${escapeHtml(map[n])} — picking a place takes ${escapeHtml(n)} off it.</div>`:''}
-        <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${PLACES.map((x,j)=>`<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;${p.w===x.w?sel:''}" onclick="placeSetup.w=PLACES[${j}].w;render()">${escapeHtml(x.w)}</button>`).join('')}
+        ${PLACE_GROUPS.map(([gt,f])=>`<span class="cb-mut" style="width:100%;margin-top:2px;">${gt}</span><div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${PLACES.map((x,j)=>!f(x)?'':`<button type="button" class="cb-btn" style="flex:1 1 30%;font-size:11.5px;${p.w===x.w?sel:''}" onclick="placeSetup.w=PLACES[${j}].w;render()">${escapeHtml(x.w.replace('Clean-up · ','').replace('Lent · ','').replace('Not here · ',''))}</button>`).join('')}</div>`).join('')}
+        <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">
         <button type="button" class="cb-btn" style="flex:1 1 100%;font-size:12px;${p.w==='__none'?sel:''}" onclick="placeSetup.w='__none';render()">Not on anything (free / spare)</button></div>
         <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">From</span><input type="time" id="placeAt" value="${p.at}" style="padding:8px;flex:1;min-width:0;"></span>
         <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="placeSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="savePlace()">Save</button></div>
@@ -2049,7 +2054,7 @@ function renderPeopleRows(){
     const col = map[n] ? 'var(--run)' : (w.startsWith('Not here') ? 'var(--muted)' : (w ? 'var(--amber)' : 'var(--change)'));
     return `<div class="cb-row" style="cursor:pointer;" onclick="openPlace(${i})"><span class="cb-nm">${escapeHtml(n)}</span><span class="cb-mut" style="color:${col};font-weight:600;">${w ? escapeHtml(w)+since : 'not on anything'} ›</span></div>`;
   }).join('');
-  return `<div class="cb-lbl">WHERE EVERYONE IS</div>${rows}<div class="cb-mut" style="font-size:11.5px;margin:2px 0 6px;">Machines fill this in by themselves when you pick names on Start Run / Change Staff / side machines. Tap a name for cleaning, lent out, or not here.</div>`;
+  return `<div class="cb-lbl">WHERE EVERYONE IS</div>${goHomeHTML()}${rows}<div class="cb-mut" style="font-size:11.5px;margin:2px 0 6px;">Machines fill this in by themselves when you pick names on Start Run / Change Staff / side machines. Tap a name for cleaning, lent out, or not here.</div>`;
 }
 /* ---- report: where each person's shift went ---- */
 const DAY_FROM = 5*60, DAY_TO = 20*60; // v161: per-person shifts can start early (e.g. 7:30 AM openers) or finish late
@@ -2139,7 +2144,7 @@ function personRangeSection(start, end){
   const acc = {}; let nDays = 0;
   days.forEach(d=>{ const pd = personDay(d); if(!pd) return; nDays++; pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, total:0, ot:0, otDays:0, grp:{}}); a.days++; a.total += p.total; a.ot += p.ot; if(p.ot) a.otDays++; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); }); });
   const names = Object.keys(acc); if(!names.length) return null;
-  const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
+  const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
   const roster = crewRoster(); names.sort((a,b)=>(roster.indexOf(a)<0?99:roster.indexOf(a))-(roster.indexOf(b)<0?99:roster.indexOf(b)));
   const rows = [{k:'Days with names', v:`${nDays}`}];
   const otTot = names.reduce((t,n)=>t+acc[n].ot,0);
@@ -2178,7 +2183,8 @@ function moveDests(m){
   MACHINES.filter(x=>x!==m).forEach(x=>{ const l = Store.liveRuns[x]; const on = l && !isStaleLive(l) && (l.segments||[]).length;
     out.push({key:x, grp:'Lines', label: shortM(x), sub: !on ? 'not started' : (l.status==='RUNNING' ? 'running' : 'stopped')}); });
   SIDE_MACHINES.forEach(sm=>{ const on = openSideRuns(T).some(s=>s.machine===sm.name); out.push({key:sm.name, grp:'Side machines', label: sm.name, sub: on ? 'on' : 'off'}); });
-  PLACES.filter(p=>!p.w.startsWith('Not here') && p.w!=='Setup / Opening').forEach(p=>out.push({key:p.w, grp:'Other', label:p.w.replace('Lent · ','Lent: '), sub:''}));
+  PLACES.filter(p=>p.g==='Shutdown / Clean-up').forEach(p=>out.push({key:p.w, grp:'🧽 Shutdown / Clean-up', label:p.w.replace('Clean-up · ',''), sub:''}));
+  PLACES.filter(p=>!p.w.startsWith('Not here') && p.w!=='Setup / Opening' && p.g!=='Shutdown / Clean-up').forEach(p=>out.push({key:p.w, grp:'Other', label:p.w.replace('Lent · ','Lent: '), sub:''}));
   out.push({key:'__none', grp:'Other', label:'Free / not on anything', sub:''});
   return out;
 }
@@ -2193,7 +2199,7 @@ function moveCrewHTML(m, live){
     <div style="font-size:12px;color:var(--brk);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">👥 MOVE CREW FROM ${escapeHtml(m.toUpperCase())} — WHO IS MOVING?</div>
     <div class="nm-grid">${names.map((n,i)=>`<button type="button" class="nm-chip${mc.sel.includes(n)?' on':''}" onclick="toggleMoveSel(${i})">${mc.sel.includes(n)?'✓ ':''}${escapeHtml(n)}</button>`).join('')}</div>
     <div class="cb-mut" style="margin-top:8px;font-weight:700;color:var(--text);">Send them to:</div>
-    ${grp('Lines')}${grp('Side machines')}${grp('Other')}
+    ${grp('Lines')}${grp('Side machines')}${grp('🧽 Shutdown / Clean-up')}${grp('Other')}
     <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="moveCrew=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="doMoveCrew()">Move ${mc.sel.length||''} →</button></div></div>`;
 }
 let moveBusy = false;
@@ -2340,11 +2346,11 @@ function setCrewPreset(p){ const d = new Date(), t = localDateStr(d);
   render(); }
 function setCrewDate(which, v){ if(!v) return; const r = crewRangeNow(); r[which] = v; r.preset = ''; if(r.end < r.start){ if(which==='start') r.end = v; else r.start = v; } render(); }
 function openCrewHours(date){ crewRange = {start:date, end:date, preset: date===todayStr() ? 'today' : ''}; Router.go('crewHours'); }
-const CH_COL = {run:'#2e9d5b', waiting:'#d64545', changeover:'#e08a2b', planned:'#7b5cd6', nowork:'#8a94a3', noentry:'#b9c0c9', brk:'#3b7dd8', side:'#d6a21e', garbage:'#8d6e4c', clean:'#2aa198', lent:'#a05bc4', setup:'#4f9fb0', away:'#c9ced6', nr:'#e74c3c', other:'#999999'};
+const CH_COL = {cleanup:'#1f7a8c', run:'#2e9d5b', waiting:'#d64545', changeover:'#e08a2b', planned:'#7b5cd6', nowork:'#8a94a3', noentry:'#b9c0c9', brk:'#3b7dd8', side:'#d6a21e', garbage:'#8d6e4c', clean:'#2aa198', lent:'#a05bc4', setup:'#4f9fb0', away:'#c9ced6', nr:'#e74c3c', other:'#999999'};
 function chColor(sg){ const k = sg.k, g = sg.g;
   if(g==='Lines running') return CH_COL.run;
   if(g==='Lines stopped') return /waiting/.test(k) ? CH_COL.waiting : /changeover/.test(k) ? CH_COL.changeover : /planned/.test(k) ? CH_COL.planned : /no work/.test(k) ? CH_COL.nowork : CH_COL.noentry;
-  return {Break:CH_COL.brk, 'Side machines':CH_COL.side, 'Garbage run':CH_COL.garbage, 'Cleaning / Sanitation':CH_COL.clean, 'Lent to other dept':CH_COL.lent, 'Setup / Opening':CH_COL.setup, 'Not here':CH_COL.away, 'Not recorded':CH_COL.nr}[g] || CH_COL.other;
+  return {'Shutdown / Clean-up':CH_COL.cleanup, Break:CH_COL.brk, 'Side machines':CH_COL.side, 'Garbage run':CH_COL.garbage, 'Cleaning / Sanitation':CH_COL.clean, 'Lent to other dept':CH_COL.lent, 'Setup / Opening':CH_COL.setup, 'Not here':CH_COL.away, 'Not recorded':CH_COL.nr}[g] || CH_COL.other;
 }
 const chFmt = m=>m2t(m).replace(':00 ',' ');
 function chDur(m){ const h = Math.floor(m/60), mm = m%60; return h ? `${h}h ${String(mm).padStart(2,'0')}m` : `${mm}m`; }
@@ -2404,13 +2410,13 @@ function crewReportHTML(start, end, forPdf){
       svg += `<text x="${L-6}" y="${y+15}" font-size="11.5" font-weight="700" fill="#1a1a2e" text-anchor="end">${escapeHtml(p.name)}</text>`;
       p.segs.forEach(sg=>{ const fill = sg.g==='Not recorded' ? 'url(#nrh)' : chColor(sg); svg += `<rect x="${x(sg.a)}" y="${y+3}" width="${Math.max(0.8, x(sg.b)-x(sg.a))}" height="${rowH-7}" fill="${fill}"><title>${escapeHtml(`${p.name} · ${m2t(sg.a)}–${m2t(sg.b)} · ${sg.k}`)}</title></rect>`; }); });
     svg += `<line x1="${x(REG_A)}" y1="${top-4}" x2="${x(REG_A)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/><line x1="${x(REG_B)}" y1="${top-4}" x2="${x(REG_B)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/></svg>`;
-    const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
+    const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Clean-up',CH_COL.cleanup],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
     H.push(hd('2 · Crew timeline'));
     H.push(scroll(svg) + (forPdf?'':`<div style="font-size:10.5px;color:#888;margin-top:2px;">← swipe the chart sideways →</div>`) + `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:10.5px;color:#555;">${lg.map(([t,c])=>`<span><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;vertical-align:-1px;margin-right:4px;"></span>${t}</span>`).join('')}<span><span style="display:inline-block;width:10px;height:10px;background:repeating-linear-gradient(45deg,#e74c3c 0 2px,#fde2df 2px 5px);vertical-align:-1px;margin-right:4px;"></span>Not recorded</span><span style="color:#c0392b;">Red shading = overtime (before 8:00 AM / after 4:30 PM)</span></div>`);
     // 3. where the crew's hours went
     const G = {}; P.forEach(p=>Object.keys(p.grp).forEach(g=>G[g]=(G[g]||0)+p.grp[g]));
-    const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
-    const gc = {'Lines running':CH_COL.run,'Lines stopped':CH_COL.waiting,'Side machines':CH_COL.side,'Garbage run':CH_COL.garbage,'Setup / Opening':CH_COL.setup,'Cleaning / Sanitation':CH_COL.clean,'Lent to other dept':CH_COL.lent,'Break':CH_COL.brk,'Not here':CH_COL.away,'Other':CH_COL.other,'Not recorded':CH_COL.nr};
+    const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
+    const gc = {'Shutdown / Clean-up':CH_COL.cleanup, 'Lines running':CH_COL.run,'Lines stopped':CH_COL.waiting,'Side machines':CH_COL.side,'Garbage run':CH_COL.garbage,'Setup / Opening':CH_COL.setup,'Cleaning / Sanitation':CH_COL.clean,'Lent to other dept':CH_COL.lent,'Break':CH_COL.brk,'Not here':CH_COL.away,'Other':CH_COL.other,'Not recorded':CH_COL.nr};
     const tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
     H.push(hd(`3 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<div style="display:flex;height:22px;border-radius:5px;overflow:hidden;">${order.filter(g=>G[g]).map(g=>`<div style="width:${G[g]/tot*100}%;background:${gc[g]};"></div>`).join('')}</div>
@@ -2450,7 +2456,7 @@ function crewReportHTML(start, end, forPdf){
     H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Name</th><th style="${th}">Days</th><th style="${th}">Worked</th><th style="${th}">Break</th><th style="${th}">Not here</th><th style="${th}">Overtime</th><th style="${th}">Not recorded</th></tr>
       ${names.map(n=>{ const a = acc[n]; return `<tr><td style="${td}font-weight:700;">${escapeHtml(n)}</td><td style="${td}">${a.days}</td><td style="${td}">${chDur(a.worked)}</td><td style="${td}">${chDur(a.brk)}</td><td style="${td}">${a.nh?chDur(a.nh):'—'}</td><td style="${td}${a.ot?red:'color:#aaa;'}">${a.ot?chDur(a.ot):'—'}</td><td style="${td}${a.nr?red:'color:#aaa;'}">${a.nr?chDur(a.nr):'—'}</td></tr>`; }).join('')}</table>`));
     const G = {}; names.forEach(n=>Object.keys(acc[n].grp).forEach(g=>G[g]=(G[g]||0)+acc[n].grp[g]));
-    const order = ['Lines running','Lines stopped','Side machines','Garbage run','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
+    const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
     H.push(hd(`2 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<table style="width:100%;border-collapse:collapse;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}">${g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
     H.push(hd('3 · Overtime by day'));
@@ -2482,6 +2488,62 @@ function crewHoursText(start, end){
 }
 async function copyCrewHours(){ const r = crewRangeNow(), t = crewHoursText(r.start, r.end);
   try{ await navigator.clipboard.writeText(t); toast('Crew hours copied'); }catch(e){ prompt('Copy the crew hours:', t); } }
+
+/* ============ v165: END OF DAY — after Finish, shutdown / clean-up, everyone went home ============ */
+let liveAfterFinish = null; // {m, names:[], sel:[], at}
+{ const _f = confirmFinishProduct; confirmFinishProduct = async function(){
+    const m = liveFinishSetup && liveFinishSetup.machine, l = m && Store.liveRuns[m];
+    const nm = (l && namesOn()) ? liveNames(l) : [];
+    const at = nowHHMM();
+    await _f();
+    if(m && !Store.liveRuns[m] && nm.length){ liveAfterFinish = {m, names: nm, sel: nm.slice(), at}; render(); }
+  }; }
+function toggleAfterSel(i){ const a = liveAfterFinish; if(!a) return; const n = a.names[i]; if(n==null) return; a.sel = a.sel.includes(n) ? a.sel.filter(x=>x!==n) : [...a.sel, n]; render(); }
+function afterFinishHTML(m){
+  const a = liveAfterFinish; if(!a || a.m!==m) return '';
+  const btn = (lab, js, col)=>`<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12.5px;padding:12px 6px;${col?`border-color:${col};color:${col};`:''}" onclick="${js}">${lab}</button>`;
+  return `<div class="live-card" style="border-color:var(--brk);margin-bottom:10px;">
+    <div style="font-size:12px;color:var(--brk);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">✅ ${escapeHtml(m.toUpperCase())} FINISHED — WHAT IS THE CREW DOING NOW?</div>
+    <div class="nm-grid">${a.names.map((n,i)=>`<button type="button" class="nm-chip${a.sel.includes(n)?' on':''}" onclick="toggleAfterSel(${i})">${a.sel.includes(n)?'✓ ':''}${escapeHtml(n)}</button>`).join('')}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+      ${btn(`🧽 Shutdown & clean ${shortM(m)}`, `afterFinishGo('Clean-up · ${m}')`, 'var(--brk)')}${btn('🗑 Garbage', `afterFinishGo('Garbage run')`)}
+      ${btn('👥 Another job', `afterFinishMove()`)}${btn('Free / not on anything', `afterFinishGo('__none')`)}</div>
+    <div class="cb-mut" style="margin-top:6px;font-size:11.5px;">Counted from ${fmtTime12(a.at)}, when ${escapeHtml(m)} finished — no gap in their time.</div></div>`;
+}
+async function afterFinishGo(w){
+  const a = liveAfterFinish; if(!a) return; if(!a.sel.length){ toast('Tap who'); return; }
+  const at = toMin(a.at) <= toMin(nowHHMM()) ? a.at : nowHHMM();
+  for(const n of a.sel){ placeSetup = {name: n, w, at}; await savePlace(); if(placeSetup){ placeSetup = null; break; } }
+  const left = a.names.filter(n=>!a.sel.includes(n));
+  liveAfterFinish = left.length ? {...a, names: left, sel: left.slice()} : null;
+  render();
+}
+function afterFinishMove(){
+  const a = liveAfterFinish; if(!a || !a.sel.length){ toast('Tap who'); return; }
+  placeSetup = null; toast(`Start or open the next machine and pick ${a.sel.join(', ')} — they show as free until then`);
+  liveAfterFinish = null; render();
+}
+/* 🏠 everyone went home — one tap at the end of the day */
+let goHome = null; // {sel:[], at}
+function goHomeCandidates(){ return crewRoster().filter(n=>{ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); return lg.length && !String(whereOf(n)).startsWith('Not here'); }); }
+function openGoHome(){ const c = goHomeCandidates(); goHome = {sel: c.slice(), at: nowHHMM()}; render(); }
+function toggleGoHome(i){ const g = goHome; if(!g) return; const n = goHomeCandidates()[i]; if(n==null) return; g.sel = g.sel.includes(n) ? g.sel.filter(x=>x!==n) : [...g.sel, n]; render(); }
+async function confirmGoHome(){
+  const g = goHome; if(!g) return; const el = document.getElementById('goHomeAt'); if(el && el.value) g.at = el.value;
+  if(!g.sel.length){ toast('Tap who went home'); return; }
+  let done = 0;
+  for(const n of g.sel){ placeSetup = {name: n, w: 'Not here · Went home', at: g.at}; await savePlace(); if(placeSetup){ placeSetup = null; toast(`${n} skipped — still on a running machine; finish it first`); continue; } done++; }
+  goHome = null; render(); toast(`🏠 ${done} marked as went home at ${fmtTime12(g.at)}`);
+}
+function goHomeHTML(){
+  if(!namesCrewActive(todayStr())) return '';
+  const c = goHomeCandidates(); if(!c.length) return '';
+  if(!goHome){ if(toMin(nowHHMM()) < 16*60) return ''; return `<button type="button" class="cb-btn" style="width:100%;flex:none;padding:12px;margin-bottom:8px;border-color:var(--brk);color:var(--brk);" onclick="openGoHome()">🏠 End of day — mark everyone still here as went home (${c.length})</button>`; }
+  return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--brk);"><span class="cb-nm">🏠 Who went home? <span class="cb-mut">(untick anyone staying)</span></span>
+    <div class="nm-grid">${c.map((n,i)=>{ const w = whereOf(n); return `<button type="button" class="nm-chip${goHome.sel.includes(n)?' on':''}" onclick="toggleGoHome(${i})">${goHome.sel.includes(n)?'✓ ':''}${escapeHtml(n)}<small>${escapeHtml(w?shortWhere(w):'free')}</small></button>`; }).join('')}</div>
+    <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">Went home at</span><input type="time" id="goHomeAt" value="${goHome.at}" style="padding:8px;flex:1;min-width:0;"></span>
+    <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="goHome=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmGoHome()">🏠 Went home (${goHome.sel.length})</button></div></div>`;
+}
 
 /* ============ FLOOR VIEW (v113) ============
 The Dashboard's machine section shows the real packaging floor (floorplan.jpg, uploaded next to index.html) with live markers placed by % so they stay on the right machine on any screen. Tap a marker for the full details. Every marker reads only existing live entries (Live Floor runs, downtime reasons, Crew Board) — nothing new to enter. A Floor / Cards switch keeps the old cards available, and Cards is used automatically if the image can't load. */
@@ -3453,7 +3515,7 @@ function renderLive(){
     } else if(liveStaffSetup && liveStaffSetup.machine===m){ cardHtml = renderLiveStaffSetupCard(live); }
     else if(liveFinishSetup && liveFinishSetup.machine===m){ cardHtml = renderLiveFinishCard(live); }
     else { cardHtml = renderLiveActiveCard(m, live); }
-    return `<div id="live-card-${machineIdSafe(m)}">${cardHtml}</div>`;
+    return `<div id="live-card-${machineIdSafe(m)}">${afterFinishHTML(m)}${cardHtml}</div>`;
   }).join('');
   return `
   <div class="card" style="margin-bottom:16px;">
@@ -3802,6 +3864,7 @@ async function confirmStaffChange(){
   } else {
     // Machine is on Downtime — there's no active running segment to split, so just record the new headcount to apply the moment it resumes
     live.pendingEmployees = s.employees; if(nm.names) live.pendingNames = nm.names;
+    if(live.segments.length) live.segments.push({start: now, end: now, employees: s.employees, ...nm}); // v165: 0-minute marker — the rest of the stop counts the new crew in gross labour
   }
   liveStaffSetup = null;
   const ok = await Store.saveLiveRuns();
