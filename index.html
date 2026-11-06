@@ -171,6 +171,14 @@ nav.tabbar .tab .ic{font-size:18px;}
 .cb-p.tr{background:rgba(199,125,214,0.15);color:var(--up);}
 .cb-p.trn{background:rgba(242,193,78,0.18);color:#F2C14E;box-shadow:0 0 0 1.5px #F2C14E inset;}
 .cb-tag{font-family:'Inter',sans-serif;font-size:10.5px;padding:2px 8px;border-radius:20px;background:var(--amber-dim);color:var(--amber);margin-left:4px;letter-spacing:0;}
+.nm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%;}
+.nm-chip{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:11px 4px;font-size:14px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15;min-height:46px;justify-content:center;}
+.nm-chip small{font-size:10.5px;font-weight:500;color:var(--muted);}
+.nm-chip.on{border-color:var(--brk);background:var(--brk-dim);color:var(--brk);}
+.nm-chip.on small{color:var(--brk);}
+.nm-chip.role{border-style:dashed;}
+.nm-chip.trn.on{border-color:#F2C14E;background:rgba(242,193,78,0.15);color:#F2C14E;}
+.nm-chip.trm.on{border-color:var(--change);background:var(--change-dim);color:var(--change);}
 .cb-btn{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 8px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.03em;text-transform:uppercase;cursor:pointer;}
 .cb-btn:active{transform:scale(0.97);}
 .cb-link{font-size:12px;color:var(--brk);cursor:pointer;text-decoration:underline;}
@@ -222,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v158 - 2026-11-05 (Side machine output comes from finished jobs only — old output menu removed, reminder for jobs missing QTY / LBS; Side-machine jobs: End → Switch to Packaging or Finish with QTY/LBS, job PLH = sealing + packing hours, PLH filter Lines only / Side machines only, Ribeye (Eye); Labour hours show exact minutes beside them, e.g. 1.8 · 1h 46m (106 min); Accuracy check: run notes always match the numbers, Dashboard totals include lines still open, garbage-run crew not counted as spare; One-tap Start Break / End Break for all lines, each back to its own status; Garbage button on Variovac cards (Packaging / Trimmer / Burger Room): 1 crew out, line keeps running, counted in gross labour and the reports; End Shift closes everything open; loads 3D floor v25)';
+const APP_VERSION = 'v159 - 2026-11-05 (Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v25)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -787,7 +795,7 @@ function machineBreakdownsNow(){
 }
 function sideOpenWait(s){ return (s.waits||[]).find(w=>!w.end) || null; }
 function closeSideWaits(s, at){ (s.waits||[]).forEach(w=>{ if(!w.end) w.end = at; }); }
-function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.coverEnd ? '' : (x.covering||''), train: x.train||0, trainName: x.trainName||'', jobId: x.jobId||x.id, phase: x.phase||'seal'}; }
+function sideCarry(x){ return {product: x.product||'', productNote: x.productNote||'', covering: x.coverEnd ? '' : (x.covering||''), train: x.train||0, trainName: x.trainName||'', jobId: x.jobId||x.id, phase: x.phase||'seal', ...sideNamesOf(x)}; }
 /* v144: cover time = sealer running time while that Variovac was still down (ends when it runs again), minus waits for trimmers */
 function coverMin(s){ const end = s.coverEnd ? Math.min(s.b, Math.max(s.a, toMin(s.coverEnd))) : s.b;
   const w = (s.waits||[]).reduce((t,x)=>{ const wa=toMin(x.start), wb = x.end ? toMin(x.end) : s.b; return t + Math.max(0, Math.min(wb,end) - Math.max(wa,s.a)); }, 0);
@@ -1131,24 +1139,28 @@ function openSideSetup(machine, changeId){
   const bd = machineBreakdownsNow();
   sideSetup = {machine, pack: cur ? cur.pack : 1, trim: cur ? cur.trim : 0, changeId: changeId||null,
     product: cur ? (cur.product||'') : '', productNote: cur ? (cur.productNote||'') : '', train: cur ? (cur.train||0) : 0, trainName: cur ? (cur.trainName||'') : '',
-    covering: cur && !cur.coverEnd ? (cur.covering||'') : ''}; // v144: never pre-selected — tap the Variovac only when the sealer is really taking its work
+    covering: cur && !cur.coverEnd ? (cur.covering||'') : '',
+    names: cur ? (cur.names||[]).slice() : [], trainNames: cur ? (cur.trainNames||[]).slice() : [], trimNames: cur ? (cur.trimNames||[]).slice() : []}; // v159: names · v144: never pre-selected — tap the Variovac only when the sealer is really taking its work
   render();
 }
 async function confirmSide(){
   const s = sideSetup, max = (SIDE_MACHINES.find(x=>x.name===s.machine)||{max:1}).max;
+  if(namesOn()){ s.trainNames = (s.trainNames||[]).filter(n=>(s.names||[]).includes(n)); s.pack = (s.names||[]).length; s.trim = (s.trimNames||[]).length; s.train = s.trainNames.length; s.trainName = s.trainNames.join(', '); }
   if(s.pack + s.trim < 1){ toast('Pick at least 1 person'); return; }
   if(s.pack > SIDE_PACK_MAX || s.trim > SIDE_TRIM_MAX){ toast(`Up to ${SIDE_PACK_MAX} packaging and ${SIDE_TRIM_MAX} trimmers`); return; }
   s.train = Math.min(s.train||0, s.pack); const tn = document.getElementById('sideTrainName'); if(tn) s.trainName = tn.value;
   const vac = s.machine==='Vacuum Sealer';
   if(vac && !s.product){ toast('Pick what is being packed on the Vacuum Sealer'); return; }
   if(vac && s.product==='Other' && !(s.productNote||'').trim()){ toast('Type what is being packed'); return; }
-  const d = ensureDayLog(todayStr()), now = nowHHMM();
+  let d = ensureDayLog(todayStr()); const now = nowHHMM();
+  if(namesOn()){ if(!(await moveFromOthers(s.names||[], s.machine, now, s.changeId))) return; d = ensureDayLog(todayStr()); } // fresh copy after the move was saved
   let wasWaiting = false;
   const prev = s.changeId ? d.side.find(x=>x.id===s.changeId) : null;
   if(prev){ if(!prev.end){ wasWaiting = !!sideOpenWait(prev); closeSideWaits(prev, now); prev.end = now; } if(!prev.jobId) prev.jobId = prev.id; } // change = close the old entry, open a new one, so hours split exactly at the change
   const e = {id: uid(), machine: s.machine, start: now, end: null, pack: s.pack, trim: s.trim};
   if(s.phase==='pack') wasWaiting = false; // packing starts fresh
-  if(s.train){ e.train = s.train; if((s.trainName||'').trim()) e.trainName = s.trainName.trim().slice(0,30); }
+  if(s.train){ e.train = s.train; if((s.trainName||'').trim()) e.trainName = s.trainName.trim().slice(0,60); }
+  if(namesOn()){ e.names = (s.names||[]).slice(); if((s.trainNames||[]).length) e.trainNames = s.trainNames.slice(); if((s.trimNames||[]).length) e.trimNames = s.trimNames.slice(); }
   if(vac){ e.product = s.product; if(s.product==='Other') e.productNote = (s.productNote||'').trim(); if(s.covering) e.covering = s.covering; }
   if(wasWaiting) e.waits = [{start: now, end: null}];
   // v157: same product = same job (crew change / switch to packaging); a new product starts a new job and closes the old one
@@ -1240,7 +1252,7 @@ function garbageMinFor(date, m, from, to){
 /* person back while the line is stopped: a 0-minute marker segment so the rest of the stop (and a paid break) counts the full crew in gross; resume uses that count */
 function garbageBackWhileStopped(live, at){
   const ls = live.segments[live.segments.length-1]; const e = ls ? Number(ls.employees)||0 : 0;
-  live.segments.push({start: at, end: at, employees: e+1});
+  live.segments.push({start: at, end: at, employees: e+1, ...segNamesOf(ls)});
   if(live.pendingEmployees!=null) live.pendingEmployees += 1;
 }
 let garbageBusy = false;
@@ -1251,7 +1263,7 @@ async function garbageOut(m, kind){
   garbageBusy = true;
   try{
     const now = nowHHMM(), e = Number(lastSeg.employees);
-    lastSeg.end = now; live.segments.push({start: now, end:null, employees: e-1});
+    lastSeg.end = now; live.segments.push({start: now, end:null, employees: e-1, ...segNamesOf(lastSeg)});
     const ev = {id: uid(), machine: m, kind, start: now, end: null};
     const d = ensureDayLog(live.date||todayStr()); d.garbage = d.garbage || []; d.garbage.push(ev);
     live.gOut = ev.id;
@@ -1269,7 +1281,7 @@ async function garbageBack(m){
     if(ev) ev.end = toMin(now) < toMin(ev.start) ? ev.start : now;
     live.gOut = null;
     const lastSeg = live.segments[live.segments.length-1];
-    if(live.status==='RUNNING' && lastSeg){ lastSeg.end = now; live.segments.push({start: now, end:null, employees: (Number(lastSeg.employees)||0)+1}); }
+    if(live.status==='RUNNING' && lastSeg){ lastSeg.end = now; live.segments.push({start: now, end:null, employees: (Number(lastSeg.employees)||0)+1, ...segNamesOf(lastSeg)}); }
     else garbageBackWhileStopped(live, ev ? ev.end : now);
     const ok = (await Store.saveLiveRuns()) && (await Store.saveDayLog());
     if(!ok){ toast('Save failed — check connection'); return; }
@@ -1499,6 +1511,7 @@ function renderCrewBoard(){
     <div class="cb-lbl">PACKAGING LINES</div>${lineRows}
     <div class="cb-lbl">OFF-LINE ROLES — STEPPING IN</div>${renderOfflineRows()}
     <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}${sideJobsNeedWeightHTML(todayStr())}
+    ${renderPeopleRows()}
     <div class="cb-lbl">TODAY</div>${crewRow}${marelRow}
     <div class="cb-legend"><span>${personDot('ok')} on line</span><span>${personDot('miss')} empty spot</span><span>${personDot('side')} packaging on side machine</span><span>${personDot('trn')} in training</span><span>${personDot('tr')} trimmer helping</span></div>
     ${dayLogFor(todayStr()) ? `<div style="text-align:center;margin-top:10px;"><span class="cb-link" style="color:var(--wait);" onclick="resetTodayCrewBoard()">Clear today's Crew Board entries</span></div>` : ''}
@@ -1509,10 +1522,10 @@ function renderSideSetup(sm){
   const s = sideSetup;
   const opts = (key, label)=>`<div style="display:flex;align-items:center;gap:8px;width:100%;"><span class="cb-mut" style="width:78px;">${label}</span>${Array.from({length:(key==='pack'?SIDE_PACK_MAX:SIDE_TRIM_MAX)+1},(_,n)=>`<button class="cb-btn" style="flex:1;${s[key]===n?'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);':''}" onclick="sideSetup.${key}=${n};if(sideSetup.train>sideSetup.pack)sideSetup.train=sideSetup.pack;render()">${n}</button>`).join('')}</div>`;
   return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--amber);"><span class="cb-nm">${s.phase==='pack'?'📦 Switch to Packaging — ':(s.changeId?'Change crew — ':'')}${sm.name} <span class="cb-mut">(up to ${SIDE_PACK_MAX} packaging + ${SIDE_TRIM_MAX} trimmers)</span></span>
-    ${opts('pack','Packaging')}
+    ${namesOn() ? sideNamesHTML(s) : `${opts('pack','Packaging')}
     ${s.pack>0?`<div style="display:flex;align-items:center;gap:8px;width:100%;"><span class="cb-mut" style="width:78px;">In training</span>${Array.from({length:s.pack+1},(_,n)=>`<button class="cb-btn" style="flex:1;${Math.min(s.train||0,s.pack)===n?'border-color:#F2C14E;color:#F2C14E;background:rgba(242,193,78,0.15);':''}" onclick="sideSetup.train=${n};render()">${n}</button>`).join('')}</div>`:''}
     ${(s.train||0)>0&&s.pack>0?`<input type="text" id="sideTrainName" maxlength="30" placeholder="Trainee name (optional)" value="${escapeHtml(s.trainName||'')}" oninput="sideSetup.trainName=this.value" style="padding:8px;width:100%;">`:''}
-    ${opts('trim','Trimmers')}
+    ${opts('trim','Trimmers')}`}
     ${sm.name==='Vacuum Sealer' && s.phase!=='pack' ? vacSetupHTML(s) : ''}
     ${s.phase==='pack'?`<div class="cb-mut" style="width:100%;">Same crew pre-filled — change it if fewer or more people pack. Product stays <b style="color:var(--text);">${escapeHtml(sideJobLabel(s))}</b>.</div>`:''}
     <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideSetup=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="confirmSide()">${s.phase==='pack'?'📦 Start packaging':s.changeId?'Save change':'▶ Start'}</button></div></div>`;
@@ -1624,6 +1637,7 @@ function dayLogSections(date, opts){
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
   if(used.length) side.push({k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0});
   out.push({title:'SIDE MACHINES', rows:side});
+  if(!(opts && opts.short)){ const ps = personDaySection(date); if(ps) out.push(ps); } // v159
   return out;
 }
 /* Upstream Impact: side-machine summary for the whole range */
@@ -1643,6 +1657,7 @@ function sideLabourSections(x){
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
   if(used.length) side.push({k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0});
   out.push({title:'SIDE MACHINES', rows:side});
+  { const ds = (x.perDay||[]).map(d=>d.date).sort(); const ps = ds.length ? personRangeSection(ds[0], ds[ds.length-1]) : null; if(ps) out.push(ps); } // v159
   return out;
 }
 /* v132: each day drawn exactly like the Daily Report section */
@@ -1815,6 +1830,269 @@ function dashMachineCard(m, recs){
       ${crewBadge(m)}
     </div>`;
 }
+/* ============ v159: CREW NAMES — who is where, by name ============
+Start Run, Change Staff and the side machines pick people by name instead of a count. The headcount is simply how many names are
+picked, so PLH, the Crew Board and every report count exactly as before.
+- Line segments carry names:[…] next to employees · pendingNames while a line is stopped.
+- Side entries carry names (packaging), trainNames (packaging in training) and trimNames (trimmer helpers — not packaging labour).
+- Picking someone who is on another machine moves them from there at that time (that machine's crew changes too).
+- Every change in where a packaging person is, is logged with its time: dayLog[date].where = {name:[{at, w}]}
+  (w = machine, a place off the machines, or '' = not on anything). Places: dayLog[date].place = {name:{w, at}}.
+- Daily Report / PDF: where each person's 8:00 AM–4:30 PM went. Break, Waiting and Changeover come from that line's own entries.
+- With no names in the crew list (Settings), everything works by count, exactly like v158. */
+const DEFAULT_ROSTER = ['Mandy','Harpreet','Stanley','Winston','Sandeep','Krishan','Mohamad','Jeevan'];
+const PLACES = [
+  {w:'Cleaning / Sanitation', g:'Cleaning / Sanitation', s:'Cleaning'},
+  {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
+  {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
+  {w:'Not here · Late', g:'Not here', s:'Late'}, {w:'Not here · Went home', g:'Not here', s:'Went home'}, {w:'Not here · Absent', g:'Not here', s:'Absent'}
+];
+const SHIFT_START_MIN = 8*60;
+function crewRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.slice(); }
+function trimmerList(){ const r = Store.settings && Store.settings.trimmerNames; return Array.isArray(r) ? r : []; }
+function namesOn(){ return crewRoster().length>0; }
+function segNamesOf(seg){ return seg && Array.isArray(seg.names) ? {names: seg.names.slice()} : {}; }
+function nextNamesOf(live){ if(Array.isArray(live.pendingNames)) return {names: live.pendingNames.slice()}; return segNamesOf((live.segments||[]).slice(-1)[0]); }
+function liveNames(live){ if(!live) return []; if(Array.isArray(live.pendingNames) && live.status!=='RUNNING') return live.pendingNames.slice(); const ls = (live.segments||[]).slice(-1)[0]; return ls && Array.isArray(ls.names) ? ls.names.slice() : []; }
+function sideNamesOf(x){ const o = {}; if(Array.isArray(x.names)) o.names = x.names.slice(); if(Array.isArray(x.trainNames) && x.trainNames.length) o.trainNames = x.trainNames.slice(); if(Array.isArray(x.trimNames) && x.trimNames.length) o.trimNames = x.trimNames.slice(); return o; }
+function shortM(m){ return m.replace('Variovac ','V').replace('Manual Pack','Manual'); }
+function shortWhere(w){ if(!w) return ''; if(MACHINES.includes(w)) return 'on '+shortM(w); const p = PLACES.find(x=>x.w===w); return p ? p.s : 'on '+w; }
+/* where every packaging person is right now (today only), from the live entries */
+function whereNowMap(){
+  const map = {}, T = todayStr();
+  MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || !(l.segments||[]).length) return; liveNames(l).forEach(n=>{ map[n] = m; }); });
+  openSideRuns(T).forEach(s=>(s.names||[]).forEach(n=>{ map[n] = s.machine; }));
+  return map;
+}
+function whereOf(n){ const m = whereNowMap()[n]; if(m) return m; const p = ((dayLogFor(todayStr())||{}).place||{})[n]; return p ? p.w : ''; }
+/* ---- time log: runs after every save of the Live Floor / Crew Board on this device ---- */
+let _whereSyncing = false;
+const _saveDayLogRaw = Store.saveDayLog, _saveLiveRaw = Store.saveLiveRuns;
+async function syncWhere(){
+  if(_whereSyncing || !Store.ready) return;
+  const T = todayStr(), d0 = dayLogFor(T), map = whereNowMap();
+  const names = new Set([...Object.keys(map), ...Object.keys((d0&&d0.place)||{}), ...Object.keys((d0&&d0.where)||{})]);
+  if(!names.size) return;
+  const d = ensureDayLog(T); d.where = d.where || {}; d.place = d.place || {};
+  const at = nowHHMM(); let ch = false;
+  names.forEach(n=>{
+    if(map[n] && d.place[n]){ delete d.place[n]; ch = true; } // on a machine again → the place off the machines is over
+    const w = map[n] || (d.place[n] ? d.place[n].w : '');
+    const log = d.where[n] || (d.where[n] = []); const last = log.length ? log[log.length-1].w : '';
+    if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true; }
+    if(!log.length) delete d.where[n];
+  });
+  if(!ch) return;
+  _whereSyncing = true; try{ await _saveDayLogRaw.call(Store); } finally { _whereSyncing = false; }
+}
+Store.saveDayLog = async function(){ const ok = await _saveDayLogRaw.call(this); if(ok && !_whereSyncing){ try{ await syncWhere(); }catch(e){ console.error('where sync', e); } } return ok; };
+Store.saveLiveRuns = async function(){ const ok = await _saveLiveRaw.apply(this, arguments); if(ok){ try{ await syncWhere(); }catch(e){ console.error('where sync', e); } } return ok; };
+/* ---- picking someone who is on another machine moves them from there ---- */
+async function moveFromOthers(names, here, at, exceptSideId){
+  if(!names || !names.length) return true;
+  const T = todayStr(), lines = [], sides = [], blocked = [];
+  MACHINES.forEach(m=>{ if(m===here) return; const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || !(l.segments||[]).length) return;
+    const cur = liveNames(l), left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
+    if(!left.length && l.status==='RUNNING') blocked.push(`${cur.join(' & ')} ${cur.length===1?'is':'are'} the only one on ${m} while it's running — finish it, stop it, or change its crew first`);
+    else lines.push({m, l, left}); });
+  openSideRuns(T).forEach(x=>{ if(x.id===exceptSideId) return; const cur = x.names||[], left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
+    if(!left.length && !(x.trim||0)) blocked.push(`${cur.join(' & ')} ${cur.length===1?'is':'are'} the only one on ${x.machine} — End it or change its crew first`);
+    else sides.push({x, left}); });
+  if(blocked.length){ toast(blocked[0]); return false; }
+  if(!lines.length && !sides.length) return true;
+  lines.forEach(({l, left})=>{ const ls = l.segments[l.segments.length-1];
+    if(l.status==='RUNNING'){ ls.end = at; l.segments.push({start: at, end:null, employees: left.length, names: left}); }
+    else { l.pendingEmployees = left.length; l.pendingNames = left; } });
+  const d = ensureDayLog(T);
+  sides.forEach(({x, left})=>{ const wasWaiting = !!sideOpenWait(x); closeSideWaits(x, at); x.end = at; if(!x.jobId) x.jobId = x.id;
+    const tn = (x.trainNames||[]).filter(n=>left.includes(n));
+    const e = {id: uid(), machine: x.machine, start: at, end: null, pack: left.length, trim: x.trim||0, ...sideCarry(x), names: left};
+    if(tn.length){ e.trainNames = tn; e.train = tn.length; e.trainName = tn.join(', '); } else { delete e.trainNames; e.train = 0; e.trainName = ''; }
+    if(wasWaiting) e.waits = [{start: at, end: null}];
+    d.side.push(e); });
+  if(lines.length && !(await _saveLiveRaw.call(Store))) return false;
+  if(sides.length && !(await _saveDayLogRaw.call(Store))) return false;
+  toast(`Moved from ${[...lines.map(x=>x.m), ...sides.map(x=>x.x.machine)].join(', ')}`);
+  return true;
+}
+/* ---- the name picker (Start Run, Change Staff, side machines) ---- */
+let pickLists = {};
+function pickTarget(ctx){ return ctx==='line' ? liveSetup : ctx==='staff' ? liveStaffSetup : sideSetup; }
+function namePickHTML(ctx){
+  const t = pickTarget(ctx); if(!t) return ''; const sel = t.names || (t.names = []);
+  const roster = crewRoster(), roles = ctx==='side' ? [] : OFFLINE_ROLES.filter(r=>roleIn(todayStr(), r));
+  const list = [...roster, ...roles, ...sel.filter(n=>!roster.includes(n) && !roles.includes(n))];
+  pickLists[ctx] = list;
+  const here = t.machine, map = whereNowMap(), placed = (dayLogFor(todayStr())||{}).place || {};
+  const chips = list.map((n,i)=>{ const on = sel.includes(n), w = (map[n] && map[n]!==here) ? map[n] : (!map[n] && placed[n] ? placed[n].w : '');
+    return `<button type="button" class="nm-chip${on?' on':''}${roles.includes(n)?' role':''}" onclick="toggleName('${ctx}',${i})">${on?'✓ ':''}${escapeHtml(n)}${w?`<small>${escapeHtml(shortWhere(w))}</small>`:''}</button>`; }).join('');
+  const moving = sel.filter(n=>map[n] && map[n]!==here);
+  return `<div class="nm-grid">${chips}</div>
+    <div style="display:flex;gap:6px;margin-top:6px;width:100%;"><input type="text" id="nmAdd_${ctx}" maxlength="24" placeholder="Someone else? Type a name" style="padding:8px;flex:1;min-width:0;"><button type="button" class="cb-btn" style="flex:0 0 auto;" onclick="addPickName('${ctx}')">+ Add</button></div>
+    <div class="cb-mut" style="margin-top:4px;width:100%;">${sel.length ? `<b style="color:var(--text);">${sel.length} ${sel.length===1?'person':'people'}</b>${moving.length?` · ${escapeHtml(moving.join(', '))} will move over from ${escapeHtml([...new Set(moving.map(n=>shortM(map[n])))].join(', '))}`:''}` : 'Tap who is on it'}</div>`;
+}
+function syncPickCounts(ctx, t){
+  if(ctx==='side'){ t.trainNames = (t.trainNames||[]).filter(n=>t.names.includes(n)); t.pack = t.names.length; t.train = t.trainNames.length; t.trim = (t.trimNames||[]).length; }
+  else t.employees = t.names.length;
+}
+function toggleName(ctx, i){
+  const t = pickTarget(ctx); if(t && !pickLists[ctx]) namePickHTML(ctx); const n = (pickLists[ctx]||[])[i]; if(!t || n==null) return;
+  t.names = t.names || [];
+  if(t.names.includes(n)) t.names = t.names.filter(x=>x!==n);
+  else { if(ctx==='side' && t.names.length>=SIDE_PACK_MAX){ toast(`Up to ${SIDE_PACK_MAX} packaging on a side machine`); return; } t.names.push(n); }
+  syncPickCounts(ctx, t); render();
+}
+async function addPickName(ctx){
+  const el = document.getElementById('nmAdd_'+ctx), n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
+  const t = pickTarget(ctx); if(!t) return; t.names = t.names || [];
+  const ex = crewRoster().find(x=>x.toLowerCase()===n.toLowerCase());
+  const name = ex || n;
+  if(ctx==='side' && !t.names.includes(name) && t.names.length>=SIDE_PACK_MAX){ toast(`Up to ${SIDE_PACK_MAX} packaging on a side machine`); return; }
+  if(!t.names.includes(name)) t.names.push(name);
+  syncPickCounts(ctx, t);
+  if(!ex && !OFFLINE_ROLES.includes(name)){ Store.settings = {...Store.settings, crewRoster: [...crewRoster(), name]}; await Store.saveSettings(); toast(`${name} added to the crew list (change it in Settings)`); }
+  render();
+}
+function toggleTrainee(i){ const t = sideSetup; if(!t) return; const n = (t.names||[])[i]; if(n==null) return; t.trainNames = t.trainNames || [];
+  t.trainNames = t.trainNames.includes(n) ? t.trainNames.filter(x=>x!==n) : [...t.trainNames, n]; syncPickCounts('side', t); render(); }
+function toggleTrimmer(i){ const t = sideSetup; if(!t) return; const list = pickLists.trim||[], n = list[i]; if(n==null) return; t.trimNames = t.trimNames || [];
+  if(t.trimNames.includes(n)) t.trimNames = t.trimNames.filter(x=>x!==n);
+  else { if(t.trimNames.length>=SIDE_TRIM_MAX){ toast(`Up to ${SIDE_TRIM_MAX} trimmers`); return; } t.trimNames.push(n); }
+  syncPickCounts('side', t); render(); }
+async function addTrimmer(){
+  const el = document.getElementById('nmAddTrim'), n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
+  const t = sideSetup; if(!t) return; t.trimNames = t.trimNames || [];
+  const ex = trimmerList().find(x=>x.toLowerCase()===n.toLowerCase()), name = ex || n;
+  if(!t.trimNames.includes(name)){ if(t.trimNames.length>=SIDE_TRIM_MAX){ toast(`Up to ${SIDE_TRIM_MAX} trimmers`); return; } t.trimNames.push(name); }
+  syncPickCounts('side', t);
+  if(!ex){ Store.settings = {...Store.settings, trimmerNames: [...trimmerList(), name]}; await Store.saveSettings(); }
+  render();
+}
+function sideNamesHTML(s){
+  s.names = s.names || [];
+  const trims = [...trimmerList(), ...(s.trimNames||[]).filter(n=>!trimmerList().includes(n))]; pickLists.trim = trims;
+  return `<span class="cb-mut" style="width:100%;">Packaging — who is on it? (up to ${SIDE_PACK_MAX})</span>${namePickHTML('side')}
+    ${s.names.length ? `<span class="cb-mut" style="width:100%;margin-top:4px;">In training? Tap the trainee (optional)</span>
+    <div class="nm-grid">${s.names.map((n,i)=>`<button type="button" class="nm-chip trn${(s.trainNames||[]).includes(n)?' on':''}" onclick="toggleTrainee(${i})">${(s.trainNames||[]).includes(n)?'🎓 ':''}${escapeHtml(n)}</button>`).join('')}</div>` : ''}
+    <span class="cb-mut" style="width:100%;margin-top:4px;">Trimmers helping? (up to ${SIDE_TRIM_MAX} — not packaging labour)</span>
+    ${trims.length ? `<div class="nm-grid">${trims.map((n,i)=>`<button type="button" class="nm-chip trm${(s.trimNames||[]).includes(n)?' on':''}" onclick="toggleTrimmer(${i})">${(s.trimNames||[]).includes(n)?'✓ ':''}${escapeHtml(n)}</button>`).join('')}</div>` : ''}
+    <div style="display:flex;gap:6px;width:100%;"><input type="text" id="nmAddTrim" maxlength="24" placeholder="Trimmer name" style="padding:8px;flex:1;min-width:0;"><button type="button" class="cb-btn" style="flex:0 0 auto;" onclick="addTrimmer()">+ Add</button></div>`;
+}
+function namesText(arr){ return (arr||[]).length ? arr.join(', ') : ''; }
+/* ---- WHERE EVERYONE IS (Crew Board) ---- */
+let placeSetup = null; // {name, w, at}
+function openPlace(i){ const n = crewRoster()[i]; if(n==null) return; placeSetup = {name: n, w: '', at: nowHHMM()}; render(); }
+async function savePlace(){
+  const p = placeSetup; if(!p) return;
+  const el = document.getElementById('placeAt'); if(el && el.value) p.at = el.value;
+  if(!p.w){ toast('Pick where they are'); return; }
+  const T = todayStr();
+  if(p.w!=='__none' && whereNowMap()[p.name]){ if(!(await moveFromOthers([p.name], '', nowHHMM()))) return; }
+  else if(p.w==='__none' && whereNowMap()[p.name]){ if(!(await moveFromOthers([p.name], '', nowHHMM()))) return; }
+  const d = ensureDayLog(T); d.place = d.place || {}; d.where = d.where || {};
+  if(p.w==='__none') delete d.place[p.name]; else d.place[p.name] = {w: p.w, at: p.at};
+  const log = d.where[p.name] || (d.where[p.name] = []), w = p.w==='__none' ? '' : p.w;
+  const last = log.length ? log[log.length-1] : null;
+  if(!last || last.w!==w){ if(last && toMin(p.at) < toMin(last.at)) p.at = last.at; if(last && last.at===p.at) last.w = w; else log.push({at: p.at, w}); }
+  placeSetup = null;
+  const ok = await Store.saveDayLog(); if(ok){ render(); toast(`${p.name} — ${w || 'not on anything'} from ${fmtTime12(p.at)}`); }
+}
+function renderPeopleRows(){
+  if(!namesOn()) return '';
+  const map = whereNowMap(), placed = (dayLogFor(todayStr())||{}).place || {}, roster = crewRoster();
+  const rows = roster.map((n,i)=>{
+    if(placeSetup && placeSetup.name===n){ const p = placeSetup, sel = 'border-color:var(--amber);color:var(--amber);background:var(--amber-dim);';
+      return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--amber);"><span class="cb-nm">${escapeHtml(n)} — where?</span>
+        ${map[n]?`<div class="cb-mut" style="width:100%;">Now on ${escapeHtml(map[n])} — picking a place takes ${escapeHtml(n)} off it.</div>`:''}
+        <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${PLACES.map((x,j)=>`<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;${p.w===x.w?sel:''}" onclick="placeSetup.w=PLACES[${j}].w;render()">${escapeHtml(x.w)}</button>`).join('')}
+        <button type="button" class="cb-btn" style="flex:1 1 100%;font-size:12px;${p.w==='__none'?sel:''}" onclick="placeSetup.w='__none';render()">Not on anything (free / spare)</button></div>
+        <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">From</span><input type="time" id="placeAt" value="${p.at}" style="padding:8px;flex:1;min-width:0;"></span>
+        <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="placeSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="savePlace()">Save</button></div></div>`; }
+    const w = map[n] || (placed[n] ? placed[n].w : '');
+    const since = !map[n] && placed[n] ? ` · since ${fmtTime12(placed[n].at)}` : '';
+    const col = map[n] ? 'var(--run)' : (w.startsWith('Not here') ? 'var(--muted)' : (w ? 'var(--amber)' : 'var(--change)'));
+    return `<div class="cb-row" style="cursor:pointer;" onclick="openPlace(${i})"><span class="cb-nm">${escapeHtml(n)}</span><span class="cb-mut" style="color:${col};font-weight:600;">${w ? escapeHtml(w)+since : 'not on anything'} ›</span></div>`;
+  }).join('');
+  return `<div class="cb-lbl">WHERE EVERYONE IS</div>${rows}<div class="cb-mut" style="font-size:11.5px;margin:2px 0 6px;">Machines fill this in by themselves when you pick names on Start Run / Change Staff / side machines. Tap a name for cleaning, lent out, or not here.</div>`;
+}
+/* ---- report: where each person's shift went ---- */
+function lineMinuteStatus(date, m, endMin){
+  const PR = {BREAK:6, WAITING:5, CHANGEOVER:4, PLANNED:3, NO_WORK:2, RUNNING:1};
+  const arr = new Array(SHIFT_END_MIN-SHIFT_START_MIN).fill('');
+  const recs = Store.records.filter(r=>r.date===date && r.machine===m && !r.side).concat(date===todayStr() ? liveSoFarRecords().filter(r=>r.machine===m) : []);
+  recs.forEach(r=>{ if(!r.startTime || !r.endTime) return; const a = Math.max(SHIFT_START_MIN, toMin(r.startTime)), b = Math.min(endMin, toMin(r.endTime));
+    for(let t=a;t<b;t++){ const i = t-SHIFT_START_MIN; if((PR[r.status]||0) > (PR[arr[i]]||0)) arr[i] = r.status; } });
+  return arr;
+}
+const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
+function personDay(date){
+  const d = dayLogFor(date); if(!d || !d.where) return null;
+  const roster = crewRoster(), names = [...roster, ...Object.keys(d.where).filter(n=>!roster.includes(n))].filter(n=>d.where[n] && d.where[n].length && !OFFLINE_ROLES.includes(n));
+  if(!names.length) return null;
+  const isToday = date===todayStr(), endMin = isToday ? Math.min(SHIFT_END_MIN, Math.max(SHIFT_START_MIN, toMin(nowHHMM()))) : SHIFT_END_MIN;
+  const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, endMin));
+  const brk = new Array(SHIFT_END_MIN-SHIFT_START_MIN).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
+  const side = sideIntervals(date);
+  const people = names.map(n=>{
+    const log = d.where[n].slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), tot = {}, grp = {};
+    for(let t=SHIFT_START_MIN; t<endMin; t++){
+      let w = ''; for(const e of log){ if(toMin(e.at)<=t) w = e.w; else break; }
+      const i = t-SHIFT_START_MIN; let k, g;
+      if(MACHINES.includes(w)){ const s = st[w][i]; if(s==='BREAK'){ k='Break'; g='Break'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
+      else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
+        const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
+        if(!iv && brk[i]){ k='Break'; g='Break'; } else if(wt){ k=`${w} waiting for trimmers`; g='Side machines'; } else { k = w; g='Side machines'; } }
+      else if(w){ const p = PLACES.find(x=>x.w===w); k = w; g = p ? p.g : 'Other'; }
+      else if(brk[i]){ k='Break'; g='Break'; } else { k='Not recorded'; g='Not recorded'; }
+      tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
+    }
+    return {name:n, tot, grp, total: endMin-SHIFT_START_MIN};
+  });
+  return {people, endMin, isToday};
+}
+function personDaySection(date){
+  const pd = personDay(date); if(!pd) return null;
+  const rows = [{k:'Shift', v: pd.isToday && pd.endMin<SHIFT_END_MIN ? `8:00 AM – now (${fmtTime12(nowHHMM())}) · so far` : '8:00 AM – 4:30 PM (8h 30m incl. breaks)'}];
+  pd.people.forEach(p=>{
+    const keys = Object.keys(p.tot).filter(k=>k!=='Not recorded').sort((a,b)=>p.tot[b]-p.tot[a]);
+    const nr = p.tot['Not recorded']||0;
+    rows.push({k: p.name, v: keys.map(k=>`${k} ${fmtShort(p.tot[k])}`).join(' · ') || '—'});
+    if(nr) rows.push({k:'', sub:true, red:true, v:`Not recorded ${fmtShort(nr)} — accounted ${fmtShort(p.total-nr)} of ${fmtShort(p.total)}`});
+  });
+  return {title:'CREW HOURS — WHERE EACH PERSON WAS', rows};
+}
+function personRangeSection(start, end){
+  const days = Object.keys(Store.dayLog||{}).filter(d=>d>=start && d<=end && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  const acc = {}; let nDays = 0;
+  days.forEach(d=>{ const pd = personDay(d); if(!pd) return; nDays++; pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, total:0, grp:{}}); a.days++; a.total += p.total; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); }); });
+  const names = Object.keys(acc); if(!names.length) return null;
+  const order = ['Lines running','Lines stopped','Side machines','Cleaning / Sanitation','Lent to other dept','Break','Not here','Other','Not recorded'];
+  const roster = crewRoster(); names.sort((a,b)=>(roster.indexOf(a)<0?99:roster.indexOf(a))-(roster.indexOf(b)<0?99:roster.indexOf(b)));
+  const rows = [{k:'Days with names', v:`${nDays}`}];
+  names.forEach(n=>{ const a = acc[n]; rows.push({k:n, v:`${a.days} day${a.days===1?'':'s'} · `+order.filter(g=>a.grp[g]).map(g=>`${g} ${fmtShort(a.grp[g])} (${Math.round(a.grp[g]/a.total*100)}%)`).join(' · ')}); });
+  return {title:'CREW HOURS BY PERSON', rows};
+}
+/* ---- Settings: crew list ---- */
+function renderCrewNamesSettings(){
+  const r = crewRoster(), t = trimmerList();
+  const chip = (n,i,fn)=>`<span class="cb-btn" style="flex:0 0 auto;display:inline-flex;gap:8px;align-items:center;text-transform:none;font-family:inherit;font-size:13.5px;">${escapeHtml(n)}<b style="color:var(--wait);cursor:pointer;" onclick="${fn}(${i})">✕</b></span>`;
+  return `<div class="card"><h3>👥 Crew names</h3>
+    <div class="cb-mut" style="margin-bottom:8px;">Picked by name on Start Run, Change Staff and the side machines. The headcount is how many names are picked. Remove every name to go back to count buttons.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${r.map((n,i)=>chip(n,i,'removeRosterName')).join('') || '<span class="cb-mut">No names — counts are used</span>'}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;"><input type="text" id="rosterAdd" maxlength="24" placeholder="Add a packaging name" style="padding:8px;flex:1;min-width:0;"><button class="btn btn-secondary" style="flex:0 0 auto;width:auto;" onclick="addRosterName()">+ Add</button></div>
+    <div class="cb-mut" style="margin:12px 0 6px;">Trimmer helpers (side machines — not packaging labour)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${t.map((n,i)=>chip(n,i,'removeTrimmerName')).join('') || '<span class="cb-mut">None yet — added when you type one on a side machine</span>'}</div>
+  </div>`;
+}
+async function addRosterName(){ const el = document.getElementById('rosterAdd'), n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
+  if(crewRoster().some(x=>x.toLowerCase()===n.toLowerCase())){ toast('Already on the list'); return; }
+  Store.settings = {...Store.settings, crewRoster: [...crewRoster(), n]}; if(await Store.saveSettings()){ toast(`${n} added`); render(); } }
+async function removeRosterName(i){ const r = crewRoster(), n = r[i]; if(n==null) return;
+  if(whereNowMap()[n]){ toast(`${n} is on ${whereNowMap()[n]} right now — take them off first`); return; }
+  if(!confirm(`Remove ${n} from the crew list?\n\nTheir past hours stay in the reports.`)) return;
+  Store.settings = {...Store.settings, crewRoster: r.filter((_,j)=>j!==i)}; if(await Store.saveSettings()){ toast(`${n} removed`); render(); } }
+async function removeTrimmerName(i){ const t = trimmerList(); if(t[i]==null) return; Store.settings = {...Store.settings, trimmerNames: t.filter((_,j)=>j!==i)}; if(await Store.saveSettings()) render(); }
+
 /* ============ FLOOR VIEW (v113) ============
 The Dashboard's machine section shows the real packaging floor (floorplan.jpg, uploaded next to index.html) with live markers placed by % so they stay on the right machine on any screen. Tap a marker for the full details. Every marker reads only existing live entries (Live Floor runs, downtime reasons, Crew Board) — nothing new to enter. A Floor / Cards switch keeps the old cards available, and Cards is used automatically if the image can't load. */
 const FLOOR_SPOTS = [
@@ -2630,7 +2908,7 @@ async function endBreakAll(){
       if(o.resumeTo){ live.downtimeSegments.push({start: o.end, end:null, ...o.resumeTo, notes:''}); back++; }
       else if(live.segments.length){ const ls = live.segments[live.segments.length-1];
         const emp = (live.pendingEmployees!=null) ? live.pendingEmployees : ls.employees;
-        live.segments.push({start: o.end, end:null, employees: emp}); delete live.pendingEmployees; live.status = 'RUNNING'; run++; } });
+        live.segments.push({start: o.end, end:null, employees: emp, ...nextNamesOf(live)}); delete live.pendingEmployees; delete live.pendingNames; live.status = 'RUNNING'; run++; } });
     if(!(await Store.saveLiveRuns())){ toast('Save failed — check connection'); return; }
     toast(`▶ Break over — ${run} running${back?`, ${back} back to ${back===1?'its':'their'} earlier status`:''}`); render();
   } finally { breakBusy = false; }
@@ -2752,7 +3030,7 @@ async function resumeAllLineStop(gid){
         lastDt.end = now;
         const lastSeg = live.segments[live.segments.length-1];
         const emp = (live.pendingEmployees!=null) ? live.pendingEmployees : lastSeg.employees;
-        live.segments.push({start: now, end:null, employees: emp});
+        live.segments.push({start: now, end:null, employees: emp, ...nextNamesOf(live)}); delete live.pendingNames;
         delete live.pendingEmployees;
         live.status = 'RUNNING';
         resumed++;
@@ -2977,7 +3255,7 @@ function renderLiveSetupCard(m){
     <div class="field"><label>Product (optional — set now or when you finish)</label>
       <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('setup')">📋 ${s.product ? escapeHtml(s.product) : 'Tap to select, or skip for now'}</button>
     </div>
-    <div class="field"><label>Employees Starting on This Station</label>${employeeGrid(s.employees, 'setEmployeesSetup')}</div>
+    <div class="field"><label>${namesOn() ? 'Who is starting on this station?' : 'Employees Starting on This Station'}</label>${namesOn() ? namePickHTML('line') : employeeGrid(s.employees, 'setEmployeesSetup')}</div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="liveSetup=null; render()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmStartRun()">▶ Start Run</button>
@@ -2985,10 +3263,13 @@ function renderLiveSetupCard(m){
   </div>`;
 }
 function setEmployeesSetup(n){ liveSetup.employees = n; render(); }
-function startLiveRunSetup(m){ liveSetup = {machine:m, product:'', productId:'', employees:1}; render(); }
+function startLiveRunSetup(m){ liveSetup = {machine:m, product:'', productId:'', employees: namesOn() ? 0 : 1, names: []}; render(); }
 async function confirmStartRun(){
   const s = liveSetup;
+  if(namesOn()){ if(!(s.names||[]).length){ toast('Tap who is starting on it'); return; } s.employees = s.names.length; }
   const now = nowHHMM();
+  if(namesOn() && !(await moveFromOthers(s.names, s.machine, now))) return;
+  const nm = namesOn() ? {names: s.names.slice()} : {};
   const existing = Store.liveRuns[s.machine];
   if(existing && existing.segments.length===0){
     // Machine was logging a standalone downtime (started idle, no production yet) — close that downtime out right as production begins, keep it on record, and start the first running segment without losing anything already logged
@@ -2998,13 +3279,13 @@ async function confirmStartRun(){
     existing.product = s.product||'';
     existing.productId = s.productId||'';
     existing.employees = s.employees;
-    existing.segments.push({start: now, end:null, employees: s.employees});
+    existing.segments.push({start: now, end:null, employees: s.employees, ...nm});
     Store.liveRuns[s.machine] = existing;
   } else {
     Store.liveRuns[s.machine] = {
       machine: s.machine, status:'RUNNING', product: s.product||'', productId: s.productId||'', date: todayStr(),
       startedAt: now, employees: s.employees,
-      segments: [{start: now, end:null, employees: s.employees}],
+      segments: [{start: now, end:null, employees: s.employees, ...nm}],
       downtimeSegments: []
     };
   }
@@ -3066,8 +3347,8 @@ function renderLiveActiveCard(m, live){
     </div>
     ${!hasNoSegmentsYet ? `<div style="color:var(--muted);font-size:13px;margin-top:4px;cursor:pointer;text-decoration:underline;" onclick="openProductPicker('active','${m}')">${live.product ? escapeHtml(live.product) : 'Tap to set product'}</div>` : `<div style="color:var(--muted);font-size:13px;margin-top:4px;">No production started yet — logging downtime only</div>`}
     <div class="live-timer">${fmtDur(elapsed)}</div>
-    ${!hasNoSegmentsYet ? `<div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station</div>` : `<div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)}</div>`}
-    ${(!isRunning && live.pendingEmployees!=null) ? `<div style="font-size:12.5px;color:var(--change);font-weight:600;">Will resume with ${live.pendingEmployees} employee${live.pendingEmployees===1?'':'s'}</div>` : ''}
+    ${!hasNoSegmentsYet ? `<div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)} · ${lastSeg.employees} employee${lastSeg.employees===1?'':'s'} on station${namesText(lastSeg.names)?`<div style="color:var(--text);font-weight:600;margin-top:2px;">👥 ${escapeHtml(namesText(lastSeg.names))}</div>`:''}</div>` : `<div style="font-size:12.5px;color:var(--muted);">Started ${fmtTime12(live.startedAt)}</div>`}
+    ${(!isRunning && live.pendingEmployees!=null) ? `<div style="font-size:12.5px;color:var(--change);font-weight:600;">Will resume with ${live.pendingEmployees} employee${live.pendingEmployees===1?'':'s'}${Array.isArray(live.pendingNames)&&live.pendingNames.length?` — ${escapeHtml(live.pendingNames.join(', '))}`:''}</div>` : ''}
     ${!hasNoSegmentsYet ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Labour so far: ${laborHoursSoFar(live)} hr gross</div>` : ''}
     <div style="border-top:1px dashed var(--line);margin:8px 0;"></div>
     ${segRows}${dtRows}
@@ -3096,14 +3377,14 @@ function renderLiveActiveCard(m, live){
 function openStaffSetup(m){
   const live = Store.liveRuns[m];
   const lastSeg = live.segments[live.segments.length-1];
-  liveStaffSetup = {machine:m, employees: (live.pendingEmployees!=null ? live.pendingEmployees : lastSeg.employees)};
+  liveStaffSetup = {machine:m, employees: (live.pendingEmployees!=null ? live.pendingEmployees : lastSeg.employees), names: liveNames(live)};
   render();
 }
 function renderLiveStaffSetupCard(live){
   const s = liveStaffSetup;
   return `<div class="live-card running">
     <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Change Staff</h3>
-    <div class="field"><label>Employees on Station Now</label>${employeeGrid(s.employees, 'setEmployeesStaff')}</div>
+    <div class="field"><label>${namesOn() ? 'Who is on this station now?' : 'Employees on Station Now'}</label>${namesOn() ? namePickHTML('staff') : employeeGrid(s.employees, 'setEmployeesStaff')}</div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="liveStaffSetup=null; render()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmStaffChange()">Confirm</button>
@@ -3113,16 +3394,22 @@ function renderLiveStaffSetupCard(live){
 function setEmployeesStaff(n){ liveStaffSetup.employees = n; render(); }
 async function confirmStaffChange(){
   const s = liveStaffSetup;
-  const live = Store.liveRuns[s.machine];
+  let live = Store.liveRuns[s.machine];
   const now = nowHHMM();
+  if(namesOn()){ s.employees = (s.names||[]).length;
+    if(!s.employees && live.status==='RUNNING'){ toast(`${s.machine} is running — pick at least 1 person`); return; }
+    const same = liveNames(live); if(same.length===s.names.length && same.every(n=>s.names.includes(n))){ liveStaffSetup=null; render(); toast('Same crew — nothing changed'); return; }
+    if(!(await moveFromOthers(s.names, s.machine, now))) return;
+    live = Store.liveRuns[s.machine]; if(!live){ liveStaffSetup=null; render(); return; } } // fresh copy after the move was saved
+  const nm = namesOn() ? {names: s.names.slice()} : {};
   const lastSeg = live.segments[live.segments.length-1];
   if(live.status==='RUNNING'){
     lastSeg.end = now;
-    live.segments.push({start: now, end:null, employees: s.employees});
-    delete live.pendingEmployees;
+    live.segments.push({start: now, end:null, employees: s.employees, ...nm});
+    delete live.pendingEmployees; delete live.pendingNames;
   } else {
     // Machine is on Downtime — there's no active running segment to split, so just record the new headcount to apply the moment it resumes
-    live.pendingEmployees = s.employees;
+    live.pendingEmployees = s.employees; if(nm.names) live.pendingNames = nm.names;
   }
   liveStaffSetup = null;
   const ok = await Store.saveLiveRuns();
@@ -3292,8 +3579,9 @@ async function resumeRun(m){
   }
   const lastSeg = live.segments[live.segments.length-1];
   const nextEmployees = (live.pendingEmployees!=null) ? live.pendingEmployees : lastSeg.employees;
-  live.segments.push({start: now, end:null, employees: nextEmployees});
-  delete live.pendingEmployees;
+  live.segments.push({start: now, end:null, employees: nextEmployees, ...nextNamesOf(live)});
+  delete live.pendingEmployees; delete live.pendingNames;
+  if(!nextEmployees) toast(`Nobody on ${m} — tap Change Staff to pick who is on it`);
   live.status = 'RUNNING';
   const ok = await Store.saveLiveRuns();
   if(!ok) return;
@@ -3481,7 +3769,7 @@ async function closeOutLiveRun(m, opts){
     grossLaborHours, netLaborHours, grossPLH, netPLH,
     targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
     productId: live.productId||'', product: live.product||'',
-    machine: m, garbageMin: gMin, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees})),
+    machine: m, garbageMin: gMin, segments: live.segments.map(seg=>({start:seg.start, end:seg.end, employees:seg.employees, ...segNamesOf(seg)})),
     downtimeSegments: (live.downtimeSegments||[]).filter(d=>d.status!=='NO_WORK').map(d=>({start:d.start, end:d.end, status:d.status, reason:d.reason}))
   };
 
@@ -3491,7 +3779,8 @@ async function closeOutLiveRun(m, opts){
     const totalSegMin = validSegments.reduce((a,seg)=>a+duration(seg.start,seg.end),0);
     const empCounts = [...new Set(validSegments.map(s=>s.employees))];
     const empNote = empCounts.length===1 ? `${empCounts[0]} employee${empCounts[0]===1?'':'s'} on station` : `${Math.min(...empCounts)}–${Math.max(...empCounts)} employees on station (staff changed)`;
-    const baseNote = `${empNote} (Live Entry)`;
+    const allNm = [...new Set(validSegments.flatMap(s=>Array.isArray(s.names)?s.names:[]))];
+    const baseNote = `${empNote}${allNm.length?` — ${allNm.join(', ')}`:''} (Live Entry)`;
     const rec = {id:uid(), date:live.date, machine:m, product:live.product, startTime:validSegments[0].start, endTime:validSegments[validSegments.length-1].end, durationMin:totalSegMin, status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes: extraNote ? `${baseNote} · ${extraNote}` : baseNote, createdAt:Date.now(), plh: plhData};
     toSave.push(rec);
   }
@@ -3520,14 +3809,14 @@ async function switchProduct(m){
     const live = Store.liveRuns[m];
     if(!live) return;
     const lastSeg = live.segments[live.segments.length-1];
-    const carryEmployees = lastSeg.employees;
+    const carryEmployees = lastSeg.employees, carryNm = segNamesOf(lastSeg);
     const result = await closeOutLiveRun(m, {});
     if(!result){ toast('Save failed — check connection'); return; }
     // Immediately start the next product on the same machine, same headcount, no gap — product can be set now or later, same as any Start Run
     Store.liveRuns[m] = {
       machine: m, status:'RUNNING', product:'', productId:'', date: todayStr(),
       startedAt: nowHHMM(), employees: carryEmployees,
-      segments: [{start: nowHHMM(), end:null, employees: carryEmployees}],
+      segments: [{start: nowHHMM(), end:null, employees: carryEmployees, ...carryNm}],
       downtimeSegments: [], gOut: live.gOut||null
     };
     const okL = await Store.saveLiveRuns();
@@ -4135,6 +4424,7 @@ function renderWeeklyView(){
     <h3>Daily PLH Trend</h3>
     ${renderPLHTrendChart(dailyPLHSeries(weeklyRange.start,weeklyRange.end))}
   </div>
+  ${(()=>{ const sec = personRangeSection(weeklyRange.start, weeklyRange.end); return sec ? `<div class="card" style="border-left:3px solid var(--brk);"><h3>Crew Hours by Person</h3>${sectionsHTML([sec])}</div>` : ''; })()}
   <div class="card">
     <h3>Recommended Actions (Lean/CI)</h3>
     ${craftWeeklySuggestions(rep).map(idea=>`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.4;margin-bottom:8px;">${escapeHtml(idea)}</div>`).join('')}
@@ -4747,6 +5037,7 @@ function renderSettings(){
     <div class="mono" style="font-size:12px;color:var(--amber);">${APP_VERSION}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">If this doesn't match what Claude just gave you, the update hasn't been uploaded to GitHub yet.</div>
   </div>
+  ${renderCrewNamesSettings()}
   <div class="card">
     <h3>App Tour</h3>
     <div style="color:var(--muted);font-size:13px;margin-bottom:10px;line-height:1.4;">A short illustrated walkthrough of what the app shows. Send the link to supervisors, managers, or the production director so they can see it before signing in.</div>
