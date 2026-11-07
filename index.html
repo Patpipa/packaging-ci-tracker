@@ -231,7 +231,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v168 - 2026-11-06 (Lent / sick / absent / vacation all day: reason only, no hours — not in totals, OT or the went-home list; Crew tab; Today’s crew (attendance, start / end, sick, lent, usual start); crew on every stop; stretching / crew talk for everyone; Other… duties; Lead / Yield off line leaves the machine; side machines: pause reasons, set up, dismantle / clean, finished without QTY, output from the Variovac run; Packaging Lines with real status; names only in the Crew Hours report; simpler Daily Report crew section; 3D floor v27: bigger name tags, old Mandy sign removed, Mandy’s look follows the real Mandy; End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v27)';
+const APP_VERSION = 'v169 - 2026-11-06 (End Shift marks everyone still here as Went home in the same tap — untick anyone still working; Lent / sick / absent / vacation all day: reason only, no hours — not in totals, OT or the went-home list; Crew tab; Today’s crew (attendance, start / end, sick, lent, usual start); crew on every stop; stretching / crew talk for everyone; Other… duties; Lead / Yield off line leaves the machine; side machines: pause reasons, set up, dismantle / clean, finished without QTY, output from the Variovac run; Packaging Lines with real status; names only in the Crew Hours report; simpler Daily Report crew section; 3D floor v27: bigger name tags, old Mandy sign removed, Mandy’s look follows the real Mandy; End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v27)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2933,6 +2933,25 @@ function sidePrepText(date, m){
   let su = 0, dc = 0; pd.people.forEach(p=>p.segs.forEach(sg=>{ if(sg.w==='Set-up · '+m) su += sg.b-sg.a; else if(sg.w==='Dismantle · '+m || sg.w==='Clean-up · '+m) dc += sg.b-sg.a; }));
   return (su?` · set-up ${fmtDur(su)}`:'') + (dc?` · dismantle + clean ${fmtDur(dc)}`:'');
 }
+/* ============ v169: END SHIFT — everyone still here goes home in the same tap ============ */
+let endHome = null; // {sel:[], at, date}
+function endShiftHomeHTML(){
+  if(!namesCrewActive(todayStr())) return '';
+  const c = goHomeCandidates(); if(!c.length) return '';
+  if(!endHome || endHome.date!==todayStr()) endHome = {sel: c.slice(), at: nowHHMM(), date: todayStr()};
+  endHome.sel = endHome.sel.filter(n=>c.includes(n));
+  return `<div class="card" style="border-color:var(--brk);"><h3>🏠 Who is going home now?</h3>
+    <div class="cb-mut" style="margin-bottom:8px;">Ticked people are marked <b>Went home</b> when the shift ends. Untick anyone still working (e.g. still cleaning) — mark them later in 👥 Crew → 🏠.</div>
+    <div class="nm-grid">${c.map((n,i)=>{ const on = endHome.sel.includes(n), w = whereOf(n); return `<button type="button" class="nm-chip${on?' on':''}" onclick="toggleEndHome(${i})">${on?'✓ ':''}${escapeHtml(n)}<small>${escapeHtml(w?shortWhere(w):'free')}</small></button>`; }).join('')}</div>
+    <span style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span class="cb-mut" style="white-space:nowrap;">Went home at</span><input type="time" value="${endHome.at}" onchange="endHome.at=this.value||nowHHMM()" style="padding:8px;flex:1;min-width:0;"></span></div>`;
+}
+function toggleEndHome(i){ const c = goHomeCandidates(), n = c[i]; if(!endHome || n==null) return; endHome.sel = endHome.sel.includes(n) ? endHome.sel.filter(x=>x!==n) : [...endHome.sel, n]; render(); }
+{ const _ca = closeAllOpenForEndShift; closeAllOpenForEndShift = async function(){
+    const ok = await _ca(); if(!ok) return ok;
+    const h = endHome; endHome = null;
+    if(h && h.date===todayStr() && h.sel.length){ for(const n of h.sel){ placeSetup = {name:n, w:'Not here · Went home', at: h.at}; await savePlace(); placeSetup = null; } }
+    return ok; }; }
+
 /* ============ FLOOR VIEW (v113) ============
 The Dashboard's machine section shows the real packaging floor (floorplan.jpg, uploaded next to index.html) with live markers placed by % so they stay on the right machine on any screen. Tap a marker for the full details. Every marker reads only existing live entries (Live Floor runs, downtime reasons, Crew Board) — nothing new to enter. A Floor / Cards switch keeps the old cards available, and Cards is used automatically if the image can't load. */
 const FLOOR_SPOTS = [
@@ -5685,13 +5704,13 @@ function renderEndShiftConfirm(){
       ${o.side.map(x=>li(`<b>${escapeHtml(x.machine)}</b> — on since ${fmtTime12(x.start)}`)).join('')}
       ${o.offl.map(x=>li(`<b>${escapeHtml(x.role)}</b> — on the line since ${fmtTime12(x.start)}`)).join('')}
     </ul>
-    <p style="color:var(--muted);font-size:13px;line-height:1.45;margin-top:8px;">They stop at the current time (4:30 PM if it's later than that). Line runs are saved without weight — add Qty/Weight later from History, or press Cancel and use <b>Finish</b> on the Live Floor first.</p>
+    <p style="color:var(--muted);font-size:13px;line-height:1.45;margin-top:8px;">They stop at the current time. Line runs are saved without weight — add Qty/Weight later from History, or press Cancel and use <b>Finish</b> on the Live Floor first.</p>
   </div>` : '';
   return `
   <div class="card">
     <h3>Ready to End Shift?</h3>
     <p style="color:var(--muted);font-size:14px;line-height:1.5;">This will close today's production day (${recs.length} record${recs.length===1?'':'s'} logged) and generate the Daily CI Report. You can still edit records afterward from History.</p>
-  </div>${openList}
+  </div>${openList}${endShiftHomeHTML()}
   <button class="btn btn-primary" id="endShiftBtn" onclick="confirmEndShift()">${o.n?`Close ${o.n} open item${o.n===1?'':'s'} &amp; End Shift`:'Confirm End Shift'}</button>
   <button class="btn btn-ghost" style="margin-top:10px;" onclick="Router.go('dashboard')">Cancel</button>
   `;
