@@ -231,7 +231,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v180 - 2026-11-07 (🏠 Someone going home — one button on Live: tap the name, tap again; they come off their machine and are marked Went home now; Crew Hours: highlighted note that hours and OT are floor-logged, not payroll / clock-out times; Crew Hours: break counted for everyone during a break — also people on a stopped line, a place (cleaning, other, lent…) or a paused side machine; Daily Report: Packaging crew count big, bold and red; Side machine output shows 1,240 lbs instead of 1240.000 lbs; Scales: IT ticket # removed; 🖥 Scales on Live: Scale 3 / 5 / 7 — tap when down (frozen, lost connection, won’t print, blank labels, computer down, other), 📞 IT called + ticket #, ✅ back up; Scales line in the Daily Report; Reports → 🖥 Scale Downtime with PDF; ⚠ strip on Live: tap a free / not placed name to place them right there — machine, closing job, cleaning, other, went home; Clean-up buttons say “🧽 Clean V1” etc. so they are not mistaken for putting someone on the machine; Settings shows the version only — tap What’s changed for the list; 🌙 Closing routine buttons after Finish: clean V#, clean all Variovacs, clean scales, materials to warehouse, garbage, restock film / boxes, paperwork, Other…; End Shift marks everyone still here as Went home in the same tap — untick anyone still working; Lent / sick / absent / vacation all day: reason only, no hours — not in totals, OT or the went-home list; Crew tab; Today’s crew (attendance, start / end, sick, lent, usual start); crew on every stop; stretching / crew talk for everyone; Other… duties; Lead / Yield off line leaves the machine; side machines: pause reasons, set up, dismantle / clean, finished without QTY, output from the Variovac run; Packaging Lines with real status; names only in the Crew Hours report; simpler Daily Report crew section; 3D floor v27: bigger name tags, old Mandy sign removed, Mandy’s look follows the real Mandy; End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v27)';
+const APP_VERSION = 'v181 - 2026-11-07 (Crew tab is one list: status, start – end, 📍 where now (tap to send), Lead / Yield On line — replaces Where Everyone Is, free box, Off-line roles and crew-count buttons; End time only when you add one; 🏠 Someone going home — one button on Live: tap the name, tap again; they come off their machine and are marked Went home now; Crew Hours: highlighted note that hours and OT are floor-logged, not payroll / clock-out times; Crew Hours: break counted for everyone during a break — also people on a stopped line, a place (cleaning, other, lent…) or a paused side machine; Daily Report: Packaging crew count big, bold and red; Side machine output shows 1,240 lbs instead of 1240.000 lbs; Scales: IT ticket # removed; 🖥 Scales on Live: Scale 3 / 5 / 7 — tap when down (frozen, lost connection, won’t print, blank labels, computer down, other), 📞 IT called + ticket #, ✅ back up; Scales line in the Daily Report; Reports → 🖥 Scale Downtime with PDF; ⚠ strip on Live: tap a free / not placed name to place them right there — machine, closing job, cleaning, other, went home; Clean-up buttons say “🧽 Clean V1” etc. so they are not mistaken for putting someone on the machine; Settings shows the version only — tap What’s changed for the list; 🌙 Closing routine buttons after Finish: clean V#, clean all Variovacs, clean scales, materials to warehouse, garbage, restock film / boxes, paperwork, Other…; End Shift marks everyone still here as Went home in the same tap — untick anyone still working; Lent / sick / absent / vacation all day: reason only, no hours — not in totals, OT or the went-home list; Crew tab; Today’s crew (attendance, start / end, sick, lent, usual start); crew on every stop; stretching / crew talk for everyone; Other… duties; Lead / Yield off line leaves the machine; side machines: pause reasons, set up, dismantle / clean, finished without QTY, output from the Variovac run; Packaging Lines with real status; names only in the Crew Hours report; simpler Daily Report crew section; 3D floor v27: bigger name tags, old Mandy sign removed, Mandy’s look follows the real Mandy; End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v27)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2638,7 +2638,7 @@ function crewHeaderHTML(){
   const red = short.length || worstFree>=30, amber = !red && (worstFree>=15 || a.notPlaced.length);
   const col = red ? ['var(--wait)','var(--wait-dim)'] : amber ? ['var(--change)','var(--change-dim)'] : ['var(--run)','var(--run-dim)'];
   const title = short.length ? short.map(l=>`${l.m} short ${(LINE_NEED[l.m]||2)-l.names.length}`).join(' · ') : crewSummaryText(a);
-  const sub = [`${a.here.length} here`, ...(a.away.length?[`${a.away.length} away (${a.away.map(x=>`${x.n} — ${placeWord(x.w)==='not here'?x.w.replace('Not here · ','').toLowerCase():x.w.replace('Lent · ','lent to ')}`).join(', ')})`]:[]), ...(a.notPlaced.length?[`not placed yet: ${a.notPlaced.join(', ')}`]:[])].join(' · ');
+  const sub = [`${a.here.length + a.notPlaced.length} here`, ...(a.away.length?[`${a.away.length} away (${a.away.map(x=>`${x.n} — ${placeWord(x.w)==='not here'?x.w.replace('Not here · ','').toLowerCase():x.w.replace('Lent · ','lent to ')}`).join(', ')})`]:[]), ...(a.notPlaced.length?[`not placed yet: ${a.notPlaced.join(', ')}`]:[])].join(' · ');
   return `<div class="cb-hd" style="background:${col[1]};border-color:${col[0]};"><div><div class="cb-big" style="color:${col[0]};">${escapeHtml(title)}</div>${short.length?`<div class="cb-sub" style="font-weight:600;color:var(--text);">${escapeHtml(crewSummaryText(a))}</div>`:''}<div class="cb-sub">${escapeHtml(sub)}</div></div></div>`;
 }
 /* v173: the ⚠ strip on Live — tap a free / not placed person to place them right here (machine, closing job, cleaning, other, went home) */
@@ -2675,9 +2675,7 @@ function crewAlertStripHTML(){
     ${people.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${people.map(chip).join('')}</div>`:''}
   </div>${liveFreeHTML()}`;
 }
-function renderCrewTab(){
-  return `${typeof renderTodaysCrewPanel==='function' ? renderTodaysCrewPanel() : ''}${renderCrewBoard('crew')}`;
-}
+
 
 /* ============ v167 B: OTHER… DUTIES · SEND CREW ANYWHERE · AFTER FINISH · LEAD / YIELD OFF LINE ============ */
 function recentOther(){ const r = Store.settings && Store.settings.recentOther; return Array.isArray(r) ? r : []; }
@@ -3101,6 +3099,66 @@ function homeQuickHTML(){
     <div class="nm-grid" style="margin-top:8px;">${names.map((n,i)=>{ const armed = homeQuick.arm===n, w = whereOf(n); return `<button type="button" class="nm-chip" style="${armed?'border-color:var(--wait);background:var(--wait-dim);color:var(--wait);':''}" onclick="tapHomeQuick(${i})">${armed?'🏠 Tap again':escapeHtml(n)}<small>${armed?escapeHtml(n):escapeHtml(w?shortWhere(w):(OFFLINE_ROLES.includes(n)?'off line':'free'))}</small></button>`; }).join('') || '<span class="cb-mut">Nobody left to send home.</span>'}</div>
     ${gone.length?`<div class="cb-mut" style="margin-top:8px;font-size:12px;">Went home: ${gone.map(n=>{ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); const e = lg[lg.length-1]; return `${escapeHtml(n)}${e?` ${fmtTime12(e.at)}`:''}`; }).join(' · ')}</div>`:''}
   </div>`;
+}
+
+/* ============ v181: ONE CREW LIST — everything about people in one place ============
+One row per person: ✓ here / status · start – end · 📍 where now (tap to send them somewhere) · Lead / Yield On line button.
+Replaces Today's crew + Where Everyone Is + the free box + Off-line roles + the crew-count buttons on the Crew tab. */
+let crewEditRow = null; // name whose times are open
+function crewWhereChip(n){
+  const T = todayStr(), w = whereOf(n), role = OFFLINE_ROLES.includes(n), lg = ((((dayLogFor(T)||{}).where)||{})[n]||[]);
+  if(w && MACHINES.includes(w)){ const li = lineNowInfo(w); return {t:`on ${shortM(w)}${li.running?'':' · '+(li.word||'stopped')}`, c: li.running?'var(--run)':'var(--change)'}; }
+  if(w && SIDE_MACHINES.some(x=>x.name===w)) return {t:`on ${w}`, c:'var(--amber)'};
+  if(w.startsWith('Not here') || w.startsWith('Lent')) return {t: w.replace('Not here · ','').replace('Lent · ','lent → '), c:'var(--muted)'};
+  if(w) return {t: shortWhere(w) || w, c:'var(--brk)'};
+  if(role){ const on = openOffline(T).find(o=>o.role===n); return {t: on ? `on the line since ${fmtTime12(on.start)}` : 'off line', c: on ? 'var(--brk)' : 'var(--muted)'}; }
+  if(!lg.length) return {t:'not placed yet', c:'var(--change)'};
+  const m = Math.max(0, toMin(nowHHMM()) - toMin(lg[lg.length-1].at));
+  return {t:`free · ${fmtShort(m)}`, c: m>=30 ? 'var(--wait)' : m>=15 ? 'var(--change)' : 'var(--muted)'};
+}
+function renderCrewList(){
+  const T = todayStr(), saved = todaysCrewActive(), usual = crewUsual();
+  const names = [...crewRoster(), ...OFFLINE_ROLES];
+  const hereN = crewRoster().filter(n=>crewRowOf(T,n).st==='here' && !String(whereOf(n)).startsWith('Not here')).length;
+  const awayN = crewRoster().filter(n=>crewRowOf(T,n).st!=='here').length;
+  const rows = names.map(n=>{
+    const r = crewRowOf(T, n), role = OFFLINE_ROLES.includes(n), here = r.st==='here', js = n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const ch = here ? crewWhereChip(n) : {t: r.st==='lent' ? `lent → ${r.dept||'other dept'}` : ({sick:'sick',absent:'absent',vacation:'vacation'}[r.st]), c:'var(--muted)'};
+    const times = here ? `${fmtTime12(r.start).replace(':00','')} – ${r.end ? fmtTime12(r.end).replace(':00','') : '…'}` : '';
+    const on = role && here ? openOffline(T).find(o=>o.role===n) : null;
+    const goneHome = String(whereOf(n))==='Not here · Went home';
+    let html = `<div class="cb-row" style="flex-wrap:wrap;gap:4px 8px;${here&&!goneHome?'':'opacity:.6;'}">
+      <span class="cb-nm" style="min-width:86px;">${here&&!goneHome?'✓ ':''}${escapeHtml(n)}</span>
+      ${here?`<span class="cb-link" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="crewEditRow=crewEditRow==='${js}'?null:'${js}';render()">${times}${r.end?' <span style="color:var(--change);">½</span>':''}</span>`:''}
+      <span style="flex:1;"></span>
+      <select onchange="setCrewDay('${js}',{st:this.value})" style="padding:5px 4px;font-size:12px;flex:0 0 auto;width:auto;">${CREW_ST.map(([k,l])=>`<option value="${k}" ${r.st===k?'selected':''}>${l}</option>`).join('')}</select>
+      <div style="width:100%;display:flex;align-items:center;gap:8px;">
+        ${here && !goneHome && !role ? `<span onclick="liveFree&&liveFree.name==='${js}'?(liveFree=null,render()):openLiveFree('${js}')" style="cursor:pointer;flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)} ›</span>` : `<span style="flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)}</span>`}
+        ${role && here ? (on ? `<button class="cb-btn" style="flex:0 0 auto;padding:7px 12px;border-color:var(--brk);color:var(--brk);" onclick="stopOffline('${on.id}')">Off line</button>` : `<button class="cb-btn" style="flex:0 0 auto;padding:7px 14px;" onclick="startOffline('${js}')">On line</button>`) : ''}
+        ${r.st==='lent'?`<select onchange="setCrewDay('${js}',{dept:this.value})" style="padding:5px;font-size:12px;flex:0 0 auto;width:auto;">${LENT_DEPTS.map(x=>`<option ${r.dept===x?'selected':''}>${x}</option>`).join('')}</select>`:''}
+      </div>`;
+    if(crewEditRow===n && here) html += `<div style="width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px;margin-top:4px;">
+        <span class="cb-mut">Start</span><input type="time" value="${r.start}" onchange="setCrewDay('${js}',{start:this.value||'08:00'})" style="padding:6px;font-size:13px;flex:1 1 34%;min-width:108px;">
+        ${r.end ? `<span class="cb-mut">End</span><input type="time" value="${r.end}" onchange="setCrewDay('${js}',{end:this.value})" style="padding:6px;font-size:13px;flex:1 1 34%;min-width:108px;"><span class="cb-link" style="color:var(--wait);" onclick="setCrewDay('${js}',{end:''})">✕ no end</span>`
+                : `<button class="cb-btn" style="flex:0 0 auto;font-size:12px;" onclick="setCrewDay('${js}',{end:'12:30'})">+ End time (half day)</button>`}
+        <span style="flex:1 1 100%;display:flex;gap:14px;justify-content:flex-end;"><span class="cb-link" style="${usual[n]===r.start?'color:var(--amber);':''}" onclick="toggleUsual('${js}')">${usual[n]===r.start?'★ usual start':'☆ make usual start'}</span>${role?'':`<span class="cb-link" style="color:var(--wait);" onclick="removeCrewName('${js}')">✕ remove from list</span>`}</span></div>`;
+    html += `</div>`;
+    if(liveFree && liveFree.name===n) html += liveFreeHTML();
+    return html;
+  }).join('');
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><h3 style="margin:0;">👥 Crew today <span class="cb-mut" style="font-family:Inter,sans-serif;text-transform:none;letter-spacing:0;">· ${hereN} here${awayN?` · ${awayN} away`:''}</span></h3></div>
+    <div class="cb-mut" style="margin:4px 0 8px;font-size:11.5px;">Tap 📍 to send someone somewhere · tap the times to change start / add an end · Here ▾ for sick, lent…</div>
+    ${rows}
+    <div style="display:flex;gap:6px;margin-top:8px;"><input type="text" id="crewAddIn" maxlength="24" placeholder="Add a name (new temp)" style="padding:8px;flex:1;min-width:0;"><button class="cb-btn" style="flex:0 0 auto;" onclick="addCrewName()">+ Add</button></div>
+    ${saved?'':`<button class="btn btn-primary" style="margin-top:10px;" onclick="confirmTodaysCrew(false)">✓ Confirm today's crew</button>`}
+  </div>`;
+}
+function renderCrewTab(){
+  const T = todayStr(), active = namesCrewActive(T) || todaysCrewActive();
+  return `${active ? `<div class="card cb" style="padding:10px 12px;">${crewHeaderHTML()}</div>` : ''}
+    ${renderCrewList()}
+    ${active ? `<div class="card cb"><div class="cb-lbl" style="margin-top:0;">PACKAGING LINES</div>${packagingLinesNowHTML()}<div class="cb-mut" style="font-size:11.5px;margin-top:8px;">${STAFF_RULES_NOTE}.</div></div>` : ''}`;
 }
 
 /* ============ FLOOR VIEW (v113) ============
