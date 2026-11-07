@@ -231,7 +231,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v173 - 2026-11-06 (⚠ strip on Live: tap a free / not placed name to place them right there — machine, closing job, cleaning, other, went home; Clean-up buttons say “🧽 Clean V1” etc. so they are not mistaken for putting someone on the machine; Settings shows the version only — tap What’s changed for the list; 🌙 Closing routine buttons after Finish: clean V#, clean all Variovacs, clean scales, materials to warehouse, garbage, restock film / boxes, paperwork, Other…; End Shift marks everyone still here as Went home in the same tap — untick anyone still working; Lent / sick / absent / vacation all day: reason only, no hours — not in totals, OT or the went-home list; Crew tab; Today’s crew (attendance, start / end, sick, lent, usual start); crew on every stop; stretching / crew talk for everyone; Other… duties; Lead / Yield off line leaves the machine; side machines: pause reasons, set up, dismantle / clean, finished without QTY, output from the Variovac run; Packaging Lines with real status; names only in the Crew Hours report; simpler Daily Report crew section; 3D floor v27: bigger name tags, old Mandy sign removed, Mandy’s look follows the real Mandy; End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v27)';
+const APP_VERSION = 'v174 - 2026-11-07 (🖥 Scales on Live: Scale 3 / 5 / 7 — tap when down (frozen, lost connection, won’t print, blank labels, computer down, other), 📞 IT called + ticket #, ✅ back up; Scales line in the Daily Report; Reports → 🖥 Scale Downtime with PDF; ⚠ strip on Live: tap a free / not placed name to place them right there — machine, closing job, cleaning, other, went home; Clean-up buttons say “🧽 Clean V1” etc. so they are not mistaken for putting someone on the machine; Settings shows the version only — tap What’s changed for the list; 🌙 Closing routine buttons after Finish: clean V#, clean all Variovacs, clean scales, materials to warehouse, garbage, restock film / boxes, paperwork, Other…; End Shift marks everyone still here as Went home in the same tap — untick anyone still working; Lent / sick / absent / vacation all day: reason only, no hours — not in totals, OT or the went-home list; Crew tab; Today’s crew (attendance, start / end, sick, lent, usual start); crew on every stop; stretching / crew talk for everyone; Other… duties; Lead / Yield off line leaves the machine; side machines: pause reasons, set up, dismantle / clean, finished without QTY, output from the Variovac run; Packaging Lines with real status; names only in the Crew Hours report; simpler Daily Report crew section; 3D floor v27: bigger name tags, old Mandy sign removed, Mandy’s look follows the real Mandy; End of day: after Finish the crew goes to Shutdown & clean / Garbage / another job with no gap; Shutdown / Clean-up and Garbage as places; 🏠 everyone went home in one tap; Crew Hours & Positions report (Reports tab + link from the Daily Report): summary table, crew timeline chart, where the hours went, each person line by line, each position, lent out, OT in red, PDF / Copy, any day or range; names on the 3D floor; Move crew from any line (most useful on Waiting) to a line, side machine, cleaning, lent out or free; Bring back the crew when a stopped line resumes; crew number comes from the names; Crew Board shows who is free, since when and why (amber 15 min, red 30) and who is on a stopped line; Overtime per person in red (before 8:00 AM and after 4:30 PM) on Daily Report, PDF, Weekly + Upstream; finish comes from what they were on — machine finished, Went home, End Shift — no finish time to type; things still on after 4:30 PM keep counting to the real time; Shift per person: early openers (e.g. 7:30 AM) or other start / finish set on Where Everyone Is, counted in their crew hours; Setup / Opening place; someone still out on garbage when the run finishes stays on Garbage run until placed; Garbage button asks who is going — that person comes off the line count and back on at Back, shown as Garbage run in their crew hours, Who went in the Daily Report; Crew by name: Start Run, Change Staff and side machines pick people by name — headcount = names picked; trainees and trimmers by name; picking someone on another machine moves them over; Where Everyone Is on the Crew Board (cleaning, lent out, not here); Daily Report: where each person’s shift went; Weekly + Upstream: crew hours by person; crew list in Settings; loads 3D floor v27)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -742,7 +742,7 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'new'; if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours'||v==='scales') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
@@ -760,6 +760,7 @@ function render(){
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
     case 'crewHours': html += renderCrewHoursView(); break;
+    case 'scales': html += renderScaleReportView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
     case 'upstreamImpact': html += renderUpstreamImpactView(); break;
@@ -1669,6 +1670,7 @@ function dayLogSections(date, opts){
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
   if(used.length) side.push({k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0});
   out.push({title:'SIDE MACHINES', rows:side});
+  out.push({title:'SCALES', rows: scaleDayRows(date)}); // v174
   return out;
 }
 /* Upstream Impact: side-machine summary for the whole range */
@@ -2982,6 +2984,102 @@ function toggleEndHome(i){ const c = goHomeCandidates(), n = c[i]; if(!endHome |
     if(h && h.date===todayStr() && h.sel.length){ for(const n of h.sel){ placeSetup = {name:n, w:'Not here · Went home', at: h.at}; await savePlace(); placeSetup = null; } }
     return ok; }; }
 
+/* ============ v174: 🖥 SCALES — downtime per packaging scale / label computer (Scale 3, 5, 7) ============
+dayLog[date].scales = [{id, scale, start, end|null, reason, itAt?, ticket?, endShift?}]
+Tap a green square = down (pick why). Tap a red one = 📞 IT called / ticket # / ✅ back up. Daily Report line + its own report with PDF. */
+const SCALES = ['Scale 3','Scale 5','Scale 7'];
+const SCALE_REASONS = ['Frozen / not responding','Lost connection','Won’t print labels','Printing blank labels','Computer down'];
+let scaleSetup = null; // {scale, mode:'down'|'up', reason, otherText, ticket, id}
+function scaleEvents(date){ return (((dayLogFor(date)||{}).scales)||[]); }
+function scaleOpen(date, sc){ return scaleEvents(date).find(e=>e.scale===sc && !e.end); }
+function scaleEnd(e, date){ return e.end || (date===todayStr() ? nowHHMM() : '16:30'); }
+function scaleMin(e, date){ return Math.max(0, toMin(scaleEnd(e, date)) - toMin(e.start)); }
+function tapScale(sc){ const o = scaleOpen(todayStr(), sc); scaleSetup = o ? {scale:sc, mode:'up', id:o.id, ticket:o.ticket||''} : {scale:sc, mode:'down', reason:'', otherText:''}; render(); }
+async function confirmScaleDown(){
+  const s = scaleSetup; if(!s) return; let r = s.reason;
+  if(r==='__other'){ r = (s.otherText||'').trim(); if(!r){ toast('Type what is wrong'); return; } await rememberOther(r); }
+  if(!r){ toast('Pick what is wrong'); return; }
+  const d = ensureDayLog(todayStr()); d.scales = d.scales || [];
+  if(scaleOpen(todayStr(), s.scale)){ scaleSetup = null; render(); return; }
+  d.scales.push({id: uid(), scale: s.scale, start: nowHHMM(), end: null, reason: r});
+  scaleSetup = null; await Store.saveDayLog(); render(); toast(`⛔ ${s.scale} down — ${r}`);
+}
+async function scaleIT(){ const s = scaleSetup; if(!s) return; const e = scaleEvents(todayStr()).find(x=>x.id===s.id); if(!e) return;
+  const el = document.getElementById('scaleTicket'); if(el) e.ticket = el.value.trim().slice(0,30);
+  if(!e.itAt) e.itAt = nowHHMM(); await Store.saveDayLog(); render(); toast(`📞 IT called for ${e.scale} at ${fmtTime12(e.itAt)}`); }
+async function scaleBackUp(){ const s = scaleSetup; if(!s) return; const e = scaleEvents(todayStr()).find(x=>x.id===s.id); if(!e) return;
+  const el = document.getElementById('scaleTicket'); if(el && el.value.trim()) e.ticket = el.value.trim().slice(0,30);
+  e.end = nowHHMM(); scaleSetup = null; await Store.saveDayLog(); render(); toast(`✅ ${e.scale} back up — down ${fmtShort(scaleMin(e, todayStr()))}`); }
+function renderScalesBar(){
+  const T = todayStr(), up = SCALES.filter(sc=>!scaleOpen(T, sc)).length;
+  const sq = sc=>{ const o = scaleOpen(T, sc), m = o ? scaleMin(o, T) : 0;
+    return `<button type="button" onclick="tapScale('${sc}')" style="flex:1;min-width:0;border-radius:10px;padding:9px 4px;cursor:pointer;font-family:inherit;border:1.5px solid ${o?'var(--wait)':'var(--run)'};background:${o?'var(--wait-dim)':'var(--run-dim)'};color:${o?'var(--wait)':'var(--run)'};font-weight:700;font-size:13px;line-height:1.2;${scaleSetup&&scaleSetup.scale===sc?'outline:2px solid var(--text);':''}">${sc}<div style="font-size:11.5px;font-weight:600;">${o?`⛔ ${fmtShort(m)}${o.itAt?' · 📞':''}`:'✓ OK'}</div></button>`; };
+  let panel = '';
+  if(scaleSetup){ const s = scaleSetup, sel = 'border-color:var(--wait);color:var(--wait);background:var(--wait-dim);';
+    if(s.mode==='down') panel = `<div style="margin-top:8px;"><div class="cb-mut" style="margin-bottom:5px;font-weight:700;color:var(--text);">⛔ ${s.scale} — what's wrong?</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;">${SCALE_REASONS.map((r,i)=>`<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;text-transform:none;font-family:inherit;${s.reason===r?sel:''}" onclick="scaleSetup.reason=SCALE_REASONS[${i}];render()">${escapeHtml(r)}</button>`).join('')}<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;text-transform:none;font-family:inherit;${s.reason==='__other'?sel:''}" onclick="scaleSetup.reason='__other';render()">✏️ Other…</button></div>
+      ${s.reason==='__other'?otherInputHTML('scaleSetup', s.otherText):''}
+      <div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="confirmScaleDown()">⛔ ${s.scale} down</button></div></div>`;
+    else { const e = scaleEvents(T).find(x=>x.id===s.id) || {};
+      panel = `<div style="margin-top:8px;"><div class="cb-mut" style="font-weight:700;color:var(--text);">⛔ ${s.scale} down since ${fmtTime12(e.start)} · ${fmtShort(scaleMin(e, T))} — ${escapeHtml(e.reason||'')}</div>
+        <div class="cb-mut" style="margin-top:3px;">${e.itAt?`📞 IT called at ${fmtTime12(e.itAt)} (${fmtShort(Math.max(0,toMin(e.itAt)-toMin(e.start)))} after it went down)`:'IT not called yet'}</div>
+        <span style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span class="cb-mut" style="white-space:nowrap;">IT ticket #</span><input type="text" id="scaleTicket" maxlength="30" value="${escapeHtml(s.ticket||e.ticket||'')}" placeholder="optional" style="padding:8px;flex:1;min-width:0;"></span>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Close</button>${e.itAt?'':`<button type="button" class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="scaleIT()">📞 IT called</button>`}<button type="button" class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="scaleBackUp()">✅ Back up</button></div></div>`; } }
+  return `<div class="card" style="padding:10px 12px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--muted);">🖥 SCALES</span><span style="font-size:12px;font-weight:700;color:${up===SCALES.length?'var(--run)':up===0?'var(--wait)':'var(--change)'};">${up} of ${SCALES.length} working</span></div>
+    <div style="display:flex;gap:6px;">${SCALES.map(sq).join('')}</div>${panel}</div>`;
+}
+/* End Shift closes any scale still down (flagged) */
+{ const _ca2 = closeAllOpenForEndShift; closeAllOpenForEndShift = async function(){ const ok = await _ca2(); if(!ok) return ok;
+    const d = dayLogFor(todayStr()); if(d && (d.scales||[]).some(e=>!e.end)){ d.scales.forEach(e=>{ if(!e.end){ e.end = nowHHMM(); e.endShift = true; } }); await Store.saveDayLog(); }
+    return ok; }; }
+/* Daily Report line */
+function scaleDayRows(date){
+  const ev = scaleEvents(date); const rows = [];
+  if(!ev.length){ rows.push({k:'Scales', v:'no downtime recorded'}); return rows; }
+  SCALES.forEach(sc=>{ const l = ev.filter(e=>e.scale===sc); if(!l.length){ rows.push({k:sc, v:'OK'}); return; }
+    const tot = l.reduce((t,e)=>t+scaleMin(e, date),0), by = {}; l.forEach(e=>{ by[e.reason] = (by[e.reason]||0) + scaleMin(e, date); });
+    rows.push({k:sc, red:true, v:`down ${l.length}× · ${fmtDur(tot)} (${Object.keys(by).map(r=>`${r.toLowerCase()} ${fmtDur(by[r])}`).join(', ')})${l.some(e=>e.endShift)?' · still down at end of shift':''}`}); });
+  return rows;
+}
+/* 🖥 Scale Downtime report */
+let scaleRange = null;
+function scaleRangeNow(){ if(!scaleRange){ const t = todayStr(), d = new Date(); d.setDate(d.getDate()-6); scaleRange = {start: localDateStr(d), end: t, preset:'7'}; } return scaleRange; }
+function setScalePreset(p){ const t = todayStr(), d = new Date(); if(p==='today') scaleRange = {start:t, end:t, preset:p}; else { d.setDate(d.getDate()-(p==='7'?6:29)); scaleRange = {start: localDateStr(d), end: t, preset:p}; } render(); }
+function setScaleDate(w, v){ if(!v) return; const r = scaleRangeNow(); r[w] = v; r.preset = ''; if(r.end < r.start){ if(w==='start') r.end = v; else r.start = v; } render(); }
+function scaleReportHTML(start, end, forPdf){
+  const td = 'padding:6px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;', th = 'text-align:left;font-size:10.5px;color:#666;text-transform:uppercase;letter-spacing:.04em;padding:6px;border-bottom:1px solid #ddd;';
+  const hd = t=>`<div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin:22px 0 10px;text-transform:uppercase;">${t}</div>`;
+  const red = 'color:#c0392b;font-weight:700;';
+  const all = []; Object.keys(Store.dayLog||{}).filter(dt=>/^\d{4}-\d{2}-\d{2}$/.test(dt) && dt>=start && dt<=end).sort().forEach(dt=>scaleEvents(dt).forEach(e=>all.push({...e, date: dt, min: scaleMin(e, dt)})));
+  const scroll = h=>forPdf ? h : `<div style="overflow-x:auto;"><div style="min-width:560px;">${h}</div></div>`;
+  const H = [`<div style="background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};"><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Scale Downtime</div><div style="font-size:13px;color:#555;margin-top:2px;">Scale 3 · Scale 5 · Scale 7 — weigh & label computers · ${start===end?fmtDate(start):`${fmtDate(start)} – ${fmtDate(end)}`}</div>`];
+  if(!all.length){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No scale downtime recorded in this period.</div></div>`); return H.join(''); }
+  const days = new Set(all.map(e=>e.date)).size, tot = all.reduce((t,e)=>t+e.min,0);
+  H.push(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">${[[`${all.length}`,'times down'],[chDur(tot),'total down'],[`${days}`,`day${days===1?'':'s'} with problems`],[chDur(Math.max(...all.map(e=>e.min))),'longest outage']].map(([v,l])=>`<div style="flex:1;min-width:120px;border:1px solid #e3e3e3;border-radius:8px;padding:10px;"><div style="font-size:20px;font-weight:800;color:#c0392b;">${v}</div><div style="font-size:11px;color:#666;">${l}</div></div>`).join('')}</div>`);
+  H.push(hd('1 · By scale'));
+  H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Scale</th><th style="${th}">Times down</th><th style="${th}">Total</th><th style="${th}">Longest</th><th style="${th}">Most common</th><th style="${th}">IT response (avg)</th></tr>${SCALES.map(sc=>{ const l = all.filter(e=>e.scale===sc); if(!l.length) return `<tr><td style="${td}font-weight:700;">${sc}</td><td colspan="5" style="${td}color:#2e9d5b;">no downtime</td></tr>`;
+    const by = {}; l.forEach(e=>by[e.reason]=(by[e.reason]||0)+1); const top = Object.keys(by).sort((a,b)=>by[b]-by[a])[0]; const it = l.filter(e=>e.itAt); const avgIt = it.length ? Math.round(it.reduce((t,e)=>t+Math.max(0,toMin(e.itAt)-toMin(e.start)),0)/it.length) : null;
+    return `<tr><td style="${td}font-weight:700;">${sc}</td><td style="${td}${red}">${l.length}</td><td style="${td}${red}">${chDur(l.reduce((t,e)=>t+e.min,0))}</td><td style="${td}">${chDur(Math.max(...l.map(e=>e.min)))}</td><td style="${td}">${escapeHtml(top)} (${by[top]}×)</td><td style="${td}">${avgIt!=null?`called after ${chDur(avgIt)}`:'—'}</td></tr>`; }).join('')}</table>`));
+  const R = {}; all.forEach(e=>{ R[e.reason] = R[e.reason] || {n:0, m:0}; R[e.reason].n++; R[e.reason].m += e.min; });
+  H.push(hd('2 · By problem'));
+  H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(R).sort((a,b)=>R[b].m-R[a].m).map(r=>`<tr><td style="${td}">${escapeHtml(r)}</td><td style="${td}text-align:right;">${R[r].n}×</td><td style="${td}text-align:right;${red}">${chDur(R[r].m)}</td></tr>`).join('')}</table>`);
+  if(start!==end){ const D = {}; all.forEach(e=>{ D[e.date] = D[e.date] || {n:0,m:0}; D[e.date].n++; D[e.date].m += e.min; });
+    H.push(hd('3 · By day')); H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(D).sort().map(dt=>`<tr><td style="${td}">${fmtDate(dt)}</td><td style="${td}text-align:right;">${D[dt].n}×</td><td style="${td}text-align:right;${red}">${chDur(D[dt].m)}</td></tr>`).join('')}</table>`); }
+  H.push(hd(`${start!==end?'4':'3'} · Every incident`));
+  H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Day</th><th style="${th}">Scale</th><th style="${th}">Down</th><th style="${th}">Problem</th><th style="${th}">IT called</th><th style="${th}">Ticket</th><th style="${th}">Minutes</th></tr>${all.map(e=>`<tr><td style="${td}white-space:nowrap;">${fmtDate(e.date)}</td><td style="${td}font-weight:700;">${e.scale}</td><td style="${td}white-space:nowrap;">${fmtTime12(e.start)} – ${e.end?fmtTime12(e.end):'still down'}${e.endShift?' (end of shift)':''}</td><td style="${td}">${escapeHtml(e.reason)}</td><td style="${td}">${e.itAt?`${fmtTime12(e.itAt)} (+${chDur(Math.max(0,toMin(e.itAt)-toMin(e.start)))})`:'—'}</td><td style="${td}">${escapeHtml(e.ticket||'—')}</td><td style="${td}text-align:right;${red}">${chDur(e.min)}</td></tr>`).join('')}</table>`));
+  H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">Logged live on the packaging floor in the CI Tracker: the time a scale / label computer stopped working, why, when IT was called, and when it worked again. Packaging lines share the scales, so a scale down means slower weighing and labelling for every line; lines that stopped completely are also logged as Waiting — Scale Problem.</div></div>`);
+  return H.join('');
+}
+function renderScaleReportView(){
+  const r = scaleRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setScalePreset('${p}')">${l}</button>`;
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
+  <div class="card"><h3>🖥 Scale Downtime</h3><div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('7','Last 7')}${pb('30','Last 30')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setScaleDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setScaleDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
+    <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="exportScalePDF()">Export PDF</button></div></div>
+  <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${scaleReportHTML(r.start, r.end)}</div>`;
+}
+async function exportScalePDF(){ const r = scaleRangeNow(); await buildHtmlReportPDF(scaleReportHTML(r.start, r.end, true), `Scale-Downtime-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
+
 /* ============ FLOOR VIEW (v113) ============
 The Dashboard's machine section shows the real packaging floor (floorplan.jpg, uploaded next to index.html) with live markers placed by % so they stay on the right machine on any screen. Tap a marker for the full details. Every marker reads only existing live entries (Live Floor runs, downtime reasons, Crew Board) — nothing new to enter. A Floor / Cards switch keeps the old cards available, and Cards is used automatically if the image can't load. */
 const FLOOR_SPOTS = [
@@ -3960,6 +4058,7 @@ function renderLive(){
     <div style="color:var(--muted);font-size:13px;">Tap a machine to start tracking a run live — set the product now or later. Finishing a product writes it straight into History, same as manual entries.</div>
   </div>
   ${renderBreakAllBar()}
+  ${renderScalesBar()}
   ${crewAlertStripHTML()}
   ${renderCrewBoard('machines')}
   ${renderAllLineBanners()}${plannedPeopleBannerHTML()}
@@ -5571,6 +5670,7 @@ function renderReportsList(){
   const list = Store.dailyReports.slice().sort((a,b)=>b.date.localeCompare(a.date));
   let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('scales')">🖥 Scale Downtime</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="openCrewHours(todayStr())">👥 Crew Hours & Positions</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('upstreamImpact')">🏭 Upstream Impact Summary</button>`;
