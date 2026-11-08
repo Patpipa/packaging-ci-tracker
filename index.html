@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v187 - 2026-11-08 (History now shows the full side-machine day — set-up, each pause with its reason, break pause, dismantle and clean-up — as view-only cards next to the job, head counts only; Side machine Running card shows ran time and paused time; Fajita, Slicer, Cutlet and Vacuum Sealer added to the History machine filter; Totals unchanged — nothing is counted twice)';
+const APP_VERSION = 'v188 - 2026-11-08 (Closing: Cleaning all Variovacs is now one general Closing clean-up; Clean a machine: Clean Manual and Clean Area / Floor removed; Older days still show their old labels)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1889,15 +1889,16 @@ const PLACES = [
   {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
   {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
   {w:'Not here · Late', g:'Not here', s:'Late'}, {w:'Not here · Went home', g:'Not here', s:'Went home'}, {w:'Not here · Absent', g:'Not here', s:'Absent'},
-  {w:'Closing · Cleaning all Variovacs', g:'Shutdown / Clean-up', s:'Cleaning Variovacs'}, // v170: 🌙 closing routine
+  {w:'Closing · Closing clean-up', g:'Shutdown / Clean-up', s:'Closing clean-up'}, // v188: one general closing clean-up (replaces Cleaning all Variovacs)
+  {w:'Closing · Cleaning all Variovacs', g:'Shutdown / Clean-up', s:'Cleaning Variovacs', hide:true}, // v170 — kept only so older days still read right
   {w:'Closing · Cleaning scales', g:'Shutdown / Clean-up', s:'Cleaning scales'},
   {w:'Closing · Materials to warehouse', g:'Shutdown / Clean-up', s:'Materials to warehouse'},
   {w:'Closing · Restocking film / boxes', g:'Shutdown / Clean-up', s:'Restocking film / boxes'},
   {w:'Closing · Paperwork', g:'Shutdown / Clean-up', s:'Paperwork'},
   {w:'Garbage run', g:'Garbage run', s:'Garbage'}, // v165: end-of-day garbage, not tied to a running line
-  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
+  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: m==='Manual Pack' || m==='Area / floor', g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
 ];
-const PLACE_GROUPS = [['🌙 Closing', p=>p.w.startsWith('Closing · ') || p.w==='Garbage run'], ['🧽 Clean a machine', p=>p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
+const PLACE_GROUPS = [['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
 function crewRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.slice(); }
 function trimmerList(){ const r = Store.settings && Store.settings.trimmerNames; return Array.isArray(r) ? r : []; }
@@ -2223,8 +2224,8 @@ function moveDests(m){
   MACHINES.filter(x=>x!==m).forEach(x=>{ const l = Store.liveRuns[x]; const on = l && !isStaleLive(l) && (l.segments||[]).length;
     out.push({key:x, grp:'Lines', label: shortM(x), sub: !on ? 'not started' : (l.status==='RUNNING' ? 'running' : 'stopped')}); });
   SIDE_MACHINES.forEach(sm=>{ const on = openSideRuns(T).some(s=>s.machine===sm.name); out.push({key:sm.name, grp:'Side machines', label: sm.name, sub: on ? 'on' : 'off'}); });
-  PLACES.filter(p=>p.w.startsWith('Closing · ') || p.w==='Garbage run').forEach(p=>out.push({key:p.w, grp:'🌙 Closing', label:p.w.replace('Closing · ',''), sub:''}));
-  PLACES.filter(p=>p.w.startsWith('Clean-up · ')).forEach(p=>out.push({key:p.w, grp:'🧽 Clean a machine', label:'🧽 Clean '+shortM(p.w.replace('Clean-up · ','')).replace('Area / floor','area / floor'), sub:''})); // v172: says "Clean V1", not just "Variovac 1"
+  PLACES.filter(p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')).forEach(p=>out.push({key:p.w, grp:'🌙 Closing', label:p.w.replace('Closing · ',''), sub:''}));
+  PLACES.filter(p=>!p.hide && p.w.startsWith('Clean-up · ')).forEach(p=>out.push({key:p.w, grp:'🧽 Clean a machine', label:'🧽 Clean '+shortM(p.w.replace('Clean-up · ','')).replace('Area / floor','area / floor'), sub:''})); // v172: says "Clean V1", not just "Variovac 1"
   PLACES.filter(p=>!p.w.startsWith('Not here') && p.w!=='Setup / Opening' && p.g!=='Shutdown / Clean-up' && p.w!=='Garbage run').forEach(p=>out.push({key:p.w, grp:'Other', label:p.w.replace('Lent · ','Lent: '), sub:''}));
   out.push({key:'__other', grp:'Other', label:'✏️ Other…', sub:''});
   out.push({key:'__none', grp:'Other', label:'Free / not on anything', sub:''});
@@ -2537,7 +2538,7 @@ function afterFinishHTML(m){
       <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="liveAfterFinish.mode='';render()">← Back</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="afterFinishSend()">Send ${a.sel.length||''} →</button></div>`
     : a.mode==='other' ? `${otherInputHTML('liveAfterFinish', a.otherText)}<div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="liveAfterFinish.mode='';render()">← Back</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="liveAfterFinish.dest='__other';afterFinishSend()">Save</button></div>`
     : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-      ${typeof afterFinishSideBtns==='function' && isSide ? afterFinishSideBtns(m, btn) : btn(`🧽 Shutdown & clean ${shortM(m)}`, `afterFinishGo('${cleanW}')`, 'var(--brk)') + btn('🧽 Clean all Variovacs', `afterFinishGo('Closing · Cleaning all Variovacs')`) + btn('⚖️ Clean scales', `afterFinishGo('Closing · Cleaning scales')`) + btn('📦 Materials to warehouse', `afterFinishGo('Closing · Materials to warehouse')`)}
+      ${typeof afterFinishSideBtns==='function' && isSide ? afterFinishSideBtns(m, btn) : btn(`🧽 Shutdown & clean ${shortM(m)}`, `afterFinishGo('${cleanW}')`, 'var(--brk)') + btn('🌙 Closing clean-up', `afterFinishGo('Closing · Closing clean-up')`) + btn('⚖️ Clean scales', `afterFinishGo('Closing · Cleaning scales')`) + btn('📦 Materials to warehouse', `afterFinishGo('Closing · Materials to warehouse')`)}
       ${btn('🗑 Garbage', `afterFinishGo('Garbage run')`)}${isSide ? '' : btn('🎞 Restock film / boxes', `afterFinishGo('Closing · Restocking film / boxes')`) + btn('📝 Paperwork', `afterFinishGo('Closing · Paperwork')`)}${btn('👥 Another job', `liveAfterFinish.mode='move';liveAfterFinish.dest='';render()`)}
       ${btn('✏️ Other…', `liveAfterFinish.mode='other';render()`)}${btn('Free / not on anything', `afterFinishGo('__none')`)}</div>`}
     <div class="cb-mut" style="margin-top:6px;font-size:11.5px;">Counted from ${fmtTime12(a.at)}, when ${escapeHtml(m)} ${isSide?'ended':'finished'} — no gap in their time.</div></div>`;
