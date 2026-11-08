@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v186 - 2026-11-07 (TRIMMERS - Schedule Change: Order Moved to After Lunch is now Trimming Moved to After Lunch / Afternoon — covers one order or the whole trimming schedule; Earlier records renamed automatically)';
+const APP_VERSION = 'v187 - 2026-11-08 (History now shows the full side-machine day — set-up, each pause with its reason, break pause, dismantle and clean-up — as view-only cards next to the job, head counts only; Side machine Running card shows ran time and paused time; Fajita, Slicer, Cutlet and Vacuum Sealer added to the History machine filter; Totals unchanged — nothing is counted twice)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5124,6 +5124,55 @@ async function _saveRecordInner(){
 }
 
 /* ============ HISTORY ============ */
+/* v187: SIDE-MACHINE HISTORY — view-only cards built from what was tapped on Live (dayLog.side + where log):
+set-up, each pause/wait, break pause, dismantle, clean. Head counts only — names stay in Crew Hours.
+They are NOT records: Downtime / Efficiency / Upstream / CSV totals never see them, so nothing is counted twice. */
+const SIDE_NAMES = SIDE_MACHINES.map(x=>x.name);
+function sideHistoryItems(dates){
+  const out = [], hh = v=>String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0');
+  dates.forEach(date=>{
+    const d = dayLogFor(date); if(!d) return;
+    const jobs = Store.records.filter(r=>r.side && r.date===date);
+    const jobFor = (m, start, kind)=>{ const js = jobs.filter(r=>r.machine===m); if(!js.length) return null; const t = toMin(start);
+      if(kind==='before'){ const a = js.filter(r=>toMin(r.startTime)>=t).sort((x,y)=>toMin(x.startTime)-toMin(y.startTime)); if(a.length) return a[0]; }
+      if(kind==='after'){ const a = js.filter(r=>toMin(r.endTime)<=t+1).sort((x,y)=>toMin(y.endTime)-toMin(x.endTime)); if(a.length) return a[0]; }
+      return js.find(r=>toMin(r.startTime)<=t && t<=toMin(r.endTime)) || js[0]; };
+    const order = (job, start, above)=> job ? job.createdAt + (above ? 0.5 : -0.5 + (1440-toMin(start))/4000) : Date.parse(date+'T'+start+':00') || 0;
+    const es = (d.side||[]).slice().sort((a,b)=>toMin(a.start)-toMin(b.start));
+    es.forEach((e,i)=>{
+      (e.waits||[]).forEach((w,k)=>{ const b = w.end || e.end; if(!b) return; const mn = Math.max(0, toMin(b)-toMin(w.start)); if(!mn) return;
+        const job = jobFor(e.machine, w.start);
+        out.push({syn:true, id:'shw-'+e.id+'-'+k, date, machine:e.machine, status:'WAITING', label:'Paused', reason: REASON_RENAMES[w.reason]||w.reason, start:w.start, end:b, min:mn, people:(e.names||[]).length || (e.pack||0), createdAt: order(job, w.start)}); });
+      const nx = es.slice(i+1).find(x=>(x.jobId||x.id)===(e.jobId||e.id));
+      if(e.breakPaused && e.end && nx && toMin(nx.start)>toMin(e.end)){ const job = jobFor(e.machine, e.end);
+        out.push({syn:true, id:'shb-'+e.id, date, machine:e.machine, status:'BREAK', label:'Break pause', reason:'Break', start:e.end, end:nx.start, min:toMin(nx.start)-toMin(e.end), people:0, createdAt: order(job, e.end)}); }
+    });
+    let pd = null; try{ pd = personDay(date); }catch(err){ pd = null; }
+    if(pd){
+      const groups = {};
+      pd.people.forEach(p=>p.segs.forEach(sg=>{ const m = /^(Set-up|Dismantle|Clean-up) · (.+)$/.exec(sg.w||''); if(!m || !SIDE_NAMES.includes(m[2]) || sg.b<=sg.a) return; (groups[sg.w] = groups[sg.w] || []).push({a:sg.a, b:sg.b, n:p.name}); }));
+      Object.keys(groups).forEach(w=>{
+        const [kind, m] = w.split(' · '), list = groups[w].sort((x,y)=>x.a-y.a), cl = [];
+        list.forEach(x=>{ const c = cl[cl.length-1]; if(c && x.a <= c.b+5){ c.b = Math.max(c.b, x.b); c.names.add(x.n); c.pm += x.b-x.a; } else cl.push({a:x.a, b:x.b, names:new Set([x.n]), pm:x.b-x.a}); });
+        cl.forEach((c,k)=>{ const st = hh(c.a), job = jobFor(m, st, kind==='Set-up'?'before':'after');
+          out.push({syn:true, id:'shp-'+w+'-'+k, date, machine:m, status: kind==='Set-up' ? 'CHANGEOVER' : 'PLANNED', label: kind==='Set-up' ? '🔧 Set-up' : kind==='Dismantle' ? '🔩 Dismantle' : '🧽 Clean-up', reason:'',
+            start:st, end:hh(c.b), min:c.b-c.a, people:c.names.size, pm:c.pm, createdAt: order(job, st, kind==='Set-up')}); });
+      });
+    }
+  });
+  return out;
+}
+function sideHistCardHTML(x){
+  const si = statusInfo(x.status) || STATUSES[0];
+  return `<div class="hist-item" style="border-left:3px solid ${si.color};">
+      <div class="hist-top"><span class="mach">${escapeHtml(x.machine)}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${escapeHtml(x.label)}</span></div>
+      <div class="hist-mid">${fmtDate(x.date)} · ${fmtTime12(x.start)} – ${fmtTime12(x.end)} · ${fmtDur(x.min)}</div>
+      ${x.reason ? `<div class="hist-mid">${escapeHtml(x.reason)}</div>` : ''}
+      ${x.people ? `<div class="hist-mid">👥 ${x.people} ${x.people===1?'person':'people'}${x.pm && x.pm!==x.min ? ` · ${fmtDur(x.pm)} labour` : ''}</div>` : ''}
+      <div class="hist-mid" style="font-size:11px;opacity:.75;">Side machine · from Live · view only</div>
+    </div>`;
+}
+
 let histFilters = {date:'', machine:'', product:'', status:'', category:''};
 let expandedTimelineIds = new Set();
 function toggleTimeline(id){
@@ -5143,8 +5192,16 @@ function renderHistory(){
   if(histFilters.product) recs = recs.filter(r=>r.product===histFilters.product);
   if(histFilters.status) recs = recs.filter(r=>r.status===histFilters.status);
   if(histFilters.category) recs = recs.filter(r=>r.reasonCategory===histFilters.category);
+  // v187: side-machine day story (view only) mixed in next to its job
+  if(!histFilters.category && !histFilters.product && (!histFilters.machine || SIDE_NAMES.includes(histFilters.machine))){
+    let syn = sideHistoryItems(histFilters.date ? [histFilters.date] : uniqueDates());
+    if(histFilters.machine) syn = syn.filter(x=>x.machine===histFilters.machine);
+    if(histFilters.status) syn = syn.filter(x=>x.status===histFilters.status);
+    if(syn.length) recs = recs.concat(syn).sort((a,b)=>b.createdAt-a.createdAt);
+  }
 
   const items = recs.length ? recs.map(r=>{
+    if(r.syn) return sideHistCardHTML(r);
     const si = statusInfo(r.status);
     const showsPLHButton = r.status==='RUNNING';
     const plhButtonLabel = (r.plh && r.plh.grossPLH!=null) ? '✎ Edit Qty/Weight (PLH)' : '📦 Add Qty/Weight (PLH)';
@@ -5152,7 +5209,7 @@ function renderHistory(){
     const isExpanded = expandedTimelineIds.has(r.id);
     return `<div class="hist-item">
       <div class="hist-top"><span class="mach">${r.machine}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${si.label}</span></div>
-      <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${fmtDur(r.durationMin)} ${r.product?('· '+r.product):''}</div>
+      <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${r.side?'ran ':''}${fmtDur(r.durationMin)}${r.side ? (()=>{ const pz = ((r.plh&&r.plh.downtimeSegments)||[]).reduce((t,d)=>t+duration(d.start,d.end),0); return pz ? ` (paused ${fmtDur(pz)})` : ''; })() : ''} ${r.product?('· '+escapeHtml(r.product)):''}</div>
       ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
       ${hasTimeline ? `<div style="cursor:pointer;color:var(--brk);font-size:12px;margin-top:6px;text-decoration:underline;" onclick="toggleTimeline('${r.id}')">${isExpanded?'▾':'▸'} View Timeline</div>` : ''}
@@ -5169,7 +5226,7 @@ function renderHistory(){
   <button class="btn btn-primary" style="margin-bottom:12px;font-size:16px;font-weight:800;padding:15px;" onclick="addMissedRecord()">＋ ADD A MISSED RECORD</button>
   <div class="filterbar">
     <select onchange="histFilters.date=this.value; render()"><option value="">All Dates</option>${uniqueDates().map(d=>`<option value="${d}" ${histFilters.date===d?'selected':''}>${fmtDate(d)}</option>`).join('')}</select>
-    <select onchange="histFilters.machine=this.value; render()"><option value="">All Machines</option>${MACHINES.map(m=>`<option ${histFilters.machine===m?'selected':''}>${m}</option>`).join('')}</select>
+    <select onchange="histFilters.machine=this.value; render()"><option value="">All Machines</option>${MACHINES.concat(SIDE_NAMES.filter(n=>!MACHINES.includes(n))).map(m=>`<option ${histFilters.machine===m?'selected':''}>${m}</option>`).join('')}</select>
     <select onchange="histFilters.status=this.value; render()"><option value="">All Status</option>${STATUSES.map(s=>`<option value="${s.key}" ${histFilters.status===s.key?'selected':''}>${s.label}</option>`).join('')}</select>
     <select onchange="histFilters.category=this.value; render()"><option value="">All Categories</option>${Object.keys(WAITING_CATEGORIES).map(c=>`<option ${histFilters.category===c?'selected':''}>${c}</option>`).join('')}</select>
   </div>
