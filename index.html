@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v189 - 2026-11-08 (Closing is now one button: Closing tasks — covers cleaning, scales, materials, restocking and paperwork; Garbage run stays; Clean Manual and Clean Area / Floor removed; Older days still show their old labels)';
+const APP_VERSION = 'v190 - 2026-11-08 (🔩 Dismantle button on Fajita, Slicer and Cutlet when idle — tap names, Start dismantle; When done: ✓ Done → Closing tasks or ✓ Done (free); Closing has just Closing tasks and Garbage run)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1505,9 +1505,10 @@ function renderCrewBoard(mode){
         ${w?`<button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="sideWaitEnd('${run.id}')">▶ Resume</button>`:`<button class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="openSidePause('${run.id}')">⏸ Pause</button>`}
         <button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="openSideEnd('${run.id}')">✅ Finished</button></div></div>`;
     }
-    const prepNow = peopleAtPlace('Set-up · '+sm.name);
-    return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}')">🔧 Set up</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
-      ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div>`:''}</div>`;
+    const prepNow = peopleAtPlace('Set-up · '+sm.name), disNow = peopleAtPlace('Dismantle · '+sm.name);
+    return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}')">🔧 Set up</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}','Dismantle')">🔩 Dismantle</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
+      ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div>`:''}
+      ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 Dismantling: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','__none')">✓ Done (free)</button></div>`:''}</div>`;
   }).join('');
   const ctl = crewTimeline(todayStr());
   let crewRow;
@@ -2915,19 +2916,21 @@ function sidePauseHTML(run){
 }
 /* 🔧 set up (Fajita, Cutlet, Slicer) */
 let sidePrep = null; // {machine, kind:'Set-up', names:[], trn:[]}
-function openSidePrep(m){ sidePrep = {machine:m, names:[], trn:[]}; render(); }
+function openSidePrep(m, kind){ sidePrep = {machine:m, kind: kind||'Set-up', names:[], trn:[]}; render(); }
+/* v190: dismantle at closing — the dismantle people move on with one tap */
+async function prepDone(m, w){ const ns = peopleAtPlace('Dismantle · '+m); const at = nowHHMM(); for(const n of ns){ placeSetup = {name:n, w, at}; await savePlace(); if(placeSetup){ placeSetup = null; return; } } render(); toast(`🔩 ${m} dismantled — ${ns.join(', ')}`); }
 function togglePrepTrn(i){ const p = sidePrep; if(!p) return; const n = p.names[i]; if(n==null) return; p.trn = p.trn.includes(n) ? p.trn.filter(x=>x!==n) : [...p.trn, n]; render(); }
 async function confirmSidePrep(){
-  const p = sidePrep; if(!p) return; if(!(p.names||[]).length){ toast('Tap who is setting it up'); return; }
+  const p = sidePrep; if(!p) return; const dis = p.kind==='Dismantle'; if(!(p.names||[]).length){ toast(dis ? 'Tap who is dismantling it' : 'Tap who is setting it up'); return; }
   const at = nowHHMM();
-  for(const n of p.names){ placeSetup = {name:n, w:'Set-up · '+p.machine, at, trn: p.trn.includes(n)}; await savePlace(); if(placeSetup){ placeSetup = null; return; } }
-  sidePrep = null; render(); toast(`🔧 ${p.machine} set-up — ${p.names.join(', ')}`);
+  for(const n of p.names){ placeSetup = {name:n, w:(dis?'Dismantle · ':'Set-up · ')+p.machine, at, trn: p.trn.includes(n)}; await savePlace(); if(placeSetup){ placeSetup = null; return; } }
+  sidePrep = null; render(); toast(`${dis?'🔩':'🔧'} ${p.machine} ${dis?'dismantle':'set-up'} — ${p.names.join(', ')}`);
 }
 function sidePrepHTML(){
-  const p = sidePrep;
-  return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--brk);"><span class="cb-nm">🔧 Set up ${escapeHtml(p.machine)} — who?</span>${namePickHTML('prep')}
+  const p = sidePrep, dis = p.kind==='Dismantle';
+  return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--brk);"><span class="cb-nm">${dis?'🔩 Dismantle':'🔧 Set up'} ${escapeHtml(p.machine)} — who?</span>${namePickHTML('prep')}
     ${p.names.length?`<span class="cb-mut" style="width:100%;">In training? Tap the trainee (optional)</span><div class="nm-grid">${p.names.map((n,i)=>`<button type="button" class="nm-chip trn${p.trn.includes(n)?' on':''}" onclick="togglePrepTrn(${i})">${p.trn.includes(n)?'🎓 ':''}${escapeHtml(n)}</button>`).join('')}</div>`:''}
-    <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="sidePrep=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmSidePrep()">🔧 Start set-up</button></div></div>`;
+    <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="sidePrep=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmSidePrep()">${dis?'🔩 Start dismantle':'🔧 Start set-up'}</button></div></div>`;
 }
 function peopleAtPlace(w){ const P = (((dayLogFor(todayStr())||{}).place)||{}); return Object.keys(P).filter(n=>P[n].w===w); }
 /* Start after set-up: the set-up people are already ticked */
