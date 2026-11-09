@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v195 - 2026-11-08 (Side machines: starting the same machine + product again the same day carries on ONE job — one PLH entry, one QTY / LBS ask, all running time added together; Earlier split jobs still waiting for QTY / LBS are joined automatically)';
+const APP_VERSION = 'v196 - 2026-11-08 (Live: a line waiting 10+ min with crew still on it shows ⚠ Move crew / They are waiting here — so idle labour is not charged by mistake; Not shown for break, planned stops, changeover or cleaning)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4515,7 +4515,7 @@ function renderLiveActiveCard(m, live){
         ? `<button class="btn btn-secondary" onclick="openDowntimeSetup('${m}')">⏸ Downtime</button>`
         : `<button class="btn btn-primary" style="background:var(--run);" onclick="resumeRun('${m}')">▶ Resume</button>`}
     </div>
-    ${bringBackHTML(m)}
+    ${bringBackHTML(m)}${stuckCrewHTML(m, live)}
     ${namesOn() && liveNames(live).length ? (moveCrew && moveCrew.m===m ? moveCrewHTML(m, live) : `<button class="btn btn-secondary" style="margin-top:8px;border-color:var(--brk);color:var(--brk);" onclick="openMoveCrew('${m}')">👥 Move crew${!isRunning?' (line stopped)':''}</button>`) : ''}
     ${garbageCardHTML(m, live, isRunning, lastSeg)}
     ${METAL_DETECTOR_MACHINES.includes(m) && !inMetalCheck(live) ? `<button class="btn btn-secondary" style="margin-top:8px;border-color:var(--planned);color:var(--planned);" onclick="quickMetalDetector('${m}')">🧲 Metal Detector</button>` : ''}
@@ -4683,6 +4683,19 @@ function renderLiveDowntimeSetupCard(live){
   </div>`;
 }
 function dtSyncBtn(){ const b = document.getElementById('dtConfirm'), s = liveDowntimeSetup; if(!b || !s) return; const ok = dtReady(s); b.disabled = !ok; b.style.opacity = ok ? '' : '.45'; }
+/* v196: a line stopped (waiting / no work) for 10+ min with crew still on it — nudge to move them, so the line isn't charged idle labour by mistake */
+const STUCK_CREW_MIN = 10;
+function stuckCrewHTML(m, live){
+  if(!namesOn() || !live || live.status==='RUNNING' || (moveCrew && moveCrew.m===m)) return '';
+  const dt = (live.downtimeSegments||[]).slice(-1)[0]; if(!dt || dt.end || dt.crewOk) return '';
+  if(!['WAITING','NO_WORK'].includes(dt.status) || dt.reasonCategory==='Cleaning / Sanitation') return '';
+  const n = liveNames(live).length, mins = elapsedMinutesSince(dt.start); if(!n || mins < STUCK_CREW_MIN) return '';
+  return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--change);border-radius:10px;background:var(--change-dim);">
+    <div style="font-weight:700;color:var(--change);font-size:13.5px;">⚠ ${escapeHtml(shortM(m))} stopped ${fmtDur(mins)} · ${n} crew still on it</div>
+    <div class="cb-mut" style="margin:3px 0 8px;">Their time counts as ${escapeHtml(shortM(m))} labour while it waits. Moved somewhere? Record it.</div>
+    <div style="display:flex;gap:6px;"><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="openMoveCrew('${m}')">👥 Move crew</button><button type="button" class="cb-btn" onclick="stuckCrewOk('${m}')">They're waiting here</button></div></div>`;
+}
+async function stuckCrewOk(m){ const l = Store.liveRuns[m]; const dt = l && (l.downtimeSegments||[]).slice(-1)[0]; if(!dt || dt.end) return; dt.crewOk = true; await Store.saveLiveRuns(); render(); }
 async function confirmDowntime(){
   const s = liveDowntimeSetup;
   if(!dtReady(s)){ toast('Pick a reason first'); return; } // v149
