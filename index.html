@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v198 - 2026-11-08 (Side machines: no PLH number — they track running hours and output only, PLH stays on the Variovac that packed it; PLH → Side machine hours & output shows ran time, QTY, LBS and which Variovac packed it; Daily Report: Fajita · ran 2h · 15 boxes · 75 lbs (packed on V3); No more weight-missing warning for Fajita, Slicer, Cutlet — tick them at any Variovac Finish; Vacuum Sealer still asks QTY / LBS at its own Finish)';
+const APP_VERSION = 'v199 - 2026-11-09 (Fix: saving side machine QTY / LBS no longer freezes when no packaging crew were logged; side job notes show QTY / LBS only, no Labour / PLH; QTY / LBS warning clears once output is in). v198: Side machines: no PLH number — they track running hours and output only, PLH stays on the Variovac that packed it; PLH → Side machine hours & output shows ran time, QTY, LBS and which Variovac packed it; Daily Report: Fajita · ran 2h · 15 boxes · 75 lbs (packed on V3); No more weight-missing warning for Fajita, Slicer, Cutlet — tick them at any Variovac Finish; Vacuum Sealer still asks QTY / LBS at its own Finish)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -271,7 +271,7 @@ function reasonAllowedForMachine(reason, machine){
   return !(m && m[1]===machine);
 }
 function reasonsForMachine(cat, machine, current){
-  const all = WAITING_CATEGORIES[cat].reasons;
+  const all = (WAITING_CATEGORIES[cat] && WAITING_CATEGORIES[cat].reasons) || []; // v199: an old / unknown category no longer crashes Edit
   const list = all.filter(r=>reasonAllowedForMachine(r, machine));
   if(current && all.includes(current) && !list.includes(current)) list.push(current);
   return list;
@@ -841,7 +841,7 @@ function sideJobsOut(date, key){
 /* v158: a day with side-machine jobs takes its output from the jobs only; days before jobs existed keep the QTY / LBS typed in then (read-only) */
 function effOut(date, key){ if(Store.records.some(r=>r.side && r.date===date)) return sideJobsOut(date, key); const o = ((dayLogFor(date)||{}).output||{})[key]; return (o && (o.qty || o.lbs)) ? o : null; }
 function sideJobsNeedWeightHTML(date){
-  const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && r.plh.grossPLH==null && !SIDE_PREP.includes(r.machine)); // v198: Fajita / Slicer / Cutlet get QTY / LBS from the Variovac Finish tick
+  const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && !(r.plh.weightLbs>0 || r.plh.quantity>0) && !SIDE_PREP.includes(r.machine)); // v199: output entered clears it, even with 0 packaging (no PLH) // v198: Fajita / Slicer / Cutlet get QTY / LBS from the Variovac Finish tick
   if(!miss.length) return '';
   const go = miss.length===1 ? `openAddPLHData('${miss[0].id}')` : `plhKind='side';try{localStorage.setItem('pct_plh_kind','side')}catch(e){};plhLogDetailId=null;plhLogRange={preset:'today',...plhPresetRange('today')};Router.go('plhLog')`;
   return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>`;
@@ -922,7 +922,7 @@ function buildSideJobRecord(date, jobId, opt){
   const runMin = segs.reduce((t,x)=>t+duration(x.start,x.end),0);
   const packs = [...new Set(es.map(e=>e.pack||0))], hasPack = es.some(e=>e.phase==='pack');
   const crewNote = packs.length===1 ? `${packs[0]} packaging on station` : `${Math.min(...packs)}–${Math.max(...packs)} packaging on station (crew changed)`;
-  const notes = [`${crewNote} (Side machine${hasPack?' · sealing then packing':''})`, ...plhNoteExtras(plh).filter(x=>!/^(PLH: |vs Target |Labour: )/.test(x)).map(x=>x.startsWith('Qty/Weight not entered')?'QTY / LBS not entered yet':x), (opt && opt.notes)||''].filter(Boolean).join(' · ');
+  const notes = [`${crewNote} (Side machine${hasPack?' · sealing then packing':''})`, ...sidePlhNoteExtras(plh), (opt && opt.notes)||''].filter(Boolean).join(' · ');
   return {id:'side-'+jobId, side:true, jobId, date, machine, product, startTime:first.start, endTime:last.end, durationMin:runMin,
     status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes, source:'side', createdAt: Date.now(), plh};
 }
@@ -4876,7 +4876,7 @@ function applyPaidBreakRule(recs){
     list.forEach(r=>{ const p = r.plh; const lab = runLabourMinutes(p.segments, p.downtimeSegments, left, p.garbageMin); left = lab.paidLeft;
       p.grossLaborHours = lab.gross/60;
       if(p.weightLbs>0) p.grossPLH = p.grossLaborHours>0 ? p.weightLbs/p.grossLaborHours : null;
-      if(/Labour: |PLH: /.test(r.notes||'')){ const nn = refreshPlhNote(r.notes, p); if(nn!==r.notes) r.notes = nn; } });
+      if(/Labour: |PLH: /.test(r.notes||'')){ const nn = refreshPlhNote(r.notes, p, r.side); if(nn!==r.notes) r.notes = nn; } });
   });
 }
 
@@ -4893,12 +4893,20 @@ function plhNoteExtras(p){
   return extras;
 }
 /* v155: rewrites only the generated Qty / Weight / Labour / PLH / vs Target pieces of a run's note so it always matches the current numbers — the operator's own words stay where they were */
-const PLH_NOTE_PART = /^(Qty: |Weight: |Labour: |PLH: |vs Target |Qty\/Weight not entered yet)/;
-function refreshPlhNote(notes, p){
+/* v199: side machines track hours + output only — their note shows QTY / LBS, never Labour / PLH */
+function sidePlhNoteExtras(p){
+  const extras = [];
+  if(p.quantity) extras.push(`Qty: ${p.quantity}`);
+  if(p.weightLbs) extras.push(`Weight: ${p.weightLbs} lbs`);
+  if(!extras.length) extras.push('QTY / LBS not entered yet');
+  return extras;
+}
+const PLH_NOTE_PART = /^(Qty: |Weight: |Labour: |PLH: |vs Target |Qty\/Weight not entered yet|QTY \/ LBS not entered yet)/;
+function refreshPlhNote(notes, p, side){
   const parts = String(notes||'').split(' · ').map(x=>x.trim()).filter(Boolean);
   const at = parts.findIndex(x=>PLH_NOTE_PART.test(x));
   const keep = parts.filter(x=>!PLH_NOTE_PART.test(x));
-  const gen = plhNoteExtras(p);
+  const gen = (side || (p && p.side)) ? sidePlhNoteExtras(p) : plhNoteExtras(p);
   const pos = at<0 ? keep.length : parts.slice(0,at).filter(x=>!PLH_NOTE_PART.test(x)).length;
   keep.splice(pos, 0, ...gen);
   return keep.join(' · ');
@@ -5399,12 +5407,12 @@ async function confirmAddPLHData(){
   const netPLH = p.netLaborHours>0 ? weightNum/p.netLaborHours : null;
   const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH};
   // Strip any previously-generated summary (the placeholder text, or a prior real Qty/Weight/Labour/PLH block from an earlier edit) so correcting a value replaces it cleanly instead of stacking a second, conflicting summary alongside the old one
-  const notes = refreshPlhNote(r.notes, updatedPLH);
+  const notes = refreshPlhNote(r.notes, updatedPLH, r.side);
   Store.records[idx] = {...r, plh: updatedPLH, notes};
   const ok = await Store.saveRecords();
   if(!ok) return;
   plhDataFormId = null;
-  toast(`PLH saved — ${grossPLH.toFixed(0)} PLH`);
+  toast(r.side ? 'QTY / LBS saved' : grossPLH!=null ? `PLH saved — ${grossPLH.toFixed(0)} PLH` : 'Saved — no labour hours on this run, so no PLH'); // v199: was a crash when labour hours were 0 (e.g. side job with trimmers only)
   Router.go('history');
 }
 async function deleteRecord(id){
@@ -5421,7 +5429,7 @@ function editRecord(id){
   if(!r) return;
   const isCustomChangeover = r.status==='CHANGEOVER' && !CHANGEOVER_REASONS.includes(r.reason);
   const isCustomWaiting = r.status==='WAITING' && r.reasonCategory && WAITING_CATEGORIES[r.reasonCategory] && !WAITING_CATEGORIES[r.reasonCategory].reasons.includes(r.reason);
-  draft = {plannedReason: r.status==='PLANNED' ? (PLANNED_REASONS.includes(r.reason)?r.reason:'Other') : PLANNED_REASONS[0], plannedReasonOther: (r.status==='PLANNED' && !PLANNED_REASONS.includes(r.reason)) ? (r.reason||'') : '', date:r.date, machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
+  draft = {plannedReason: r.status==='PLANNED' ? (PLANNED_REASONS.includes(r.reason)?r.reason:'Other') : PLANNED_REASONS[0], plannedReasonOther: (r.status==='PLANNED' && !PLANNED_REASONS.includes(r.reason)) ? (r.reason||'') : '', date:r.date, machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING' ? (WAITING_CATEGORIES[r.reasonCategory] ? r.reasonCategory : (Object.keys(WAITING_CATEGORIES).find(c=>WAITING_CATEGORIES[c].reasons.includes(r.reason)) || Object.keys(WAITING_CATEGORIES)[0])) : Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
   draft._editId = id;
   Router.go('new');
 }
