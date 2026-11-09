@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v193 - 2026-11-08 (Moving crew to an idle Fajita, Slicer or Cutlet now asks: 🔧 Set up, 🔩 Dismantle, or ▶ Start the run — works from Move crew, after Finish and the crew place panel)';
+const APP_VERSION = 'v194 - 2026-11-08 (Moving the only person off a running line now asks: Stop it (Employee Reassigned) and move? — one tap instead of stop then move; Side machine button now says 👥 Add / change crew with a tap-to-add hint; ＋ Add person while setting up or dismantling)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1501,14 +1501,14 @@ function renderCrewBoard(mode){
         ${info?`<div class="cb-mut" style="width:100%;">${info}</div>`:''}
         ${w?`<div style="width:100%;font-size:12.5px;color:var(--change);font-weight:600;">⏸ ${escapeHtml(w.reason||'Waiting for trimmers')} since ${fmtTime12(w.start)} — not counted as running time</div>`:''}
         ${(run.names||[]).length?`<div class="cb-mut" style="width:100%;">👥 ${escapeHtml(run.names.join(', '))}${(run.trimNames||[]).length?` + ${escapeHtml(run.trimNames.join(', '))} (trimmer)`:''}</div>`:''}
-        <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">${vac?'Change product / crew':'Change crew'}</button>
+        <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">${vac?'👥 Add / change crew · product':'👥 Add / change crew'}</button>
         ${w?`<button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="sideWaitEnd('${run.id}')">▶ Resume</button>`:`<button class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="openSidePause('${run.id}')">⏸ Pause</button>`}
         <button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="openSideEnd('${run.id}')">✅ Finished</button></div></div>`;
     }
     const prepNow = peopleAtPlace('Set-up · '+sm.name), disNow = peopleAtPlace('Dismantle · '+sm.name);
     return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}')">🔧 Set up</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}','Dismantle')">🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
-      ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div>`:''}
-      ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','__none')">✓ Done (free)</button></div>`:''}</div>`;
+      ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div><div style="display:flex;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Set-up',true)">＋ Add person</button></div>`:''}
+      ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Dismantle',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','__none')">✓ Done (free)</button></div>`:''}</div>`;
   }).join('');
   const ctl = crewTimeline(todayStr());
   let crewRow;
@@ -1948,15 +1948,29 @@ Store.saveLiveRuns = async function(){ const ok = await _saveLiveRaw.apply(this,
 /* ---- picking someone who is on another machine moves them from there ---- */
 async function moveFromOthers(names, here, at, exceptSideId){
   if(!names || !names.length) return true;
-  const T = todayStr(), lines = [], sides = [], blocked = [];
+  const T = todayStr(), lines = [], sides = [], blocked = [], stopOffer = [];
   MACHINES.forEach(m=>{ if(m===here) return; const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || (!(l.segments||[]).length && !(l.pendingNames||[]).length)) return;
     const cur = liveNames(l), left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
-    if(!left.length && l.status==='RUNNING') blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${m} while it's running — finish it, stop it, or change its crew first`);
+    if(!left.length && l.status==='RUNNING'){ blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${m} while it's running — finish it, stop it, or change its crew first`); stopOffer.push({m, cur}); }
     else lines.push({m, l, left, gone: cur.filter(n=>!left.includes(n))}); });
   openSideRuns(T).forEach(x=>{ if(x.id===exceptSideId) return; const cur = x.names||[], left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
     if(!left.length && !(x.trim||0)) blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${x.machine} — End it or change its crew first`);
     else sides.push({x, left}); });
-  if(blocked.length){ toast(blocked[0]); return false; }
+  if(blocked.length){
+    // v194: only running lines in the way → offer to stop them (Employee Reassigned) and carry on with the move
+    if(stopOffer.length===blocked.length && !moveFromOthers._stopping){
+      const txt = stopOffer.map(o=>`${o.cur.join(' & ')} ${o.cur.length===1?'is the only one':'are the only ones'} on ${o.m}.`).join('\n');
+      if(confirm(`${txt}\n\nStop ${stopOffer.map(o=>o.m).join(' & ')} (Employee Reassigned) and move ${names.join(' & ')}?\n\nTap ▶ Resume or Finish on it later.`)){
+        moveFromOthers._stopping = true;
+        try{
+          for(const o of stopOffer){ liveDowntimeSetup = {machine:o.m, status:'WAITING', waitCategory:'Labour / Operational', waitReason:'Employee Reassigned', waitReasonOther:'', plannedReason:'', plannedReasonOther:'', changeReason:'', changeReasonOther:'', notes:'', cat:'', q:''};
+            await confirmDowntime(); if(liveDowntimeSetup){ liveDowntimeSetup = null; return false; } }
+          return await moveFromOthers(names, here, at, exceptSideId);
+        } finally { moveFromOthers._stopping = false; }
+      }
+      return false;
+    }
+    toast(blocked[0]); return false; }
   if(!lines.length && !sides.length) return true;
   lines.forEach(({l, left, gone})=>{ const ls = l.segments[l.segments.length-1];
     if(l.status==='RUNNING'){ ls.end = at; l.segments.push({start: at, end:null, employees: left.length, names: left}); }
@@ -2030,7 +2044,7 @@ async function addTrimmer(){
 function sideNamesHTML(s){
   s.names = s.names || [];
   const trims = [...trimmerList(), ...(s.trimNames||[]).filter(n=>!trimmerList().includes(n))]; pickLists.trim = trims;
-  return `<span class="cb-mut" style="width:100%;">Packaging — who is on it? (up to ${SIDE_PACK_MAX})</span>${namePickHTML('side')}
+  return `<span class="cb-mut" style="width:100%;">Packaging — who is on it? (up to ${SIDE_PACK_MAX}) · <b style="color:var(--text);">tap a name to add · tap again to remove</b></span>${namePickHTML('side')}
     ${s.names.length ? `<span class="cb-mut" style="width:100%;margin-top:4px;">In training? Tap the trainee (optional)</span>
     <div class="nm-grid">${s.names.map((n,i)=>`<button type="button" class="nm-chip trn${(s.trainNames||[]).includes(n)?' on':''}" onclick="toggleTrainee(${i})">${(s.trainNames||[]).includes(n)?'🎓 ':''}${escapeHtml(n)}</button>`).join('')}</div>` : ''}
     <span class="cb-mut" style="width:100%;margin-top:4px;">Trimmers helping? (up to ${SIDE_TRIM_MAX} — not packaging labour)</span>
@@ -2932,7 +2946,7 @@ function sidePauseHTML(run){
 }
 /* 🔧 set up (Fajita, Cutlet, Slicer) */
 let sidePrep = null; // {machine, kind:'Set-up', names:[], trn:[]}
-function openSidePrep(m, kind){ sidePrep = {machine:m, kind: kind||'Set-up', names:[], trn:[]}; render(); }
+function openSidePrep(m, kind, keep){ const k = kind||'Set-up'; sidePrep = {machine:m, kind: k, names: keep ? peopleAtPlace((k==='Dismantle'?'Dismantle · ':'Set-up · ')+m) : [], trn:[]}; render(); }
 /* v190: dismantle at closing — the dismantle people move on with one tap */
 async function prepDone(m, w){ const ns = peopleAtPlace('Dismantle · '+m); const at = nowHHMM(); for(const n of ns){ placeSetup = {name:n, w, at}; await savePlace(); if(placeSetup){ placeSetup = null; return; } } render(); toast(`🔩 ${m} ${disLabel(m).toLowerCase()} done — ${ns.join(', ')}`); }
 function togglePrepTrn(i){ const p = sidePrep; if(!p) return; const n = p.names[i]; if(n==null) return; p.trn = p.trn.includes(n) ? p.trn.filter(x=>x!==n) : [...p.trn, n]; render(); }
