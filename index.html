@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v197 - 2026-11-08 (Stopped-line crew reminder: first at 10 min, then every 5 min — a pop-up on any screen plus the box on Live; They are waiting here now hides it for 5 min, then asks again while crew are still on the stopped line)';
+const APP_VERSION = 'v198 - 2026-11-08 (Side machines: no PLH number — they track running hours and output only, PLH stays on the Variovac that packed it; PLH → Side machine hours & output shows ran time, QTY, LBS and which Variovac packed it; Daily Report: Fajita · ran 2h · 15 boxes · 75 lbs (packed on V3); No more weight-missing warning for Fajita, Slicer, Cutlet — tick them at any Variovac Finish; Vacuum Sealer still asks QTY / LBS at its own Finish)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -758,7 +758,7 @@ function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
   const m = document.getElementById('main');
   const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis', upstreamImpact:'Upstream Impact'};
-  document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (titles[Router.current] || 'CI Tracker');
+  document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (Router.current==='addPLHData' && (Store.records.find(x=>x.id===plhDataFormId)||{}).side) ? 'Side Machine Output' : (titles[Router.current] || 'CI Tracker');
   updateClock();
   let html = '';
   if(!Store.ready){ html += '<div class="warnbanner">DATA STORAGE IS NOT AVAILABLE. DO NOT ENTER PRODUCTION DATA UNTIL STORAGE IS FIXED.</div>'; }
@@ -835,19 +835,20 @@ function sideJobsOut(date, key){
   const js = Store.records.filter(r=>r.side && r.date===date && r.machine===mach && (!lab || (r.product||'')===lab) && r.plh && (r.plh.weightLbs>0 || r.plh.quantity>0));
   if(!js.length) return null;
   const q = js.reduce((a,r)=>a+(parseInt(r.plh.quantity,10)||0),0), l = js.reduce((a,r)=>a+(parseFloat(r.plh.weightLbs)||0),0);
-  return {qty: q?String(q):'', lbs: l?l.toFixed(3):'', fromJobs: js.length};
+  const from = [...new Set(js.map(r=>r.plh.outputFrom).filter(Boolean))].map(shortM);
+  return {qty: q?String(q):'', lbs: l?l.toFixed(3):'', fromJobs: js.length, from: from.join(' & ')};
 }
 /* v158: a day with side-machine jobs takes its output from the jobs only; days before jobs existed keep the QTY / LBS typed in then (read-only) */
 function effOut(date, key){ if(Store.records.some(r=>r.side && r.date===date)) return sideJobsOut(date, key); const o = ((dayLogFor(date)||{}).output||{})[key]; return (o && (o.qty || o.lbs)) ? o : null; }
 function sideJobsNeedWeightHTML(date){
-  const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && r.plh.grossPLH==null);
+  const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && r.plh.grossPLH==null && !SIDE_PREP.includes(r.machine)); // v198: Fajita / Slicer / Cutlet get QTY / LBS from the Variovac Finish tick
   if(!miss.length) return '';
   const go = miss.length===1 ? `openAddPLHData('${miss[0].id}')` : `plhKind='side';try{localStorage.setItem('pct_plh_kind','side')}catch(e){};plhLogDetailId=null;plhLogRange={preset:'today',...plhPresetRange('today')};Router.go('plhLog')`;
   return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>`;
 }
 function outText(o){
   if(!o || (!o.qty && !o.lbs)) return 'output not entered';
-  return [o.qty?`${o.qty} box${o.qty==='1'?'':'es'}`:'', o.lbs?`${isNaN(Number(o.lbs)) ? o.lbs : Number(Number(o.lbs).toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs`:''].filter(Boolean).join(' · '); // v176: 1,240 lbs, not 1240.000
+  return [o.qty?`${o.qty} box${o.qty==='1'?'':'es'}`:'', o.lbs?`${isNaN(Number(o.lbs)) ? o.lbs : Number(Number(o.lbs).toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs`:''].filter(Boolean).join(' · ') + (o.from ? ` (packed on ${o.from})` : ''); // v176: 1,240 lbs, not 1240.000
 }
 /* one row per machine (and per Vacuum Sealer product) used that day, for entering QTY / LBS any time after */
 function sideOutputGroups(date){
@@ -921,7 +922,7 @@ function buildSideJobRecord(date, jobId, opt){
   const runMin = segs.reduce((t,x)=>t+duration(x.start,x.end),0);
   const packs = [...new Set(es.map(e=>e.pack||0))], hasPack = es.some(e=>e.phase==='pack');
   const crewNote = packs.length===1 ? `${packs[0]} packaging on station` : `${Math.min(...packs)}–${Math.max(...packs)} packaging on station (crew changed)`;
-  const notes = [`${crewNote} (Side machine${hasPack?' · sealing then packing':''})`, ...plhNoteExtras(plh), (opt && opt.notes)||''].filter(Boolean).join(' · ');
+  const notes = [`${crewNote} (Side machine${hasPack?' · sealing then packing':''})`, ...plhNoteExtras(plh).filter(x=>!/^(PLH: |vs Target |Labour: )/.test(x)).map(x=>x.startsWith('Qty/Weight not entered')?'QTY / LBS not entered yet':x), (opt && opt.notes)||''].filter(Boolean).join(' · ');
   return {id:'side-'+jobId, side:true, jobId, date, machine, product, startTime:first.start, endTime:last.end, durationMin:runMin,
     status:'RUNNING', reasonCategory:'', reason:'', classification:'', notes, source:'side', createdAt: Date.now(), plh};
 }
@@ -3652,6 +3653,22 @@ function setPLHLogPreset(preset){
   render();
 }
 let plhLogExpanded = new Set();
+/* v198: side machines track hours + output only — PLH belongs to the Variovac that packed the product */
+function sideHoursOutputHTML(start, end){
+  const js = Store.records.filter(r=>r.side && r.date>=start && r.date<=end).sort((a,b)=>b.date.localeCompare(a.date) || toMin(a.startTime)-toMin(b.startTime));
+  if(!js.length) return '<div class="empty">No side machine jobs in this range.</div>';
+  const pz = r=>((r.plh&&r.plh.downtimeSegments)||[]).filter(d=>d.status!=='BREAK').reduce((t,d)=>t+duration(d.start,d.end),0);
+  const tot = {}; js.forEach(r=>{ const t = tot[r.machine] = tot[r.machine] || {ran:0, q:0, l:0, n:0}; t.ran += r.durationMin||0; t.q += parseInt(r.plh&&r.plh.quantity,10)||0; t.l += parseFloat(r.plh&&r.plh.weightLbs)||0; t.n++; });
+  const lb = v=>Number(v.toFixed(1)).toLocaleString('en-US');
+  const sum = `<div class="card"><h3>Totals</h3>${Object.keys(tot).map(m=>{ const t = tot[m]; return `<div class="cb-row" style="gap:8px;"><span class="cb-nm">${escapeHtml(m)}</span><span class="cb-mut" style="color:var(--text);">ran ${fmtDur(t.ran)} · QTY ${t.q} · ${lb(t.l)} lbs</span></div>`; }).join('')}</div>`;
+  const rows = js.map(r=>{ const p = r.plh||{}, has = p.weightLbs>0 || p.quantity>0, vac = !SIDE_PREP.includes(r.machine), z = pz(r);
+    return `<div class="hist-item" style="cursor:pointer;" onclick="openAddPLHData('${r.id}')">
+      <div class="hist-top"><span class="mach">${escapeHtml(r.machine)}${vac && r.product && r.product!==r.machine?` · ${escapeHtml(r.product)}`:''}</span><span class="pill ${has?'run':'wait'}">${has?'✓ output in':(vac?'QTY / LBS needed':'not linked yet')}</span></div>
+      <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ran ${fmtDur(r.durationMin||0)}${z?` (paused ${fmtDur(z)})`:''}</div>
+      <div class="hist-mid" style="color:var(--text);">${has ? `QTY ${p.quantity||0} · ${lb(parseFloat(p.weightLbs)||0)} lbs${p.outputFrom?` · packed on ${escapeHtml(shortM(p.outputFrom))}`:''}` : (vac ? 'Tap to add QTY / LBS' : 'Tick it when you Finish the Variovac that packs it — or tap to add')}</div>
+    </div>`; }).join('');
+  return `<div class="cb-mut" style="margin-bottom:10px;">Side machines track running hours and output. PLH is on the Variovac that packed the product (Lines only).</div>${sum}${rows}`;
+}
 function togglePLHJob(key){ if(plhLogExpanded.has(key)) plhLogExpanded.delete(key); else plhLogExpanded.add(key); render(); }
 function renderPLHLogView(){
   if(!plhLogRange) plhLogRange = {preset:'today', ...plhPresetRange('today')};
@@ -3683,8 +3700,11 @@ function renderPLHLogView(){
     ${open ? j.runs.map(r=>runRow(r, true)).join('') : ''}`;
   }).join('') : '<div class="empty">No finished runs in this range.</div>';
 
-  const kindBar = `<div class="filterbar">${[['lines','Lines only'],['side','Side machines only']].map(([k,l])=>`<div class="mchip ${plhKind===k?'sel':''}" style="flex:1;padding:9px 12px;font-size:12.5px;text-align:center;" onclick="setPLHKind('${k}')">${l}</div>`).join('')}</div>`;
+  const kindBar = `<div class="filterbar">${[['lines','Lines only'],['side','Side machine hours & output']].map(([k,l])=>`<div class="mchip ${plhKind===k?'sel':''}" style="flex:1;padding:9px 12px;font-size:12.5px;text-align:center;" onclick="setPLHKind('${k}')">${l}</div>`).join('')}</div>`;
   const missRows = missingW.length ? `<div class="card" style="border-color:var(--change);"><h3 style="color:var(--change);">Weight not entered — ${missingW.length} job${missingW.length===1?'':'s'}</h3>${missingW.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(r=>`<div class="statrow" style="cursor:pointer;" onclick="openAddPLHData('${r.id}')"><span class="lbl">${fmtDate(r.date)} · ${r.machine} · ${escapeHtml(r.plh.product||r.product||'')}</span><span class="val" style="color:var(--brk);">Add →</span></div>`).join('')}<div style="font-size:12px;color:var(--muted);margin-top:6px;">Not in PLH until QTY / LBS are added.</div></div>` : '';
+  if(plhKind==='side') return `${kindBar}
+  <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${plhLogRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setPLHLogPreset('${v}')">${l}</div>`).join('')}</div>
+  ${sideHoursOutputHTML(plhLogRange.start, plhLogRange.end)}`;
   return `
   ${kindBar}
   <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${plhLogRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setPLHLogPreset('${v}')">${l}</div>`).join('')}</div>
@@ -5291,7 +5311,7 @@ function renderHistory(){
     if(r.syn) return sideHistCardHTML(r);
     const si = statusInfo(r.status);
     const showsPLHButton = r.status==='RUNNING';
-    const plhButtonLabel = (r.plh && r.plh.grossPLH!=null) ? '✎ Edit Qty/Weight (PLH)' : '📦 Add Qty/Weight (PLH)';
+    const plhButtonLabel = r.side ? ((r.plh && (r.plh.weightLbs>0||r.plh.quantity>0)) ? '✎ Edit QTY / LBS' : '📦 Add QTY / LBS') : (r.plh && r.plh.grossPLH!=null) ? '✎ Edit Qty/Weight (PLH)' : '📦 Add Qty/Weight (PLH)';
     const hasTimeline = r.plh && r.plh.segments && r.plh.segments.length;
     const isExpanded = expandedTimelineIds.has(r.id);
     return `<div class="hist-item">
@@ -5342,17 +5362,17 @@ function renderAddPLHDataForm(){
   return `
   <div class="card">
     <h3>${r.product ? escapeHtml(r.product) : 'No product set'}</h3>
-    <div style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${fmtDate(r.date)} · ${r.machine} · ${laborLine}</div>
-    <div class="field"><label>Product</label>
+    <div style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${fmtDate(r.date)} · ${r.machine} · ${r.side ? `ran ${fmtDur(r.durationMin||0)} — side machine: hours + output only, no PLH` : laborLine}</div>
+    ${r.side ? '' : `<div class="field"><label>Product</label>
       <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('addPLHData','${r.id}')">📋 ${r.product ? escapeHtml(r.product) : 'Tap to select, or skip'}</button>
     </div>
-    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>`}
     ${!hasSegments ? `<div class="field"><label>Employees on Station (for this whole window)</label>${employeeGrid(plhFormEmployees, 'setPLHFormEmployees')}</div>` : ''}
     <div class="timerow">
       <div class="field"><label>Quantity Produced</label><input type="number" min="0" id="plhQtyInput" placeholder="e.g. 120" value="${r.plh?r.plh.quantity||'':''}"></div>
       <div class="field"><label>Total Weight, lbs</label><input type="number" min="0" id="plhWeightInput" placeholder="e.g. 3600" value="${r.plh?r.plh.weightLbs||'':''}"></div>
     </div>
-    <button class="btn btn-primary" onclick="confirmAddPLHData()">Save PLH Data</button>
+    <button class="btn btn-primary" onclick="confirmAddPLHData()">${r.side ? 'Save QTY / LBS' : 'Save PLH Data'}</button>
     <button class="btn btn-ghost" style="margin-top:8px;" onclick="plhDataFormId=null; Router.go('history')">Cancel</button>
   </div>`;
 }
