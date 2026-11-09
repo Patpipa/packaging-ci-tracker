@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v199 - 2026-11-08 (Full check of v185–v198 — all passed; History: side machine cards no longer repeat the machine name)';
+const APP_VERSION = 'v200 - 2026-11-09 (☕ Start Break now works with no lines running — puts everyone in today on break, pauses side machines and Lead / Yield, ▶ End Break brings them back; Crew Hours counts the break for everyone here, placed or not)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1265,15 +1265,19 @@ function personDot(cls){ return `<span class="cb-p ${cls}"><svg width="12" heigh
    pauses at the time the last Variovac went on break; when the first Variovac comes back from Break, it restarts with the same crew
    at that time. Times come from the Live Floor entries, so whichever device opens the tracker next fixes it, at the right times. */
 const VARIOVACS = ['Variovac 1','Variovac 2','Variovac 3'];
+/* v200: crew break — works even when no line is running (everyone on side machines, places, or nothing yet) */
+function openCrewBreak(date){ const d = dayLogFor(date||todayStr()); return d && (d.crewBreaks||[]).find(x=>!x.end) || null; }
 function variovacBreakState(){
   const act = VARIOVACS.map(m=>({m, live:Store.liveRuns[m]})).filter(x=>x.live && !isStaleLive(x.live) && lineStaffNow(x.m).active);
-  if(!act.length) return {any:false};
+  const cb = openCrewBreak();
+  if(cb) return {any:true, all:true, start: cb.start};
+  if(!act.length){ const d = dayLogFor(todayStr()); return (d && d.breakPause) ? {any:true, all:false} : {any:false}; }
   const open = act.map(x=>{ const dts = x.live.downtimeSegments||[], o = dts[dts.length-1]; return (x.live.status!=='RUNNING' && o && !o.end && o.status==='BREAK') ? o : null; });
   const all = open.every(Boolean);
   return {any:true, all, start: all ? open.map(o=>o.start).sort().pop() : null};
 }
 function breakEndAfter(t){
-  const ends = [];
+  const ends = []; const d0 = dayLogFor(todayStr()); ((d0 && d0.crewBreaks)||[]).forEach(x=>{ if(x.end && x.end>=t) ends.push(x.end); });
   VARIOVACS.forEach(m=>{ const live = Store.liveRuns[m]; if(!live) return; (live.downtimeSegments||[]).forEach(o=>{ if(o.status==='BREAK' && o.end && o.end>=t) ends.push(o.end); }); });
   return ends.sort()[0] || nowHHMM();
 }
@@ -2172,6 +2176,7 @@ function personDay(date){
   const isToday = date===todayStr();
   const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, DAY_TO));
   const brk = new Array(DAY_TO-DAY_FROM).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
+  const cbk = new Array(DAY_TO-DAY_FROM).fill(false); (d.crewBreaks||[]).forEach(x=>{ const a = toMin(x.start), b = x.end ? toMin(x.end) : (isToday ? toMin(nowHHMM()) : a); for(let t=Math.max(a,DAY_FROM); t<Math.min(b,DAY_TO); t++){ brk[t-DAY_FROM] = true; cbk[t-DAY_FROM] = true; } });
   const side = sideIntervals(date);
   const people = names.map(n=>{
     if(cdd[n] && crewRowOf(date, n).st!=='here'){ const r0 = crewRowOf(date, n); return {name:n, away: r0.st==='lent' ? `Lent to ${r0.dept||'other dept'}` : ({sick:'Sick',absent:'Absent',vacation:'Vacation'}[r0.st]||'Not here'), awaySt: r0.st, tot:{}, grp:{}, segs:[], total:0, a:REG_A, b:REG_A, otA:0, otB:0, ot:0}; } // v167: lent / sick / absent all day = reason only, no hours (you can't see when they leave)
@@ -2186,7 +2191,7 @@ function personDay(date){
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         const wo = iv && (iv.waits||[]).find(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         if(onBrk && (!iv || wt)){ k='Break'; g='Break'; } else if(wt){ k=`${w} — ${(wo && wo.reason) || 'Waiting for trimmers'}`; g='Side machines'; } else { k = w; g='Side machines'; } }
-      else if(onBrk && w){ k='Break'; g='Break'; }
+      else if(onBrk && (w || cbk[i])){ k='Break'; g='Break'; } // v200: crew break counts everyone here, placed or not
       else if(w==='Garbage run'){ k = 'Garbage run'; g = 'Garbage run'; }
       else if(w.startsWith('Other · ')){ k = w.slice(8); g = 'Other duties'; }
       else if(w.startsWith('Planned · ')){ k = w.slice(10); g = 'Meetings & stretching'; }
@@ -4045,10 +4050,11 @@ function openBreakAll(){
 async function startBreakAll(){
   if(breakBusy) return;
   const ms = breakAllCandidates();
-  if(!ms.length){ toast('No lines to put on break'); return; }
+  if(!ms.length && !crewTotalFor(todayStr())){ toast('No crew in today'); return; }
   breakBusy = true;
   try{
     const now = nowHHMM(), gid = uid();
+    { const d = ensureDayLog(todayStr()); d.crewBreaks = (d.crewBreaks||[]).filter(x=>x.end); d.crewBreaks.push({id: gid, start: now, end: null}); if(!ms.length){ await saveDayLogNow(); toast('☕ Break started — everyone'); render(); return; } await Store.saveDayLog(); }
     ms.forEach(m=>{ const live = Store.liveRuns[m]; let resumeTo = null;
       if(live.status==='RUNNING'){ const ls = live.segments[live.segments.length-1]; if(ls && !ls.end) ls.end = now; }
       else { const o = live.downtimeSegments[live.downtimeSegments.length-1];
@@ -4063,10 +4069,11 @@ async function startBreakAll(){
 }
 async function endBreakAll(){
   if(breakBusy) return;
-  const b = openBreakAll(); if(!b) return;
+  const b = openBreakAll(), cb = openCrewBreak(); if(!b && !cb) return;
   breakBusy = true;
   try{
     const now = nowHHMM(); let run = 0, back = 0;
+    if(cb){ cb.end = toMin(now) < toMin(cb.start) ? cb.start : now; if(!b){ await saveDayLogNow(); toast('▶ Break over — everyone back'); render(); return; } await Store.saveDayLog(); }
     b.lines.forEach(m=>{ const live = Store.liveRuns[m]; const o = live.downtimeSegments[live.downtimeSegments.length-1];
       o.end = toMin(now) < toMin(o.start) ? o.start : now;
       if(o.resumeTo){ live.downtimeSegments.push({start: o.end, end:null, ...o.resumeTo, notes:''}); back++; }
@@ -4078,13 +4085,18 @@ async function endBreakAll(){
   } finally { breakBusy = false; }
 }
 function renderBreakAllBar(){
-  const b = openBreakAll();
+  const b = openBreakAll(), cb = openCrewBreak();
+  if(!b && cb) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
+    <div style="font-family:'Oswald';font-size:16px;color:var(--brk);text-transform:uppercase;letter-spacing:0.04em;">☕ On break since ${fmtTime12(cb.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(cb.start)))}</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Everyone in today · side machines paused</div>
+    <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="endBreakAll()">▶ End Break — all back</button></div>`;
   if(b) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
     <div style="font-family:'Oswald';font-size:16px;color:var(--brk);text-transform:uppercase;letter-spacing:0.04em;">☕ On break since ${fmtTime12(b.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(b.start)))}</div>
     <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${b.lines.join(', ')} · each goes back to what it was doing</div>
     <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="endBreakAll()">▶ End Break — all back</button></div>`;
-  const n = breakAllCandidates().length; if(!n) return '';
-  return `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--brk);color:var(--brk);" onclick="startBreakAll()">☕ Start Break — all lines (${n})</button>`;
+  const n = breakAllCandidates().length, crew = crewTotalFor(todayStr());
+  if(!n && !crew) return '';
+  return `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--brk);color:var(--brk);" onclick="startBreakAll()">☕ Start Break — ${n ? `all lines (${n}) + crew` : `everyone (${crew} crew)`}</button>`;
 }
 let allLineSetup = null;
 let allLineBusy = false;
