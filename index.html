@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v196 - 2026-11-08 (Live: a line waiting 10+ min with crew still on it shows ⚠ Move crew / They are waiting here — so idle labour is not charged by mistake; Not shown for break, planned stops, changeover or cleaning)';
+const APP_VERSION = 'v197 - 2026-11-08 (Stopped-line crew reminder: first at 10 min, then every 5 min — a pop-up on any screen plus the box on Live; They are waiting here now hides it for 5 min, then asks again while crew are still on the stopped line)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4684,18 +4684,31 @@ function renderLiveDowntimeSetupCard(live){
 }
 function dtSyncBtn(){ const b = document.getElementById('dtConfirm'), s = liveDowntimeSetup; if(!b || !s) return; const ok = dtReady(s); b.disabled = !ok; b.style.opacity = ok ? '' : '.45'; }
 /* v196: a line stopped (waiting / no work) for 10+ min with crew still on it — nudge to move them, so the line isn't charged idle labour by mistake */
-const STUCK_CREW_MIN = 10;
+const STUCK_CREW_MIN = 10, STUCK_CREW_EVERY = 5; // v197: first at 10 min, then every 5 min while crew are still on the stopped line
 function stuckCrewHTML(m, live){
   if(!namesOn() || !live || live.status==='RUNNING' || (moveCrew && moveCrew.m===m)) return '';
-  const dt = (live.downtimeSegments||[]).slice(-1)[0]; if(!dt || dt.end || dt.crewOk) return '';
-  if(!['WAITING','NO_WORK'].includes(dt.status) || dt.reasonCategory==='Cleaning / Sanitation') return '';
-  const n = liveNames(live).length, mins = elapsedMinutesSince(dt.start); if(!n || mins < STUCK_CREW_MIN) return '';
+  const st = stuckCrewState(m, live); if(!st) return ''; const {n, mins} = st;
   return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--change);border-radius:10px;background:var(--change-dim);">
     <div style="font-weight:700;color:var(--change);font-size:13.5px;">⚠ ${escapeHtml(shortM(m))} stopped ${fmtDur(mins)} · ${n} crew still on it</div>
     <div class="cb-mut" style="margin:3px 0 8px;">Their time counts as ${escapeHtml(shortM(m))} labour while it waits. Moved somewhere? Record it.</div>
-    <div style="display:flex;gap:6px;"><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="openMoveCrew('${m}')">👥 Move crew</button><button type="button" class="cb-btn" onclick="stuckCrewOk('${m}')">They're waiting here</button></div></div>`;
+    <div style="display:flex;gap:6px;"><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="openMoveCrew('${m}')">👥 Move crew</button><button type="button" class="cb-btn" onclick="stuckCrewOk('${m}')">They're waiting here<div style="font-size:10px;opacity:.75;text-transform:none;">asks again in 5 min</div></button></div></div>`;
 }
-async function stuckCrewOk(m){ const l = Store.liveRuns[m]; const dt = l && (l.downtimeSegments||[]).slice(-1)[0]; if(!dt || dt.end) return; dt.crewOk = true; await Store.saveLiveRuns(); render(); }
+function stuckCrewState(m, live){
+  if(!live || live.status==='RUNNING' || isStaleLive(live)) return null;
+  const dt = (live.downtimeSegments||[]).slice(-1)[0]; if(!dt || dt.end || dt.crewOk===true) return null;
+  if(!['WAITING','NO_WORK'].includes(dt.status) || dt.reasonCategory==='Cleaning / Sanitation') return null;
+  const n = liveNames(live).length, mins = elapsedMinutesSince(dt.start); if(!n || mins < STUCK_CREW_MIN) return null;
+  if(dt.crewOkAt && elapsedMinutesSince(dt.crewOkAt) < STUCK_CREW_EVERY) return null; // "waiting here" — quiet for 5 min, then asks again
+  return {n, mins};
+}
+async function stuckCrewOk(m){ const l = Store.liveRuns[m]; const dt = l && (l.downtimeSegments||[]).slice(-1)[0]; if(!dt || dt.end) return; dt.crewOkAt = nowHHMM(); await Store.saveLiveRuns(); render(); }
+/* every 5 min a pop-up on any screen, so it's seen even when busy */
+const stuckNudgeAt = {};
+function stuckNudge(){ try{ if(!Store.ready || !namesOn()) return; const now = toMin(nowHHMM());
+  MACHINES.forEach(m=>{ const st = stuckCrewState(m, Store.liveRuns[m]); if(!st){ delete stuckNudgeAt[m]; return; }
+    if(stuckNudgeAt[m]!=null && now - stuckNudgeAt[m] < STUCK_CREW_EVERY) return; stuckNudgeAt[m] = now;
+    toast(`⚠ ${shortM(m)} stopped ${fmtDur(st.mins)} · ${st.n} crew still on it — Move crew on Live?`); if(Router.current==='live') render(); }); }catch(e){} }
+setInterval(stuckNudge, 60000);
 async function confirmDowntime(){
   const s = liveDowntimeSetup;
   if(!dtReady(s)){ toast('Pick a reason first'); return; } // v149
