@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v194 - 2026-11-08 (Moving the only person off a running line now asks: Stop it (Employee Reassigned) and move? — one tap instead of stop then move; Side machine button now says 👥 Add / change crew with a tap-to-add hint; ＋ Add person while setting up or dismantling)';
+const APP_VERSION = 'v195 - 2026-11-08 (Side machines: starting the same machine + product again the same day carries on ONE job — one PLH entry, one QTY / LBS ask, all running time added together; Earlier split jobs still waiting for QTY / LBS are joined automatically)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -934,6 +934,30 @@ async function saveSideJob(date, jobId, opt){
   const ok = await Store.saveRecords(); if(!ok){ toast('Save failed — check connection'); return null; }
   render(); return rec;
 }
+/* v195: one PLH entry per side machine + product per day while QTY / LBS are still to come */
+function sideJobOpenForOutput(r){ return r && r.side && r.plh && !(r.plh.weightLbs>0) && !(r.plh.quantity>0) && !r.plh.outputFrom; }
+function sideJobToContinue(date, machine, label){
+  const d = dayLogFor(date); if(!d) return null;
+  const recs = Store.records.filter(r=>r.date===date && r.machine===machine && sideJobOpenForOutput(r) && (r.product||machine)===label).sort((a,b)=>toMin(b.endTime)-toMin(a.endTime));
+  for(const r of recs){ const es = sideJobEntries(date, r.jobId); if(es.length && es.every(e=>e.end)) return {jobId: r.jobId, phase: es[es.length-1].phase||'seal'}; }
+  return null;
+}
+async function mergeSideJobs(){
+  try{
+    if(!Store.ready) return; const groups = {};
+    Store.records.filter(r=>sideJobOpenForOutput(r) && r.jobId).forEach(r=>{ const k = r.date+'|'+r.machine+'|'+(r.product||r.machine); (groups[k] = groups[k] || []).push(r); });
+    const todo = Object.values(groups).filter(g=>g.length>1); if(!todo.length) return;
+    const keep = [];
+    todo.forEach(g=>{ g.sort((a,b)=>toMin(a.startTime)-toMin(b.startTime)); const k = g[0], d = dayLogFor(k.date); if(!d) return;
+      const drop = g.slice(1).map(r=>r.jobId);
+      (d.side||[]).forEach(e=>{ if(drop.includes(e.jobId||e.id)) e.jobId = k.jobId; });
+      Store.records = Store.records.filter(r=>!(r.side && drop.includes(r.jobId) && r.date===k.date));
+      keep.push([k.date, k.jobId]); });
+    if(!keep.length) return;
+    await Store.saveDayLog(); await Store.saveRecords();
+    for(const [dt, j] of keep) await saveSideJob(dt, j, {});
+  }catch(e){ console.error('side job merge failed', e); }
+}
 /* every finished job of the day that has no PLH record yet (e.g. left off after a break, or closed at End Shift) gets one, without weight */
 async function saveLooseSideJobs(date){
   const d = dayLogFor(date); if(!d) return;
@@ -1180,7 +1204,9 @@ async function confirmSide(){
   // v157: same product = same job (crew change / switch to packaging); a new product starts a new job and closes the old one
   let closedJob = null;
   if(prev && (s.phase==='pack' || sideJobLabel(prev)===sideJobLabel(e))){ e.jobId = prev.jobId; e.phase = s.phase==='pack' ? 'pack' : (prev.phase||'seal'); }
-  else { e.jobId = e.id; e.phase = 'seal'; if(prev) closedJob = prev.jobId; }
+  else { e.jobId = e.id; e.phase = 'seal'; if(prev) closedJob = prev.jobId;
+    // v195: same machine + same product started again today, and its QTY / LBS not given yet → carry on the SAME job (one PLH entry; output comes from the Variovac at the end)
+    if(!prev){ const cont = sideJobToContinue(todayStr(), s.machine, sideJobLabel(e)); if(cont){ e.jobId = cont.jobId; e.phase = cont.phase; } } }
   d.side.push(e);
   sideSetup = null;
   await saveDayLogNow();
@@ -6824,6 +6850,7 @@ async function startApp(){
   try{ const w = storageUsage().filter(r=>r.pct>=80); const k='pct_storage_warn_'+todayStr(); if(w.length && !safeLocalGet(k)){ safeLocalSet(k,'1'); setTimeout(()=>toast(`Storage: ${w[0].name} is ${w[0].pct.toFixed(0)}% full — see Settings`), 2500); } }catch(e){}
   await migrateReasonLabels();
   await migrateRibeyeEye();
+  await mergeSideJobs();
   await repairOvernightRecords();
   render();
   if(!safeLocalGet(TOUR_SEEN_KEY)) openTour(true);
