@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v198 - 2026-11-08 (Side machines: no PLH number — they track running hours and output only, PLH stays on the Variovac that packed it; PLH → Side machine hours & output shows ran time, QTY, LBS and which Variovac packed it; Daily Report: Fajita · ran 2h · 15 boxes · 75 lbs (packed on V3); No more weight-missing warning for Fajita, Slicer, Cutlet — tick them at any Variovac Finish; Vacuum Sealer still asks QTY / LBS at its own Finish)';
+const APP_VERSION = 'v199 - 2026-11-08 (Full check of v185–v198 — all passed; History: side machine cards no longer repeat the machine name)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5316,7 +5316,7 @@ function renderHistory(){
     const isExpanded = expandedTimelineIds.has(r.id);
     return `<div class="hist-item">
       <div class="hist-top"><span class="mach">${r.machine}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${si.label}</span></div>
-      <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${r.side?'ran ':''}${fmtDur(r.durationMin)}${r.side ? (()=>{ const pz = ((r.plh&&r.plh.downtimeSegments)||[]).reduce((t,d)=>t+duration(d.start,d.end),0); return pz ? ` (paused ${fmtDur(pz)})` : ''; })() : ''} ${r.product?('· '+escapeHtml(r.product)):''}</div>
+      <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${r.side?'ran ':''}${fmtDur(r.durationMin)}${r.side ? (()=>{ const pz = ((r.plh&&r.plh.downtimeSegments)||[]).reduce((t,d)=>t+duration(d.start,d.end),0); return pz ? ` (paused ${fmtDur(pz)})` : ''; })() : ''} ${r.product && r.product!==r.machine ?('· '+escapeHtml(r.product)):''}</div>
       ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
       ${hasTimeline ? `<div style="cursor:pointer;color:var(--brk);font-size:12px;margin-top:6px;text-decoration:underline;" onclick="toggleTimeline('${r.id}')">${isExpanded?'▾':'▸'} View Timeline</div>` : ''}
