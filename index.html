@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v191 - 2026-11-08 (Fajita button now reads 🔩 Dismantle / Clean — packaging crew does both; After Fajita ends: one Dismantle / Clean Fajita button; Slicer and Cutlet keep Dismantle)';
+const APP_VERSION = 'v192 - 2026-11-08 (Scales: 📞 IT called is now 📢 Reported — reported to supervisor or manager; Scale Downtime report columns say Reported and Reported after (avg))';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3004,7 +3004,7 @@ function toggleEndHome(i){ const c = goHomeCandidates(), n = c[i]; if(!endHome |
 
 /* ============ v174: 🖥 SCALES — downtime per packaging scale / label computer (Scale 3, 5, 7) ============
 dayLog[date].scales = [{id, scale, start, end|null, reason, itAt?, ticket?, endShift?}]
-Tap a green square = down (pick why). Tap a red one = 📞 IT called / ticket # / ✅ back up. Daily Report line + its own report with PDF. */
+Tap a green square = down (pick why). Tap a red one = 📢 Reported / ✅ back up. Daily Report line + its own report with PDF. */
 const SCALES = ['Scale 3','Scale 5','Scale 7'];
 const SCALE_REASONS = ['Frozen / not responding','Lost connection','Won’t print labels','Printing blank labels','Computer down'];
 let scaleSetup = null; // {scale, mode:'down'|'up', reason, otherText, ticket, id}
@@ -3024,7 +3024,7 @@ async function confirmScaleDown(){
 }
 async function scaleIT(){ const s = scaleSetup; if(!s) return; const e = scaleEvents(todayStr()).find(x=>x.id===s.id); if(!e) return;
   const el = document.getElementById('scaleTicket'); if(el) e.ticket = el.value.trim().slice(0,30);
-  if(!e.itAt) e.itAt = nowHHMM(); await Store.saveDayLog(); render(); toast(`📞 IT called for ${e.scale} at ${fmtTime12(e.itAt)}`); }
+  if(!e.itAt) e.itAt = nowHHMM(); await Store.saveDayLog(); render(); toast(`📢 ${e.scale} reported at ${fmtTime12(e.itAt)}`); }
 async function scaleBackUp(){ const s = scaleSetup; if(!s) return; const e = scaleEvents(todayStr()).find(x=>x.id===s.id); if(!e) return;
   const el = document.getElementById('scaleTicket'); if(el && el.value.trim()) e.ticket = el.value.trim().slice(0,30);
   e.end = nowHHMM(); scaleSetup = null; await Store.saveDayLog(); render(); toast(`✅ ${e.scale} back up — down ${fmtShort(scaleMin(e, todayStr()))}`); }
@@ -3040,8 +3040,8 @@ function renderScalesBar(){
       <div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--wait);color:var(--wait);" onclick="confirmScaleDown()">⛔ ${s.scale} down</button></div></div>`;
     else { const e = scaleEvents(T).find(x=>x.id===s.id) || {};
       panel = `<div style="margin-top:8px;"><div class="cb-mut" style="font-weight:700;color:var(--text);">⛔ ${s.scale} down since ${fmtTime12(e.start)} · ${fmtShort(scaleMin(e, T))} — ${escapeHtml(e.reason||'')}</div>
-        <div class="cb-mut" style="margin-top:3px;">${e.itAt?`📞 IT called at ${fmtTime12(e.itAt)} (${fmtShort(Math.max(0,toMin(e.itAt)-toMin(e.start)))} after it went down)`:'IT not called yet'}</div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Close</button>${e.itAt?'':`<button type="button" class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="scaleIT()">📞 IT called</button>`}<button type="button" class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="scaleBackUp()">✅ Back up</button></div></div>`; } }
+        <div class="cb-mut" style="margin-top:3px;">${e.itAt?`📢 Reported at ${fmtTime12(e.itAt)} (${fmtShort(Math.max(0,toMin(e.itAt)-toMin(e.start)))} after it went down)`:'Not reported yet'}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Close</button>${e.itAt?'':`<button type="button" class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="scaleIT()">📢 Reported</button>`}<button type="button" class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="scaleBackUp()">✅ Back up</button></div></div>`; } }
   return `<div class="card" style="padding:10px 12px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--muted);">🖥 SCALES</span><span style="font-size:12px;font-weight:700;color:${up===SCALES.length?'var(--run)':up===0?'var(--wait)':'var(--change)'};">${up} of ${SCALES.length} working</span></div>
     <div style="display:flex;gap:6px;">${SCALES.map(sq).join('')}</div>${panel}</div>`;
 }
@@ -3074,7 +3074,7 @@ function scaleReportHTML(start, end, forPdf){
   const days = new Set(all.map(e=>e.date)).size, tot = all.reduce((t,e)=>t+e.min,0);
   H.push(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">${[[`${all.length}`,'times down'],[chDur(tot),'total down'],[`${days}`,`day${days===1?'':'s'} with problems`],[chDur(Math.max(...all.map(e=>e.min))),'longest outage']].map(([v,l])=>`<div style="flex:1;min-width:120px;border:1px solid #e3e3e3;border-radius:8px;padding:10px;"><div style="font-size:20px;font-weight:800;color:#c0392b;">${v}</div><div style="font-size:11px;color:#666;">${l}</div></div>`).join('')}</div>`);
   H.push(hd('1 · By scale'));
-  H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Scale</th><th style="${th}">Times down</th><th style="${th}">Total</th><th style="${th}">Longest</th><th style="${th}">Most common</th><th style="${th}">IT response (avg)</th></tr>${SCALES.map(sc=>{ const l = all.filter(e=>e.scale===sc); if(!l.length) return `<tr><td style="${td}font-weight:700;">${sc}</td><td colspan="5" style="${td}color:#2e9d5b;">no downtime</td></tr>`;
+  H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Scale</th><th style="${th}">Times down</th><th style="${th}">Total</th><th style="${th}">Longest</th><th style="${th}">Most common</th><th style="${th}">Reported after (avg)</th></tr>${SCALES.map(sc=>{ const l = all.filter(e=>e.scale===sc); if(!l.length) return `<tr><td style="${td}font-weight:700;">${sc}</td><td colspan="5" style="${td}color:#2e9d5b;">no downtime</td></tr>`;
     const by = {}; l.forEach(e=>by[e.reason]=(by[e.reason]||0)+1); const top = Object.keys(by).sort((a,b)=>by[b]-by[a])[0]; const it = l.filter(e=>e.itAt); const avgIt = it.length ? Math.round(it.reduce((t,e)=>t+Math.max(0,toMin(e.itAt)-toMin(e.start)),0)/it.length) : null;
     return `<tr><td style="${td}font-weight:700;">${sc}</td><td style="${td}${red}">${l.length}</td><td style="${td}${red}">${chDur(l.reduce((t,e)=>t+e.min,0))}</td><td style="${td}">${chDur(Math.max(...l.map(e=>e.min)))}</td><td style="${td}">${escapeHtml(top)} (${by[top]}×)</td><td style="${td}">${avgIt!=null?`called after ${chDur(avgIt)}`:'—'}</td></tr>`; }).join('')}</table>`));
   const R = {}; all.forEach(e=>{ R[e.reason] = R[e.reason] || {n:0, m:0}; R[e.reason].n++; R[e.reason].m += e.min; });
@@ -3083,8 +3083,8 @@ function scaleReportHTML(start, end, forPdf){
   if(start!==end){ const D = {}; all.forEach(e=>{ D[e.date] = D[e.date] || {n:0,m:0}; D[e.date].n++; D[e.date].m += e.min; });
     H.push(hd('3 · By day')); H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(D).sort().map(dt=>`<tr><td style="${td}">${fmtDate(dt)}</td><td style="${td}text-align:right;">${D[dt].n}×</td><td style="${td}text-align:right;${red}">${chDur(D[dt].m)}</td></tr>`).join('')}</table>`); }
   H.push(hd(`${start!==end?'4':'3'} · Every incident`));
-  H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Day</th><th style="${th}">Scale</th><th style="${th}">Down</th><th style="${th}">Problem</th><th style="${th}">IT called</th><th style="${th}">Minutes</th></tr>${all.map(e=>`<tr><td style="${td}white-space:nowrap;">${fmtDate(e.date)}</td><td style="${td}font-weight:700;">${e.scale}</td><td style="${td}white-space:nowrap;">${fmtTime12(e.start)} – ${e.end?fmtTime12(e.end):'still down'}${e.endShift?' (end of shift)':''}</td><td style="${td}">${escapeHtml(e.reason)}</td><td style="${td}">${e.itAt?`${fmtTime12(e.itAt)} (+${chDur(Math.max(0,toMin(e.itAt)-toMin(e.start)))})`:'—'}</td><td style="${td}text-align:right;${red}">${chDur(e.min)}</td></tr>`).join('')}</table>`));
-  H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">Logged live on the packaging floor in the CI Tracker: the time a scale / label computer stopped working, why, when IT was called, and when it worked again. Packaging lines share the scales, so a scale down means slower weighing and labelling for every line; lines that stopped completely are also logged as Waiting — Scale Problem.</div></div>`);
+  H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Day</th><th style="${th}">Scale</th><th style="${th}">Down</th><th style="${th}">Problem</th><th style="${th}">Reported</th><th style="${th}">Minutes</th></tr>${all.map(e=>`<tr><td style="${td}white-space:nowrap;">${fmtDate(e.date)}</td><td style="${td}font-weight:700;">${e.scale}</td><td style="${td}white-space:nowrap;">${fmtTime12(e.start)} – ${e.end?fmtTime12(e.end):'still down'}${e.endShift?' (end of shift)':''}</td><td style="${td}">${escapeHtml(e.reason)}</td><td style="${td}">${e.itAt?`${fmtTime12(e.itAt)} (+${chDur(Math.max(0,toMin(e.itAt)-toMin(e.start)))})`:'—'}</td><td style="${td}text-align:right;${red}">${chDur(e.min)}</td></tr>`).join('')}</table>`));
+  H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">Logged live on the packaging floor in the CI Tracker: the time a scale / label computer stopped working, why, when it was reported to the supervisor / manager, and when it worked again. Packaging lines share the scales, so a scale down means slower weighing and labelling for every line; lines that stopped completely are also logged as Waiting — Scale Problem.</div></div>`);
   return H.join('');
 }
 function renderScaleReportView(){
