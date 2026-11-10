@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.1 - 2026-11-10 (Lent to another dept: added Trimmer helper and MAREL helper)';
+const APP_VERSION = 'v205.2 - 2026-11-10 (Crew bottom sheet: 🏃 Runner button at the top next to ✕ — one tap)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3580,7 +3580,7 @@ function crewSheetHTML(){
   return `<div onclick="if(event.target===this){crewSheet=null;render()}" style="position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;">
     <div style="width:100%;max-width:560px;max-height:82vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--panel);border-radius:18px 18px 0 0;border-top:2px solid var(--amber);padding:14px 14px calc(18px + env(safe-area-inset-bottom));">
       <div style="width:40px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 10px;"></div>
-      <div style="display:flex;align-items:center;gap:10px;"><span style="width:12px;height:12px;border-radius:50%;background:${st.c};"></span><div style="flex:1;min-width:0;"><div style="font-size:19px;font-weight:800;">${escapeHtml(n)}</div><div class="cb-mut" style="font-size:12.5px;">${escapeHtml(st.t)}${st.where?' · '+escapeHtml(st.where):''}${st.away?'':' · '+fmtShort(crewSinceMin(n))}</div></div><button type="button" class="cb-btn" style="flex:0 0 auto;padding:8px 12px;" onclick="crewSheet=null;render()">✕</button></div>
+      <div style="display:flex;align-items:center;gap:10px;"><span style="width:12px;height:12px;border-radius:50%;background:${st.c};"></span><div style="flex:1;min-width:0;"><div style="font-size:19px;font-weight:800;">${escapeHtml(n)}</div><div class="cb-mut" style="font-size:12.5px;">${escapeHtml(st.t)}${st.where?' · '+escapeHtml(st.where):''}${st.away?'':' · '+fmtShort(crewSinceMin(n))}</div></div>${st.away && !role ? '' : `<button type="button" class="cb-btn" style="flex:0 0 auto;padding:9px 12px;font-size:13px;border-color:${cur==='Runner / Floater'?'var(--amber)':'var(--brk)'};color:${cur==='Runner / Floater'?'var(--amber)':'var(--brk)'};" ${cur==='Runner / Floater'?'disabled':''} onclick="crewSheetGo('Runner / Floater')">🏃 Runner</button>`}<button type="button" class="cb-btn" style="flex:0 0 auto;padding:8px 12px;" onclick="crewSheet=null;render()">✕</button></div>
       ${role ? `<button type="button" class="cb-btn" style="width:100%;margin-top:12px;padding:12px;border-color:var(--brk);color:var(--brk);" onclick="crewSheetOff()">Off line — back to ${escapeHtml(n)} duties</button>` : ''}
       ${st.away && !role ? `<div class="cb-mut" style="margin-top:12px;">${escapeHtml(n)} is ${escapeHtml(st.t.toLowerCase())} today — change that in Crew Setup.</div>` : `
       ${grid('Move to a line', lines)}${grid('Move to a side machine', sides)}${grid('Cleaning', cleans)}${grid('Closing &amp; support', support)}
