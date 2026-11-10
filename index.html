@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205 - 2026-11-10 (Every side machine — Fajita, Slicer, Cutlet, Vacuum Sealer — can hold several job numbers / codes, each with its own QTY / LBS, hours counted once; Variovac Finish tick adds the run as another code instead of replacing; Add / Edit QTY / LBS has ＋ Add another code)';
+const APP_VERSION = 'v205.1 - 2026-11-10 (Lent to another dept: added Trimmer helper and MAREL helper)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1940,7 +1940,7 @@ const PLACES = [
   {w:'Runner / Floater', g:'Other duties', s:'🏃 Runner / Floater'}, // v203.6: whoever is available — runs, helps, fills in (support, not 'free')
   {w:'Break · own', g:'Break', s:'☕ Break (own time)'}, // v201: one person's own break — ↩ Back on Live returns them
   {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
-  {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
+  {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Trimmer helper', g:'Lent to other dept', s:'Trimmers'}, {w:'Lent · MAREL helper', g:'Lent to other dept', s:'MAREL'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'}, // v205.1: Trimmer / MAREL helper
   {w:'Not here · Late', g:'Not here', s:'Late'}, {w:'Not here · Went home', g:'Not here', s:'Went home'}, {w:'Not here · Absent', g:'Not here', s:'Absent'},
   {w:'Closing · Closing tasks', g:'Shutdown / Clean-up', s:'Closing tasks'}, // v189: ONE general closing option — covers cleaning, scales, materials, restocking, paperwork
   {w:'Closing · Closing clean-up', g:'Shutdown / Clean-up', s:'Closing clean-up', hide:true},
@@ -2943,7 +2943,7 @@ settings.crewUsual = {name: 'HH:MM'} — usual start (Mandy 7:00 AM). Everyone e
 End = half day / sick: from that time they are "Not here · Went home" (taken off their machine).
 Lead Hand / Yield Operator are in the list too; their time off the machines counts as "Lead / Yield duties". */
 const CREW_ST = [['here','Here'],['sick','Sick'],['absent','Absent'],['vacation','Vacation'],['lent','Lent']];
-const LENT_DEPTS = ['Warehouse','Burger Room','Dicer / Grinding','Other dept'];
+const LENT_DEPTS = ['Warehouse','Burger Room','Dicer / Grinding','Trimmer helper','MAREL helper','Other dept'];
 function crewUsual(){ const u = Store.settings && Store.settings.crewUsual; return (u && typeof u==='object') ? u : {Mandy:'07:00'}; }
 function crewDayOf(date){ return ((dayLogFor(date)||{}).crewDay) || {}; }
 function todaysCrewActive(){ return Object.keys(crewDayOf(todayStr())).length>0; }
