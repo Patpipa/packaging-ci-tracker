@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v204.3 - 2026-11-09 (Crew tab: Move section removed from the top — the orange ⇄ Move crew quick action opens the by-station move view right there)';
+const APP_VERSION = 'v204.4 - 2026-11-09 (Crew tab: tapping a side machine jumps straight to that machine on Live)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3506,7 +3506,7 @@ function crewSideCard(){
     else if(bp){ t = 'Break'; c = 'var(--brk)'; names = bp.names||[]; }
     else if(pr.length){ t = 'Set-up'; c = 'var(--amber)'; names = pr; }
     else if(di.length){ t = disLabel(m); c = '#e8742a'; names = di; }
-    return `<div onclick="Router.go('live')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);">
+    return `<div onclick="goToLiveMachine('${m}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);">
       <span style="width:10px;height:10px;border-radius:50%;background:${c};${t!=='Idle'?`box-shadow:0 0 8px ${c};`:''}flex:0 0 auto;"></span>
       <span style="font-weight:700;min-width:96px;">${escapeHtml(m)}</span><span style="font-size:12.5px;font-weight:700;color:${c};">${escapeHtml(t)}</span>
       <span class="cb-mut" style="margin-left:auto;font-size:12px;text-align:right;">${names.length?escapeHtml(names.join(', ')):''}${since?` · ${fmtShort(since)}`:''}</span></div>`; }).join('');
@@ -6988,8 +6988,8 @@ function afterRender(){
   placeFloor3D();
   if(Router.current==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); }
   if(Router.current==='live' && liveScrollTarget){
-    const el = document.getElementById('live-card-'+machineIdSafe(liveScrollTarget));
-    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+    const el = document.getElementById('live-card-'+machineIdSafe(liveScrollTarget)) || [...document.querySelectorAll('.cb-row')].find(r=>{ const nm = r.querySelector('.cb-nm'); return nm && nm.textContent.trim().startsWith(liveScrollTarget); }); // v204.4: side machine rows too
+    if(el){ el.scrollIntoView({behavior:'smooth', block: el.id ? 'start' : 'center'}); if(!el.id){ el.style.transition='box-shadow .3s'; el.style.boxShadow='0 0 0 2px var(--amber), 0 0 14px var(--amber)'; setTimeout(()=>{ el.style.boxShadow=''; }, 1600); } }
     liveScrollTarget = null;
   }
 }
