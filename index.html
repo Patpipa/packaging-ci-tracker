@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v200 - 2026-11-09 (☕ Start Break now works with no lines running — puts everyone in today on break, pauses side machines and Lead / Yield, ▶ End Break brings them back; Crew Hours counts the break for everyone here, placed or not)';
+const APP_VERSION = 'v201 - 2026-11-09 (↩ Undo last crew move for 2 min — logged, never erased; 👷 Working through break — tap names on the break bar, their time stays on their work and a paused side machine keeps running; ☕ Own break place — ↩ Back returns them to where they were; Not placed / free alert shows minutes, amber at 5, red at 10; End Shift checklist — not placed, gaps, lines still stopped, jobs with no QTY / LBS; Crew Hours: Labour breakdown — floor presence, running, stopped, direct, support, lent, break, not recorded, OT; PLH shows lbs ÷ labour hours)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1918,6 +1918,7 @@ const DEFAULT_ROSTER = ['Mandy','Harpreet','Stanley','Winston','Sandeep','Krisha
 const PLACES = [
   {w:'Setup / Opening', g:'Setup / Opening', s:'Setup'},
   {w:'Cleaning / Sanitation', g:'Cleaning / Sanitation', s:'Cleaning'},
+  {w:'Break · own', g:'Break', s:'☕ Break (own time)'}, // v201: one person's own break — ↩ Back on Live returns them
   {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
   {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
   {w:'Not here · Late', g:'Not here', s:'Late'}, {w:'Not here · Went home', g:'Not here', s:'Went home'}, {w:'Not here · Absent', g:'Not here', s:'Absent'},
@@ -1931,7 +1932,7 @@ const PLACES = [
   {w:'Garbage run', g:'Garbage run', s:'Garbage'}, // v165: end-of-day garbage, not tied to a running line
   ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: m==='Manual Pack' || m==='Area / floor', g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
 ];
-const PLACE_GROUPS = [['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
+const PLACE_GROUPS = [['☕ Break', p=>p.w==='Break · own'], ['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
 function crewRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.slice(); }
 function trimmerList(){ const r = Store.settings && Store.settings.trimmerNames; return Array.isArray(r) ? r : []; }
@@ -2176,6 +2177,7 @@ function personDay(date){
   const isToday = date===todayStr();
   const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, DAY_TO));
   const brk = new Array(DAY_TO-DAY_FROM).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
+  const wtl = d.workThrough || [];
   const cbk = new Array(DAY_TO-DAY_FROM).fill(false); (d.crewBreaks||[]).forEach(x=>{ const a = toMin(x.start), b = x.end ? toMin(x.end) : (isToday ? toMin(nowHHMM()) : a); for(let t=Math.max(a,DAY_FROM); t<Math.min(b,DAY_TO); t++){ brk[t-DAY_FROM] = true; cbk[t-DAY_FROM] = true; } });
   const side = sideIntervals(date);
   const people = names.map(n=>{
@@ -2185,8 +2187,10 @@ function personDay(date){
     for(let t=win.a; t<win.b; t++){
       let w = '', trn0 = false; for(const e of log){ if(toMin(e.at)<=t){ w = e.w; trn0 = !!e.trn; } else break; }
       const i = t-DAY_FROM; let k, g;
-      const onBrk = brk[i] && !(w.startsWith('Not here')); // v178: break time = break for everyone here, whatever they were on (a stopped line, a place, a paused side machine)
-      if(MACHINES.includes(w)){ const s = st[w][i]; if(s==='BREAK' || (onBrk && s!=='RUNNING')){ k='Break'; g='Break'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
+      const wThru = wtl.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
+      const onBrk = brk[i] && !(w.startsWith('Not here')) && !wThru; // v178: break time = break for everyone here, whatever they were on (a stopped line, a place, a paused side machine)
+      if(w==='Break · own'){ k='Break (own)'; g='Break'; } // v201
+      else if(MACHINES.includes(w)){ const s = st[w][i]; if((s==='BREAK' && !wThru) || (onBrk && s!=='RUNNING')){ k='Break'; g='Break'; } else if(s==='BREAK'){ k='Worked through break'; g='Other duties'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
       else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         const wo = iv && (iv.waits||[]).find(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
@@ -2198,7 +2202,7 @@ function personDay(date){
       else if(w.startsWith('Set-up · ')){ k = `${w.slice(9)} set-up`; g = 'Side machines'; }
       else if(w.startsWith('Dismantle · ')){ k = `${w.slice(12)} ${disLabel(w.slice(12)).toLowerCase()}`; g = 'Side machines'; }
       else if(w){ const p = PLACES.find(x=>x.w===w); k = w.replace('Closing · ',''); g = p ? p.g : 'Other'; }
-      else if(brk[i]){ k='Break'; g='Break'; } else if(isRole){ k = `${n} duties`; g = 'Lead / Yield duties'; } else { k='Not recorded'; g='Not recorded'; }
+      else if(brk[i] && !wThru){ k='Break'; g='Break'; } else if(isRole){ k = `${n} duties`; g = 'Lead / Yield duties'; } else { k='Not recorded'; g='Not recorded'; }
       tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
       let det = '';
       if(MACHINES.includes(w) && k!=='Break'){ const s0 = st[w][i]; if(s0 && s0!=='RUNNING') det = st[w].reason[i]||''; }
@@ -2446,6 +2450,35 @@ function positionDay(date, pd){
   });
   return out;
 }
+/* v201: labour breakdown — every floor minute in exactly one bucket */
+function labourCat(sg){
+  if(sg.g==='Not here') return null;
+  if(sg.g==='Lines running') return 'run';
+  if(sg.g==='Lines stopped') return 'stop';
+  if(sg.g==='Side machines'){ if(/^(Set-up|Dismantle) · /.test(sg.w||'')) return 'sup'; return sg.k.includes(' — ') ? 'stop' : 'run'; }
+  if(sg.g==='Break') return 'brk';
+  if(sg.g==='Lent to other dept') return 'lent';
+  if(sg.g==='Not recorded') return 'nr';
+  return 'sup';
+}
+function labourAdd(acc, p){ if(p.away) return; p.segs.forEach(sg=>{ const c = labourCat(sg); if(!c) return; const m = sg.b-sg.a; acc[c] = (acc[c]||0)+m; acc.floor = (acc.floor||0)+m; if(sg.ot) acc.ot = (acc.ot||0)+m; }); }
+function labourBreakdownHTML(acc, td){
+  const h = m=>chDur(m||0), pc = m=>acc.floor ? Math.round((m||0)/acc.floor*100)+'%' : '';
+  const row = (t, m, sub, st)=>`<tr><td style="${td}${st||''}">${t}${sub?`<div style="font-size:10.5px;color:#888;">${sub}</div>`:''}</td><td style="${td}text-align:right;white-space:nowrap;${st||''}">${h(m)}</td><td style="${td}text-align:right;color:#888;">${pc(m)}</td></tr>`;
+  const direct = (acc.run||0)+(acc.stop||0);
+  return `<table style="width:100%;border-collapse:collapse;">
+    ${row('<b>Floor presence</b>', acc.floor, 'every minute the crew was on the floor — all rows below add up to this', 'font-weight:800;')}
+    ${row('&nbsp;&nbsp;Running', acc.run, 'on a line or side machine while it ran')}
+    ${row('&nbsp;&nbsp;Stopped / waiting', acc.stop, 'on a line or side machine while it was stopped')}
+    ${row('&nbsp;&nbsp;<b>= Packaging direct labour</b>', direct, '', 'font-weight:700;')}
+    ${row('&nbsp;&nbsp;Support', acc.sup, 'set-up, dismantle, cleaning, closing, garbage, Lead / Yield, other duties')}
+    ${row('&nbsp;&nbsp;Lent out', acc.lent, 'other departments — not packaging labour')}
+    ${row('&nbsp;&nbsp;Break', acc.brk)}
+    ${row('&nbsp;&nbsp;Not recorded', acc.nr, 'in, but not tapped onto anything', acc.nr?'color:#c0392b;':'')}
+    ${row('Overtime (floor-logged)', acc.ot, 'before 8:00 AM / after 4:30 PM — already inside the rows above · not payroll', acc.ot?'color:#c0392b;':'')}
+  </table>
+  <div style="font-size:10.5px;color:#666;margin-top:6px;line-height:1.5;">PLH (Lines only) divides lbs by the labour of people on V1–V3 and Manual: <b>gross</b> = all their time on the run (stops and paid break included), <b>net</b> = running time only. Side machine, support, lent and break hours are not in PLH.</div>`;
+}
 function crewReportHTML(start, end, forPdf){
   const single = start===end, H = [];
   const card = `background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};`;
@@ -2468,6 +2501,7 @@ function crewReportHTML(start, end, forPdf){
       ${P.map(p=>{ if(p.away) return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td colspan="6" style="${td}color:#777;">${escapeHtml(p.away)} — all day (hours not tracked)</td></tr>`; const nr = p.tot['Not recorded']||0, nh = p.grp['Not here']||0;
         return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td style="${td}${p.a<REG_A?red:''}">${chFmt(p.a)}</td><td style="${td}${p.b>REG_B?red:''}">${chFmt(p.b)}${pd.isToday && p.b>=toMin(nowHHMM())?' (so far)':''}</td><td style="${td}">${chDur(chWorked(p))}${nh?`<div style="font-size:10.5px;color:#888;">not here ${chDur(nh)}</div>`:''}</td><td style="${td}">${chDur(p.grp['Break']||0)}</td><td style="${td}${p.ot?red:'color:#aaa;'}">${p.ot?chDur(p.ot):'—'}</td><td style="${td}${nr?red:'color:#aaa;'}">${nr?chDur(nr):'—'}</td></tr>`; }).join('')}
       <tr><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">Total · ${P.filter(p=>!p.away).length} working</td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(chWorked))}</td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(p=>p.grp['Break']||0))}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.ot)?red:''}">${sum(p=>p.ot)?chDur(sum(p=>p.ot)):'—'}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.tot['Not recorded']||0)?red:''}">${sum(p=>p.tot['Not recorded']||0)?chDur(sum(p=>p.tot['Not recorded']||0)):'—'}</td></tr></table>`));
+    { const acc = {}; P.forEach(p=>labourAdd(acc, p)); H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(acc, td)); }
     // 2. timeline chart
     const PW = P.filter(p=>!p.away), a0 = Math.floor(Math.min(REG_A, ...PW.map(p=>p.a))/60)*60, b0 = Math.ceil(Math.max(REG_B, ...PW.map(p=>p.b))/60)*60;
     const W = 740, L = 92, R = 8, rowH = 24, top = 22, Wd = W-L-R, x = m=>L + (m-a0)/(b0-a0)*Wd, Hh = top + P.length*rowH + 6;
@@ -2518,8 +2552,8 @@ function crewReportHTML(start, end, forPdf){
     H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total (part of the day)</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : (lentAll.length ? '' : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`));
   } else {
     const days = []; for(let d = new Date(start+'T00:00:00'); localDateStr(d) <= end; d.setDate(d.getDate()+1)) days.push(localDateStr(d));
-    const acc = {}, otByDay = [];
-    days.forEach(dt=>{ const pd = personDay(dt); if(!pd) return; let dayOt = 0;
+    const acc = {}, otByDay = [], lab = {};
+    days.forEach(dt=>{ const pd = personDay(dt); if(!pd) return; let dayOt = 0; pd.people.forEach(p=>labourAdd(lab, p));
       pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, worked:0, brk:0, ot:0, nr:0, nh:0, grp:{}, away:{}}); if(p.away){ a.away[p.away] = (a.away[p.away]||0)+1; return; } a.days++; a.worked += chWorked(p); a.brk += p.grp['Break']||0; a.ot += p.ot; a.nr += p.tot['Not recorded']||0; a.nh += p.grp['Not here']||0; dayOt += p.ot; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); });
       otByDay.push({dt, ot: dayOt, n: pd.people.filter(p=>p.ot).length}); });
     const names = Object.keys(acc);
@@ -2532,6 +2566,7 @@ function crewReportHTML(start, end, forPdf){
     const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Meetings & stretching','Lead / Yield duties','Other duties','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
     H.push(hd(`2 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<table style="width:100%;border-collapse:collapse;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}">${g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
+    H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(lab, td));
     H.push(hd('3 · Overtime by day'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${otByDay.map(o=>`<tr><td style="${td}">${fmtDate(o.dt)}</td><td style="${td}${o.ot?red:'color:#aaa;'}">${o.ot?`${chDur(o.ot)} · ${o.n} ${o.n===1?'person':'people'}`:'—'}</td><td style="${td}text-align:right;"><span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openCrewHours('${o.dt}')">day →</span></td></tr>`).join('')}</table>`);
   }
@@ -2720,12 +2755,32 @@ async function confirmLiveFree(){
   const ok = await sendNamesTo([f.name], f.dest, {at: f.at, otherText: f.otherText});
   if(ok){ liveFree = null; render(); }
 }
+/* v201: own break — back to where they were */
+function ownBreakPeople(){ const W = (((dayLogFor(todayStr())||{}).where)||{}); return crewRoster().filter(n=>whereOf(n)==='Break · own').map(n=>{ const lg = W[n]||[], e = lg[lg.length-1]; let prev = ''; for(let i=lg.length-2;i>=0;i--){ if(lg[i].w!=='Break · own'){ prev = lg[i].w; break; } } return {n, since: e ? e.at : nowHHMM(), prev}; }); }
+function backTarget(prev){
+  const T = todayStr(); if(!prev || prev.startsWith('Not here')) return '__none';
+  if(MACHINES.includes(prev)) return Store.liveRuns[prev] ? prev : '__none';
+  if(SIDE_MACHINES.some(x=>x.name===prev)) return openSideRuns(T).some(x=>x.machine===prev) ? prev : '__none';
+  return prev;
+}
+async function backFromBreak(n){ const p = ownBreakPeople().find(x=>x.n===n); if(!p) return; const dest = backTarget(p.prev);
+  if(dest==='__none' || !MACHINES.concat(SIDE_MACHINES.map(x=>x.name)).includes(dest)){ placeSetup = {name:n, w:dest, at:nowHHMM()}; await savePlace(); }
+  else await sendNamesTo([n], dest);
+  toast(`↩ ${n} back from break${dest!=='__none'?' — '+placeLabel(dest):''}`); render(); }
+function ownBreakStripHTML(){ const ps = ownBreakPeople(); if(!ps.length) return ''; const now = toMin(nowHHMM());
+  return `<div style="margin-bottom:12px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--brk);background:var(--brk-dim);"><div style="font-size:13px;font-weight:700;color:var(--brk);">☕ On own break</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${ps.map(p=>{ const t = backTarget(p.prev); return `<button type="button" class="cb-btn" style="flex:0 0 auto;text-transform:none;font-family:inherit;font-size:13px;padding:8px 10px;" onclick="backFromBreak('${p.n.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${escapeHtml(p.n)} · ${fmtShort(Math.max(0, now-toMin(p.since)))} · <b>↩ Back${t!=='__none'?' to '+escapeHtml(placeLabel(t)):''}</b></button>`; }).join('')}</div></div>`; }
 function crewAlertStripHTML(){
   if(!namesCrewActive(todayStr()) && !(typeof todaysCrewActive==='function' && todaysCrewActive())) return liveFreeHTML();
+  return ownBreakStripHTML() + crewAlertStripInner();
+}
+function crewAlertStripInner(){
   const a = crewActivity(), short = MACHINES.map(lineNowInfo).filter(l=>l.running && l.names.length < (LINE_NEED[l.m]||2));
   const free = a.groups['free']||[], W = (((dayLogFor(todayStr())||{}).where)||{}), now = toMin(nowHHMM());
-  const people = [...free.map(n=>{ const lg = W[n]||[]; const m = lg.length ? Math.max(0, now - toMin(lg[lg.length-1].at)) : 0; return {n, txt:`free ${fmtShort(m)}`, col: m>=30?'var(--wait)':m>=15?'var(--change)':'var(--muted)'}; }),
-                  ...a.notPlaced.map(n=>({n, txt:'not placed', col:'var(--change)'}))];
+  // v201: minutes not recorded — amber from 5 min, red from 10 min. Never placed by itself.
+  const esc = m=>m>=10?'var(--wait)':m>=5?'var(--change)':'var(--muted)';
+  const people = [...free.map(n=>{ const lg = W[n]||[]; const m = lg.length ? Math.max(0, now - toMin(lg[lg.length-1].at)) : 0; return {n, m, txt:`free ${fmtShort(m)}`, col: esc(m)}; }),
+                  ...a.notPlaced.map(n=>{ const st0 = crewRowOf(todayStr(), n).start || '08:00'; const m = Math.max(0, now - toMin(st0)); return {n, m, txt:`not placed ${fmtShort(m)}`, col: esc(m)}; })].sort((x,y)=>y.m-x.m);
   if(!short.length && !people.length) return liveFreeHTML();
   const red = short.length || people.some(p=>p.col==='var(--wait)');
   const chip = p=>`<button type="button" class="cb-btn" style="flex:0 0 auto;text-transform:none;font-family:inherit;font-size:13px;padding:8px 10px;${liveFree&&liveFree.name===p.n?'border-color:var(--brk);color:var(--brk);':''}" onclick="event.stopPropagation();openLiveFree('${p.n.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"><b>${escapeHtml(p.n)}</b> <span style="color:${p.col};font-weight:700;">${p.txt}</span></button>`;
@@ -3802,7 +3857,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
     <div style="padding:26px 36px;">
       <div style="border-left:5px solid #2980b9;background:#f7f7f7;padding:18px 20px;margin-bottom:18px;">
         <div style="font-size:38px;font-weight:700;">${summary.grossPLH.toFixed(1)} <span style="font-size:16px;font-weight:400;color:#555;">lbs/hr</span></div>
-        <div style="font-size:12px;color:#666;margin-top:4px;">Overall Gross PLH &nbsp;=&nbsp; total lbs produced ÷ total gross labour hours</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">Overall Gross PLH &nbsp;=&nbsp; ${Math.round(summary.totalWeight).toLocaleString('en-US')} lbs ÷ ${summary.totalGrossHours.toFixed(1)} gross labour hours <span style="color:#999;">(people on V1–V3 &amp; Manual · side machines, support and lent hours not included)</span></div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
         ${statCard('Total Lbs Produced', Math.round(summary.totalWeight))}
@@ -4073,6 +4128,7 @@ async function endBreakAll(){
   breakBusy = true;
   try{
     const now = nowHHMM(); let run = 0, back = 0;
+    { const bn = breakNow(), d0 = dayLogFor(todayStr()); if(bn && d0) (d0.workThrough||[]).forEach(x=>{ if(x.brk===bn.id && !x.end) x.end = now; }); brkWtOpen = false; }
     if(cb){ cb.end = toMin(now) < toMin(cb.start) ? cb.start : now; if(!b){ await saveDayLogNow(); toast('▶ Break over — everyone back'); render(); return; } await Store.saveDayLog(); }
     b.lines.forEach(m=>{ const live = Store.liveRuns[m]; const o = live.downtimeSegments[live.downtimeSegments.length-1];
       o.end = toMin(now) < toMin(o.start) ? o.start : now;
@@ -4080,19 +4136,47 @@ async function endBreakAll(){
       else if(live.segments.length){ const ls = live.segments[live.segments.length-1];
         const emp = (live.pendingEmployees!=null) ? live.pendingEmployees : ls.employees;
         live.segments.push({start: o.end, end:null, employees: emp, ...nextNamesOf(live)}); delete live.pendingEmployees; delete live.pendingNames; live.status = 'RUNNING'; run++; } });
+    if(!cb) await Store.saveDayLog();
     if(!(await Store.saveLiveRuns())){ toast('Save failed — check connection'); return; }
     toast(`▶ Break over — ${run} running${back?`, ${back} back to ${back===1?'its':'their'} earlier status`:''}`); render();
   } finally { breakBusy = false; }
+}
+/* v201: someone keeps working during the break — their time stays on what they're doing (a paused side machine starts again for them) */
+let brkWtOpen = false;
+function breakNow(){ const b = openBreakAll(), cb = openCrewBreak(); if(!b && !cb) return null; return {id: cb ? cb.id : b.id, start: cb ? cb.start : b.start}; }
+function workingThrough(date){ const d = dayLogFor(date||todayStr()); return (d && d.workThrough) || []; }
+function pausedSideOf(n){ const b = breakNow(), d = dayLogFor(todayStr()); if(!b || !d) return ''; const x = (d.side||[]).find(y=>y.breakPaused && y.end===b.start && (y.names||[]).includes(n)); return x ? x.machine : ''; }
+function placeLabel(w){ return !w || w==='__none' ? 'free' : MACHINES.includes(w) ? shortM(w) : SIDE_MACHINES.some(x=>x.name===w) ? w : (shortWhere(w) || w); }
+function breakPresentNames(){ return crewRoster().filter(n=>{ const w = whereOf(n); return crewRowOf(todayStr(), n).st==='here' && !String(w).startsWith('Not here') && !String(w).startsWith('Lent'); }); }
+async function toggleWorkThrough(n){
+  const b = breakNow(); if(!b) return; const T = todayStr(), d = ensureDayLog(T);
+  d.workThrough = d.workThrough || []; const i = d.workThrough.findIndex(x=>x.name===n && x.brk===b.id && !x.end);
+  if(i>-1){ d.workThrough.splice(i,1); await saveDayLogNow(); return; }
+  d.workThrough.push({name:n, brk:b.id, start:b.start, end:null});
+  const x = (d.side||[]).filter(y=>y.breakPaused && y.end===b.start && (y.names||[]).includes(n)).pop();
+  if(x && !(d.side||[]).some(y=>y.machine===x.machine && !y.end)){
+    x.end = null; delete x.breakPaused; if(d.breakPause) d.breakPause.ids = (d.breakPause.ids||[]).filter(id=>id!==x.id);
+    (x.names||[]).forEach(nm=>{ const lg = (d.where||{})[nm]; if(lg && lg.length && lg[lg.length-1].w==='' && lg[lg.length-1].at===b.start) lg.pop(); }); // they never left the machine
+    toast(`${x.machine} keeps running — ${n} working through the break`);
+  }
+  await saveDayLogNow();
+}
+function workThroughHTML(){
+  const b = breakNow(); if(!b) return ''; const wt = workingThrough().filter(x=>x.brk===b.id && !x.end).map(x=>x.name);
+  if(!brkWtOpen) return `<button type="button" class="cb-btn" style="margin-top:8px;text-transform:none;font-family:inherit;font-size:12.5px;" onclick="brkWtOpen=true;render()">👷 Someone working through the break?${wt.length?` · ${escapeHtml(wt.join(', '))}`:''}</button>`;
+  return `<div style="margin-top:8px;"><div class="cb-mut" style="margin-bottom:6px;">Tap who is <b style="color:var(--text);">working through</b> — their time stays on what they're doing:</div>
+    <div class="nm-grid">${breakPresentNames().map(n=>`<button type="button" class="nm-chip${wt.includes(n)?' on':''}" onclick="toggleWorkThrough('${n.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${wt.includes(n)?'👷 ':''}${escapeHtml(n)}<small>${escapeHtml(pausedSideOf(n) || placeLabel(whereOf(n)))}</small></button>`).join('')}</div>
+    <button type="button" class="cb-btn" style="margin-top:6px;" onclick="brkWtOpen=false;render()">Done</button></div>`;
 }
 function renderBreakAllBar(){
   const b = openBreakAll(), cb = openCrewBreak();
   if(!b && cb) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
     <div style="font-family:'Oswald';font-size:16px;color:var(--brk);text-transform:uppercase;letter-spacing:0.04em;">☕ On break since ${fmtTime12(cb.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(cb.start)))}</div>
-    <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Everyone in today · side machines paused</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Everyone in today · side machines paused</div>${workThroughHTML()}
     <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="endBreakAll()">▶ End Break — all back</button></div>`;
   if(b) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
     <div style="font-family:'Oswald';font-size:16px;color:var(--brk);text-transform:uppercase;letter-spacing:0.04em;">☕ On break since ${fmtTime12(b.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(b.start)))}</div>
-    <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${b.lines.join(', ')} · each goes back to what it was doing</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${b.lines.join(', ')} · each goes back to what it was doing</div>${workThroughHTML()}
     <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="endBreakAll()">▶ End Break — all back</button></div>`;
   const n = breakAllCandidates().length, crew = crewTotalFor(todayStr());
   if(!n && !crew) return '';
@@ -6095,6 +6179,19 @@ function endShiftOpenItems(){
   const offl = d ? (d.offline||[]).filter(x=>!x.end) : [];
   return {runs, side, offl, n: runs.length + side.length + offl.length};
 }
+/* v201: before closing — who was never placed, gaps in the record, lines still stopped, jobs with no QTY / LBS. Fix or close anyway. */
+function endShiftChecks(){
+  const T = todayStr(), li = t=>`<li style="margin:5px 0;">${t}</li>`, btn = (t, on)=>` <button type="button" class="cb-btn" style="display:inline-block;width:auto;padding:4px 9px;font-size:11.5px;margin-left:4px;" onclick="${on}">${t}</button>`;
+  const items = [];
+  const a = crewActivity(); (a.groups['free']||[]).concat(a.notPlaced).forEach(n=>items.push(li(`<b>${escapeHtml(n)}</b> — not on anything right now`+btn('📍 Place', `Router.go('live');openLiveFree('${n.replace(/'/g,"\\'")}')`))));
+  let pd = null; try{ pd = personDay(T); }catch(e){}
+  if(pd) pd.people.forEach(p=>{ const nr = p.segs.filter(sg=>sg.g==='Not recorded' && !(sg.b<=REG_A)).reduce((t,sg)=>t+sg.b-sg.a,0); if(nr>=5) items.push(li(`<b>${escapeHtml(p.name)}</b> — ${fmtDur(nr)} not recorded today <span style="color:var(--muted);">(shows as a gap in Crew Hours)</span>`)); });
+  MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || l.status==='RUNNING' || isStaleLive(l)) return; const o = (l.downtimeSegments||[]).slice(-1)[0]; if(o && !o.end) items.push(li(`<b>${escapeHtml(m)}</b> — stopped since ${fmtTime12(o.start)} · ${escapeHtml(o.reason||o.status)}`+btn('Finish', `Router.go('live');openFinishSetup('${m}')`))); });
+  Store.records.filter(r=>r.date===T && r.plh && !(r.plh.weightLbs>0) && !(r.plh.quantity>0) && (r.side || r.status==='RUNNING')).forEach(r=>items.push(li(`<b>${escapeHtml(r.machine)}</b> ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)} — no QTY / LBS`+btn('Add', `openAddPLHData('${r.id}')`))));
+  if(!items.length) return `<div class="card" style="border-color:var(--run);"><div style="color:var(--run);font-weight:700;">✓ Checklist clear — everyone placed, no gaps, every job has its output.</div></div>`;
+  return `<div class="card" style="border-color:var(--change);"><h3 style="color:var(--change);">Before you close — check these</h3><ul style="margin:6px 0 0 18px;padding:0;font-size:14px;line-height:1.45;">${items.join('')}</ul>
+    <p style="color:var(--muted);font-size:12.5px;margin-top:8px;">Fix what you can, or close anyway — anything left stays as it is in the reports.</p></div>`;
+}
 function renderEndShiftConfirm(){
   const recs = recordsForDate(todayStr());
   const o = endShiftOpenItems();
@@ -6111,11 +6208,12 @@ function renderEndShiftConfirm(){
     </ul>
     <p style="color:var(--muted);font-size:13px;line-height:1.45;margin-top:8px;">They stop at the current time. Line runs are saved without weight — add Qty/Weight later from History, or press Cancel and use <b>Finish</b> on the Live Floor first.</p>
   </div>` : '';
+  const chk = endShiftChecks();
   return `
   <div class="card">
     <h3>Ready to End Shift?</h3>
     <p style="color:var(--muted);font-size:14px;line-height:1.5;">This will close today's production day (${recs.length} record${recs.length===1?'':'s'} logged) and generate the Daily CI Report. You can still edit records afterward from History.</p>
-  </div>${openList}${endShiftHomeHTML()}
+  </div>${openList}${chk}${endShiftHomeHTML()}
   <button class="btn btn-primary" id="endShiftBtn" onclick="confirmEndShift()">${o.n?`Close ${o.n} open item${o.n===1?'':'s'} &amp; End Shift`:'Confirm End Shift'}</button>
   <button class="btn btn-ghost" style="margin-top:10px;" onclick="Router.go('dashboard')">Cancel</button>
   `;
@@ -6126,7 +6224,7 @@ function plhHeadline(date){
   const x = computePLHSummary(plhRecordsInRange(date, date));
   if(!x.runCount) return {main:'PLH today: no finished runs with weight recorded.', note:''};
   return {
-    main: `PLH today: ${x.grossPLH.toFixed(1)} lbs/hr gross · ${x.netPLH.toFixed(1)} net · ${Math.round(x.totalWeight).toLocaleString('en-US')} lbs · ${x.runCount} job${x.runCount===1?'':'s'}.`,
+    main: `PLH today: ${x.grossPLH.toFixed(1)} lbs/hr gross (${Math.round(x.totalWeight).toLocaleString('en-US')} lbs ÷ ${x.totalGrossHours.toFixed(1)} labour hrs on the lines) · ${x.netPLH.toFixed(1)} net · ${x.runCount} job${x.runCount===1?'':'s'}.`,
     note: 'Full breakdown in the attached PLH report.'
   };
 }
@@ -6525,8 +6623,54 @@ function attachFloorVideo(){
   if(floorVideoEl.parentNode !== slot) slot.appendChild(floorVideoEl);
   const p = floorVideoEl.play(); if(p && p.catch) p.catch(()=>{});
 }
+
+/* ============ v201: ↩ UNDO LAST CREW MOVE (2 min) ============
+Before any crew move the day is copied; Undo puts it back exactly and adds a line to today's undo log (never erased). */
+let undoSnap = null, undoDepth = 0, undoRestoring = false;
+const UNDO_MS = 120000;
+function undoTake(){ const T = todayStr(); return {T, live: JSON.stringify(Store.liveRuns||{}), day: JSON.stringify((Store.dayLog||{})[T]||null), recs: JSON.stringify(Store.records.filter(r=>r.date===T)), where: JSON.stringify((((Store.dayLog||{})[T])||{}).where||{})}; }
+function undoWrap(name){
+  const f = window[name]; if(typeof f!=='function') return;
+  window[name] = async function(...args){
+    if(undoDepth>0 || undoRestoring) return f.apply(this, args);
+    const snap = undoTake(); undoDepth++;
+    let res; try{ res = await f.apply(this, args); } finally { undoDepth--; }
+    try{
+      const after = (((Store.dayLog||{})[snap.T])||{}).where||{}, before = JSON.parse(snap.where);
+      const moved = Object.keys(after).filter(n=>JSON.stringify(after[n])!==JSON.stringify(before[n]||[]));
+      if(moved.length){ snap.at = Date.now();
+        snap.label = moved.slice(0,3).map(n=>{ const lg = after[n]; const w = lg[lg.length-1] ? lg[lg.length-1].w : ''; return `${n} → ${placeLabel(w)}`; }).join(', ') + (moved.length>3 ? ` +${moved.length-3}` : '');
+        undoSnap = snap; setTimeout(()=>{ if(undoSnap===snap) render(); }, UNDO_MS + 500); render(); }
+    }catch(e){}
+    return res; };
+}
+['sendNamesTo','doMoveCrew','savePlace','doBringBack','confirmSide','confirmSidePrep','prepDone','confirmGoHome','tapHomeQuick','confirmStaffChange','confirmStartRun','afterFinishGo','backFromBreak'].forEach(undoWrap);
+/* anything else saved after the move (a stop, a finish …) closes the undo window, so Undo never rolls back other work */
+['saveLiveRuns','saveDayLog','saveRecords'].forEach(k=>{ const f = Store[k].bind(Store); Store[k] = async function(...a){ if(undoDepth===0 && !undoRestoring && undoSnap && Date.now()-undoSnap.at > 1500) undoSnap = null; return f(...a); }; });
+async function undoLast(){
+  const s0 = undoSnap; if(!s0 || Date.now()-s0.at > UNDO_MS){ undoSnap = null; render(); return; }
+  if(!confirm(`Undo: ${s0.label}?`)) return;
+  undoRestoring = true;
+  try{
+    const T = s0.T; Store.liveRuns = JSON.parse(s0.live); Store.dayLog = Store.dayLog || {};
+    const day = JSON.parse(s0.day); if(day) Store.dayLog[T] = day; else delete Store.dayLog[T];
+    if(Store.dayLog[T]) (Store.dayLog[T].undoLog = Store.dayLog[T].undoLog || []).push({at: nowHHMM(), what: s0.label});
+    Store.records = Store.records.filter(r=>r.date!==T).concat(JSON.parse(s0.recs));
+    undoSnap = null; liveAfterFinish = null; moveCrew = null;
+    await Store.saveLiveRuns(); await Store.saveDayLog(); await Store.saveRecords();
+    toast('↩ Undone — ' + s0.label); render();
+  } finally { undoRestoring = false; }
+}
+function undoBarSync(){
+  let el = document.getElementById('undoBar');
+  const s0 = undoSnap, left = s0 ? UNDO_MS - (Date.now()-s0.at) : 0;
+  if(!s0 || left<=0){ if(el) el.remove(); if(s0 && left<=0) undoSnap = null; return; }
+  if(!el){ el = document.createElement('div'); el.id = 'undoBar'; el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom));z-index:900;width:calc(100% - 24px);max-width:536px;'; document.body.appendChild(el); }
+  el.innerHTML = `<button type="button" onclick="undoLast()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:12px;border:1.5px solid var(--amber);background:var(--panel);color:var(--text);font-size:13.5px;box-shadow:0 6px 18px rgba(0,0,0,.45);"><span style="text-align:left;">↩ <b style="color:var(--amber);">UNDO</b> · ${escapeHtml(s0.label)}</span><span style="color:var(--muted);font-size:11.5px;white-space:nowrap;">${Math.ceil(left/60000)} min</span></button>`;
+}
 function afterRender(){
   attachFloorVideo();
+  undoBarSync();
   setTimeout(syncSideBreaks, 0);
   setTimeout(syncGarbage, 0);
   placeFloor3D();
