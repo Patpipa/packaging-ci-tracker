@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.8 - 2026-11-10 (side pause reasons: + Meat still frozen on Fajita / Cutlet / Slicer; Machine issue → Machine breakdown)';
+const APP_VERSION = 'v205.9 - 2026-11-10 (Daily Report side machines: one fact per line — ran, labour, each pause reason, set-up, dismantle, output)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -847,6 +847,7 @@ function sideJobsNeedWeightHTML(date){
   const go = miss.length===1 ? `openAddPLHData('${miss[0].id}')` : `plhKind='side';try{localStorage.setItem('pct_plh_kind','side')}catch(e){};plhLogDetailId=null;plhLogRange={preset:'today',...plhPresetRange('today')};Router.go('plhLog')`;
   return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>`;
 }
+function outLine(o){ const t = outText(o); return t==='output not entered' ? 'Output not entered' : 'Output: '+t; }
 function outText(o){
   if(!o || (!o.qty && !o.lbs)) return 'output not entered';
   return [o.qty?`${o.qty} box${o.qty==='1'?'':'es'}`:'', o.lbs?`${isNaN(Number(o.lbs)) ? o.lbs : Number(Number(o.lbs).toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs`:''].filter(Boolean).join(' · ') + (o.from ? ` (packed on ${o.from})` : '') + (o.codes && o.codes.length>1 ? ` — ${codesText(o.codes)}` : ''); // v176: 1,240 lbs, not 1240.000
@@ -1697,10 +1698,10 @@ function computeSideLabour(start, end){
 function sectionsHTML(secs, forPdf){
   const keyC = forPdf ? '#666' : 'var(--muted)', redC = forPdf ? '#c0392b' : 'var(--wait)', hC = forPdf ? '#888' : 'var(--muted)';
   const fs = forPdf ? 12 : 13.5;
-  return secs.map(sec=>`<div style="font-size:10.5px;letter-spacing:.1em;color:${hC};font-weight:700;margin:10px 0 4px;">${sec.title}</div>${sec.rows.map(r=>`<div style="display:flex;gap:10px;font-size:${r.sub?fs-1:fs}px;line-height:1.45;padding:${r.sub?'0':'2px'} 0;"><span style="flex:0 0 40%;color:${keyC};${r.sub&&r.k?'padding-left:12px;':''}">${escapeHtml(r.k)}</span><span style="flex:1;${r.red?`color:${redC};font-weight:600;`:''}${r.bold?'font-weight:700;':''}${r.big?`font-size:${forPdf?17:22}px;font-weight:800;line-height:1.1;`:''}">${escapeHtml(r.v)}</span></div>`).join('')}`).join('');
+  return secs.map(sec=>`<div style="font-size:10.5px;letter-spacing:.1em;color:${hC};font-weight:700;margin:10px 0 4px;">${sec.title}</div>${sec.rows.map(r=>`<div style="display:flex;gap:10px;font-size:${r.sub?fs-1:fs}px;line-height:1.45;padding:${r.sub?'0':'2px'} 0;"><span style="flex:0 0 40%;color:${keyC};${r.sub&&r.k?'padding-left:12px;':''}">${escapeHtml(r.k)}</span><span style="flex:1;${r.red?`color:${redC};font-weight:600;`:''}${r.bold?'font-weight:700;':''}${r.big?`font-size:${forPdf?17:22}px;font-weight:800;line-height:1.1;`:''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}`).join('');
 }
 
-function sectionsText(secs){ return secs.map(sec=>`${sec.title}\n`+sec.rows.map(r=> r.k ? `${r.k}: ${r.v}` : `   ${r.v}`).join('\n')).join('\n\n'); }
+function sectionsText(secs){ return secs.map(sec=>`${sec.title}\n`+sec.rows.map(r=>{ const v = String(r.v); return v.includes('\n') ? `${r.k}:\n   `+v.split('\n').join('\n   ') : (r.k ? `${r.k}: ${v}` : `   ${v}`); }).join('\n')).join('\n\n'); }
 function marelRowFor(d){
   const late = d.marelEnd && toMin(d.marelEnd) > SHIFT_END_MIN;
   const note = d.marelEnd ? (late ? `finished ${fmtDur(toMin(d.marelEnd)-SHIFT_END_MIN)} after the 4:30 PM shift end` : 'finished before the 4:30 PM shift end') : 'finish not recorded';
@@ -1724,14 +1725,19 @@ function dayLogSections(date, opts){
   used.forEach(m=>{ const pm = x.perMachine[m.name], mine = iv.filter(s=>s.machine===m.name);
     const act = mine.reduce((a,s)=>a+s.act,0), wait = mine.reduce((a,s)=>a+s.waitMin,0);
     const trainMin = mine.reduce((a,s)=>a+s.act*Math.min(s.train||0,s.pack||0),0), names = []; // v167: no names in reports
-    const base = `ran ${fmtDur(act)} · ${fmtDur(pm.packMin)} labour${trainMin?` (incl. ${fmtDur(trainMin)} training${names.length?`: ${names.join(', ')}`:''})`:''}${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}${wait?` · paused ${fmtDur(wait)} (${[...new Set(mine.flatMap(s=>(s.waits||[]).map(w=>w.reason||'Waiting for trimmers')))].join(', ').toLowerCase()})`:''}${sidePrepText(date, m.name)}`;
-    if(m.name!=='Vacuum Sealer'){ side.push({k:m.name, v:`${base} · ${outText(effOut(date, m.name))}`}); return; }
+    /* v205.9: one fact per line — easier to read */
+    const L = [`Ran ${fmtDur(act)}`, `Labour ${fmtDur(pm.packMin)}${trainMin?` (incl. ${fmtDur(trainMin)} training)`:''}${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}`];
+    if(wait){ const byR = {}; mine.forEach(s=>(s.waits||[]).forEach(w=>{ const r = w.reason||'Waiting for trimmers'; const mm = Math.max(0, toMin(w.end||nowHHMM())-toMin(w.start)); byR[r] = (byR[r]||0)+mm; }));
+      const rs = Object.keys(byR); if(rs.length<=1) L.push(`Paused ${fmtDur(wait)}${rs.length?` — ${rs[0].toLowerCase()}`:''}`); else rs.forEach(r=>L.push(`Paused ${fmtDur(byR[r])} — ${r.toLowerCase()}`)); }
+    L.push(...sidePrepLines(date, m.name));
+    const base = L.join('\n');
+    if(m.name!=='Vacuum Sealer'){ side.push({k:m.name, v:`${base}\n${outLine(effOut(date, m.name))}`}); return; }
     const vg = sideOutputGroups(date).filter(g=>g.machine==='Vacuum Sealer');
     const withOut = vg.filter(g=>{ const o = effOut(date, g.key); return o && (o.qty || o.lbs); }), missing = vg.filter(g=>!withOut.includes(g)).map(g=>g.label);
     const tq = withOut.reduce((a,g)=>a+(parseInt(effOut(date, g.key).qty,10)||0),0), tl = withOut.reduce((a,g)=>a+(parseFloat(effOut(date, g.key).lbs)||0),0);
-    const tot = withOut.length ? ` · ${tq} box${tq===1?'':'es'} · ${Number(tl.toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs${missing.length?` (${missing.join(', ')} output not entered)`:''}` : ' · output not entered';
-    side.push({k:'Vacuum Sealer · total', v: base + (vg.length>1 ? tot : ` · ${outText(effOut(date, vg[0] ? vg[0].key : ''))}`), bold:false});
-    if(vg.length>1) vg.forEach(g=>side.push({k:`↳ ${g.label}`, sub:true, v:`ran ${fmtDur(g.act)} · ${outText(effOut(date, g.key))}`}));
+    const tot = withOut.length ? `\nOutput: ${tq} box${tq===1?'':'es'} · ${Number(tl.toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs${missing.length?` (${missing.join(', ')} output not entered)`:''}` : '\nOutput not entered';
+    side.push({k:'Vacuum Sealer · total', v: base + (vg.length>1 ? tot : `\n${outLine(effOut(date, vg[0] ? vg[0].key : ''))}`), bold:false});
+    if(vg.length>1) vg.forEach(g=>side.push({k:`↳ ${g.label}`, sub:true, v:`Ran ${fmtDur(g.act)}\n${outLine(effOut(date, g.key))}`}));
     else if(vg.length===1) side[side.length-1].k = `Vacuum Sealer · ${vg[0].label}`;
     [...new Set(mine.filter(s=>s.covering).map(s=>s.covering))].forEach(c=>side.push({k:`↳ covering ${c} breakdown`, sub:true, v: fmtDur(mine.filter(s=>s.covering===c).reduce((a,s)=>a+coverMin(s),0)), red:true}));
   });
@@ -3274,6 +3280,14 @@ function sidePrepText(date, m){
   let su = 0, dc = 0; pd.people.forEach(p=>p.segs.forEach(sg=>{ if(sg.w==='Set-up · '+m) su += sg.b-sg.a; else if(sg.w==='Dismantle · '+m || sg.w==='Clean-up · '+m) dc += sg.b-sg.a; }));
   const ag = (((dayLogFor(date)||{}).prepAgain)||[]).filter(x=>x.m===m);
   return (su?` · set-up ${fmtDur(su)}`:'') + (ag.length?` (set up again ×${ag.length}: ${ag.map(x=>x.reason.toLowerCase()).join(', ')})`:'') + (dc?` · dismantle + clean ${fmtDur(dc)}`:'');
+}
+function sidePrepLines(date, m){
+  const pd = personDay(date); if(!pd) return [];
+  let su = 0, dc = 0; pd.people.forEach(p=>p.segs.forEach(sg=>{ if(sg.w==='Set-up · '+m) su += sg.b-sg.a; else if(sg.w==='Dismantle · '+m || sg.w==='Clean-up · '+m) dc += sg.b-sg.a; }));
+  const ag = (((dayLogFor(date)||{}).prepAgain)||[]).filter(x=>x.m===m), out = [];
+  if(su) out.push(`Set-up ${fmtDur(su)}${ag.length?` (set up again ×${ag.length}: ${ag.map(x=>x.reason.toLowerCase()).join(', ')})`:''}`);
+  if(dc) out.push(`${m==='Fajita'?'Dismantle / clean':'Dismantle'} ${fmtDur(dc)}`);
+  return out;
 }
 /* ============ v169: END SHIFT — everyone still here goes home in the same tap ============ */
 let endHome = null; // {sel:[], at, date}
@@ -6728,7 +6742,7 @@ function exportReportPDF(date){
     const secs = dayLogSections(rep.date);
     if(secs.length){ ensure(80); y+=6; section('CREW · MAREL · SIDE MACHINES');
       secs.forEach(sec=>{ ensure(36); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(120); doc.text(sec.title, 46, y); y+=13; doc.setFontSize(10.5); doc.setTextColor(0);
-        sec.rows.forEach(r=>{ const kl = doc.splitTextToSize(String(r.k).replace(/↳/g,'  -'), 160), vl = doc.splitTextToSize(String(r.v).replace(/↳/g,'-').replace(/→/g,'->'), 340), h = 13*Math.max(kl.length, vl.length); ensure(h+4);
+        sec.rows.forEach(r=>{ const kl = doc.splitTextToSize(String(r.k).replace(/↳/g,'  -'), 160), vl = String(r.v).replace(/↳/g,'-').replace(/→/g,'->').replace(/—/g,'-').split('\n').flatMap(t=>doc.splitTextToSize(t, 340)), h = 13*Math.max(kl.length, vl.length); ensure(h+4);
           doc.setFont('helvetica','normal'); doc.setTextColor(95); doc.text(kl, 46, y); doc.setTextColor(0); if(r.red){ doc.setTextColor(192,57,43); doc.setFont('helvetica','bold'); } if(r.big) doc.setFontSize(16); doc.text(vl, 220, r.big ? y+2 : y); if(r.big){ doc.setFontSize(10.5); y += 6; } doc.setTextColor(0); doc.setFont('helvetica','normal'); y += h+3; });
         y+=5; });
     }
