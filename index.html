@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203.4 - 2026-11-09 (Planned stop: every line that is on starts ticked — untick one to keep it running with its crew (e.g. a priority order on V1); everyone else is still summoned)';
+const APP_VERSION = 'v203.5 - 2026-11-09 (Planned stop card always lists all four lines — lines that are on are ticked to stop (tap to keep running), lines not started are shown greyed)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4484,9 +4484,11 @@ function renderAllLineSetupCard(){
       ${reasons.map(r=>`<div class="statusopt ${a.reason===r?'sel':''}" style="--sc:var(--planned);--scdim:var(--planned-dim)" onclick="allLineSetup.reason='${r.replace(/'/g,"\\'")}'; render()"><div class="dot" style="background:var(--planned)"></div>${r}</div>`).join('')}
     </div>
     ${a.reason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(a.other)}" oninput="allLineSetup.other=this.value" placeholder="Describe the planned stop"></div>` : ''}
-    ${activeLinesNow().length ? `<div class="field"><label>Lines that are on — untick one to keep it running</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${activeLinesNow().map(m=>{ const on = a.machines.includes(m), li = lineNowInfo(m); return `<button type="button" onclick="toggleAllLineMachine('${m}')" style="padding:10px;border-radius:10px;text-align:left;border:1.5px solid ${on?'var(--planned)':'var(--run)'};background:${on?'var(--planned-dim)':'var(--run-dim)'};color:var(--text);"><div style="font-weight:700;">${on?'⏸':'▶'} ${escapeHtml(m)}</div><div style="font-size:11.5px;color:${on?'var(--planned)':'var(--run)'};font-weight:700;">${on?'stops':'keeps running'} · ${li.names.length} crew${li.names.length?` (${escapeHtml(li.names.join(', '))})`:''}</div></button>`; }).join('')}</div>
-      ${activeLinesNow().some(m=>!a.machines.includes(m)) ? `<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Crew on a line that keeps running stay on it. To send some of them to the meeting, take them off with 👥 Change crew first — then they're summoned too.</div>` : ''}</div>` : `<div class="cb-mut" style="font-size:12px;margin-bottom:10px;">No lines on yet — only the crew is summoned.</div>`}
+    <div class="field"><label>Lines — tap a line that's on to keep it running</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${MACHINES.map(m=>{ const act = activeLinesNow().includes(m), on = act && a.machines.includes(m), li = lineNowInfo(m);
+        if(!act) return `<div style="padding:10px;border-radius:10px;border:1.5px dashed var(--line);opacity:.55;"><div style="font-weight:700;">${escapeHtml(m)}</div><div style="font-size:11.5px;color:var(--muted);">not started — nothing to stop</div></div>`;
+        return `<button type="button" onclick="toggleAllLineMachine('${m}')" style="padding:10px;border-radius:10px;text-align:left;border:1.5px solid ${on?'var(--planned)':'var(--run)'};background:${on?'var(--planned-dim)':'var(--run-dim)'};color:var(--text);"><div style="font-weight:700;">${on?'⏸':'▶'} ${escapeHtml(m)}</div><div style="font-size:11.5px;color:${on?'var(--planned)':'var(--run)'};font-weight:700;">${on?'stops':'keeps running'} · ${li.names.length} crew${li.names.length?` (${escapeHtml(li.names.join(', '))})`:''}</div></button>`; }).join('')}</div>
+      ${!activeLinesNow().length ? `<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">No lines on yet — only the crew is summoned.</div>` : activeLinesNow().some(m=>!a.machines.includes(m)) ? `<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Crew on a line that keeps running stay on it. To send some of them to the meeting, take them off with 👥 Change crew first — then they're summoned too.</div>` : ''}</div>
     <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Recorded as a Planned Stop — not counted against Efficiency or in the bottleneck rankings.</div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="allLineSetup=null; render()">Cancel</button>
