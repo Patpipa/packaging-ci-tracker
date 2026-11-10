@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v204.5 - 2026-11-09 (Crew tab: Lead Hand / Yield Operator only in their own box, not in the crew list; the box shows On line · V1, Off line · on duty, or Went home)';
+const APP_VERSION = 'v204.6 - 2026-11-09 (End Shift: Lead Hand and Yield Operator are in the Who is going home list too, ticked — they go off line and home together with the crew)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2710,7 +2710,7 @@ async function afterFinishGo(w){
 async function afterFinishSend(){ const a = liveAfterFinish; if(!a) return; if(!a.dest){ toast('Pick where they are going'); return; } await afterFinishGo(a.dest); }
 /* 🏠 everyone went home — one tap at the end of the day */
 let goHome = null; // {sel:[], at}
-function goHomeCandidates(){ return crewRoster().filter(n=>{ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); const w = String(whereOf(n)); return lg.length && !w.startsWith('Not here') && !w.startsWith('Lent'); }); } // v167: lent out = not tracked, so not in the went-home list
+function goHomeCandidates(){ const T0 = todayStr(); const roles = OFFLINE_ROLES.filter(r=>roleIn(T0, r) && !String(whereOf(r)).startsWith('Not here')); return crewRoster().filter(n=>{ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); const w = String(whereOf(n)); return lg.length && !w.startsWith('Not here') && !w.startsWith('Lent'); }).concat(roles); } // v167: lent out = not tracked, so not in the went-home list
 function openGoHome(){ const c = goHomeCandidates(); goHome = {sel: c.slice(), at: nowHHMM()}; render(); }
 function toggleGoHome(i){ const g = goHome; if(!g) return; const n = goHomeCandidates()[i]; if(n==null) return; g.sel = g.sel.includes(n) ? g.sel.filter(x=>x!==n) : [...g.sel, n]; render(); }
 async function confirmGoHome(){
@@ -3253,7 +3253,9 @@ function toggleEndHome(i){ const c = goHomeCandidates(), n = c[i]; if(!endHome |
 { const _ca = closeAllOpenForEndShift; closeAllOpenForEndShift = async function(){
     const ok = await _ca(); if(!ok) return ok;
     const h = endHome; endHome = null;
-    if(h && h.date===todayStr() && h.sel.length){ for(const n of h.sel){ placeSetup = {name:n, w:'Not here · Went home', at: h.at}; await savePlace(); placeSetup = null; } }
+    if(h && h.date===todayStr() && h.sel.length){ for(const n of h.sel){
+      if(OFFLINE_ROLES.includes(n)){ const on = openOffline(todayStr()).find(o=>o.role===n); if(on) await stopOffline(on.id); } // v204.6: Lead / Yield go off line first
+      placeSetup = {name:n, w:'Not here · Went home', at: h.at}; await savePlace(); placeSetup = null; } }
     return ok; }; }
 
 /* ============ v174: 🖥 SCALES — downtime per packaging scale / label computer (Scale 3, 5, 7) ============
