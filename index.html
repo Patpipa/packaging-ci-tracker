@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203.3 - 2026-11-09 (All-line planned stop now summons everyone who is here, wherever they are — lines that are on stop, side machines and Lead / Yield pause, people at cleaning / garbage / not placed are counted in it; End puts everyone back; 🙋 Someone not attending? keeps their time where it is)';
+const APP_VERSION = 'v203.4 - 2026-11-09 (Planned stop: every line that is on starts ticked — untick one to keep it running with its crew (e.g. a priority order on V1); everyone else is still summoned)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3073,7 +3073,7 @@ function notAttending(date){ const d = dayLogFor(date||todayStr()); return (d &&
     const a = allLineSetup; if(!a) return;
     const reason = a.reason==='Other' ? (a.other.trim()||'Other') : a.reason; if(a.reason==='Other' && !a.other.trim()){ toast('Type what the stop is for'); return; }
     if(!todaysCrewActive() && namesOn()) await confirmTodaysCrew(true);
-    a.machines = activeLinesNow();
+    a.machines = (a.machines||[]).filter(m=>activeLinesNow().includes(m)); // v203.4: unticked lines keep running with their crew
     if(a.machines.length){ await _sa(); if(allLineSetup) return; } else allLineSetup = null;
     const T = todayStr(), d = ensureDayLog(T), g = openAllLineStops()[0], now = nowHHMM();
     d.crewPlanned = (d.crewPlanned||[]).filter(x=>x.end); d.crewPlanned.push({id: g ? g.id : uid(), start: g ? g.start : now, end:null, reason});
@@ -4466,7 +4466,7 @@ function renderBreakAllBar(){
 let allLineSetup = null;
 let allLineBusy = false;
 function openAllLineSetup(){
-  allLineSetup = {reason: PLANNED_REASONS[0], other:'', machines: MACHINES.filter(m=>!!Store.liveRuns[m])};
+  allLineSetup = {reason: PLANNED_REASONS[0], other:'', machines: activeLinesNow()};
   render();
 }
 function toggleAllLineMachine(m){
@@ -4479,11 +4479,14 @@ function renderAllLineSetupCard(){
   const reasons = [...PLANNED_REASONS,'Other'];
   return `<div class="card" style="border-color:var(--planned);">
     <h3>All-Line Planned Stop</h3>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">Pick the event, then Start. <b style="color:var(--text);">Everyone who is here joins</b> — wherever they are. ${activeLinesNow().length ? `${activeLinesNow().map(shortM).join(', ')} stop` : 'No lines on yet'}; side machines pause; End puts everyone back.</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">Pick the event, then Start. <b style="color:var(--text);">Everyone who is here joins</b> — wherever they are. Side machines pause; End puts everyone back.</div>
     <div class="statusgrid" style="margin-bottom:12px;">
       ${reasons.map(r=>`<div class="statusopt ${a.reason===r?'sel':''}" style="--sc:var(--planned);--scdim:var(--planned-dim)" onclick="allLineSetup.reason='${r.replace(/'/g,"\\'")}'; render()"><div class="dot" style="background:var(--planned)"></div>${r}</div>`).join('')}
     </div>
     ${a.reason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(a.other)}" oninput="allLineSetup.other=this.value" placeholder="Describe the planned stop"></div>` : ''}
+    ${activeLinesNow().length ? `<div class="field"><label>Lines that are on — untick one to keep it running</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${activeLinesNow().map(m=>{ const on = a.machines.includes(m), li = lineNowInfo(m); return `<button type="button" onclick="toggleAllLineMachine('${m}')" style="padding:10px;border-radius:10px;text-align:left;border:1.5px solid ${on?'var(--planned)':'var(--run)'};background:${on?'var(--planned-dim)':'var(--run-dim)'};color:var(--text);"><div style="font-weight:700;">${on?'⏸':'▶'} ${escapeHtml(m)}</div><div style="font-size:11.5px;color:${on?'var(--planned)':'var(--run)'};font-weight:700;">${on?'stops':'keeps running'} · ${li.names.length} crew${li.names.length?` (${escapeHtml(li.names.join(', '))})`:''}</div></button>`; }).join('')}</div>
+      ${activeLinesNow().some(m=>!a.machines.includes(m)) ? `<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Crew on a line that keeps running stay on it. To send some of them to the meeting, take them off with 👥 Change crew first — then they're summoned too.</div>` : ''}</div>` : `<div class="cb-mut" style="font-size:12px;margin-bottom:10px;">No lines on yet — only the crew is summoned.</div>`}
     <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Recorded as a Planned Stop — not counted against Efficiency or in the bottleneck rankings.</div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="allLineSetup=null; render()">Cancel</button>
