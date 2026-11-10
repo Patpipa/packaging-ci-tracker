@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v201 - 2026-11-09 (↩ Undo last crew move for 2 min — logged, never erased; 👷 Working through break — tap names on the break bar, their time stays on their work and a paused side machine keeps running; ☕ Own break place — ↩ Back returns them to where they were; Not placed / free alert shows minutes, amber at 5, red at 10; End Shift checklist — not placed, gaps, lines still stopped, jobs with no QTY / LBS; Crew Hours: Labour breakdown — floor presence, running, stopped, direct, support, lent, break, not recorded, OT; PLH shows lbs ÷ labour hours)';
+const APP_VERSION = 'v202 - 2026-11-09 (Lead / Yield Off line clears you from every line, side machine and place; Garbage from the place list asks Packaging / Trimmer / Burger Room; Side machine buttons light up — Set up amber, Dismantle orange, Running green, Paused red, Break blue; ✕ remove a person on the Crew list; 🤝 Helpers from other depts — Lin, Fernando, Richard, Krishan (Burger Room) join at a time and count from then; Each finished machine keeps its own where-next card; Crew tab ▦ By station view; Vacuum Sealer: several codes, each with its own QTY / LBS, hours counted once)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -836,7 +836,8 @@ function sideJobsOut(date, key){
   if(!js.length) return null;
   const q = js.reduce((a,r)=>a+(parseInt(r.plh.quantity,10)||0),0), l = js.reduce((a,r)=>a+(parseFloat(r.plh.weightLbs)||0),0);
   const from = [...new Set(js.map(r=>r.plh.outputFrom).filter(Boolean))].map(shortM);
-  return {qty: q?String(q):'', lbs: l?l.toFixed(3):'', fromJobs: js.length, from: from.join(' & ')};
+  const codes = [].concat(...js.map(r=>r.plh.codes||[]));
+  return {qty: q?String(q):'', lbs: l?l.toFixed(3):'', fromJobs: js.length, from: from.join(' & '), codes};
 }
 /* v158: a day with side-machine jobs takes its output from the jobs only; days before jobs existed keep the QTY / LBS typed in then (read-only) */
 function effOut(date, key){ if(Store.records.some(r=>r.side && r.date===date)) return sideJobsOut(date, key); const o = ((dayLogFor(date)||{}).output||{})[key]; return (o && (o.qty || o.lbs)) ? o : null; }
@@ -848,7 +849,7 @@ function sideJobsNeedWeightHTML(date){
 }
 function outText(o){
   if(!o || (!o.qty && !o.lbs)) return 'output not entered';
-  return [o.qty?`${o.qty} box${o.qty==='1'?'':'es'}`:'', o.lbs?`${isNaN(Number(o.lbs)) ? o.lbs : Number(Number(o.lbs).toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs`:''].filter(Boolean).join(' · ') + (o.from ? ` (packed on ${o.from})` : ''); // v176: 1,240 lbs, not 1240.000
+  return [o.qty?`${o.qty} box${o.qty==='1'?'':'es'}`:'', o.lbs?`${isNaN(Number(o.lbs)) ? o.lbs : Number(Number(o.lbs).toFixed(3)).toLocaleString('en-US',{maximumFractionDigits:3})} lbs`:''].filter(Boolean).join(' · ') + (o.from ? ` (packed on ${o.from})` : '') + (o.codes && o.codes.length>1 ? ` — ${codesText(o.codes)}` : ''); // v176: 1,240 lbs, not 1240.000
 }
 /* one row per machine (and per Vacuum Sealer product) used that day, for entering QTY / LBS any time after */
 function sideOutputGroups(date){
@@ -930,6 +931,7 @@ async function saveSideJob(date, jobId, opt){
   const old = Store.records.find(r=>r.id==='side-'+jobId);
   if(old && old.plh && !(opt && (opt.weight||opt.qty))) opt = {qty: old.plh.quantity||'', weight: old.plh.weightLbs||'', ...(opt||{})}; // keep a weight already entered
   const rec = buildSideJobRecord(date, jobId, opt||{}); if(!rec) return null;
+  { const cs = (opt && opt.codes!==undefined) ? opt.codes : (old && old.plh && old.plh.codes); if(cs && cs.length) rec.plh.codes = cs; }
   await Store.refreshRecords();
   const i = Store.records.findIndex(r=>r.id===rec.id); if(i>-1){ rec.createdAt = Store.records[i].createdAt||rec.createdAt; Store.records[i] = rec; } else Store.records.push(rec);
   const ok = await Store.saveRecords(); if(!ok){ toast('Save failed — check connection'); return null; }
@@ -974,23 +976,33 @@ function openSwitchToPack(id){
 }
 async function finishSideJob(id){
   const d = ensureDayLog(todayStr()), cur = (d.side||[]).find(x=>x.id===id); if(!cur) return;
-  const qty = (sideEnd && sideEnd.qty)||'', lbs = (sideEnd && sideEnd.lbs)||'';
+  let qty = (sideEnd && sideEnd.qty)||'', lbs = (sideEnd && sideEnd.lbs)||'', codes = null;
+  if(sideEnd && sideEnd.codes){ codes = codesClean(sideEnd.codes); if(codes.some(c=>c.lbs!=='' && !(parseFloat(c.lbs)>0))){ toast('Each code needs a weight more than 0 — or leave it empty'); return; }
+    if(codes.length){ qty = String(codes.reduce((t,c)=>t+(parseInt(c.qty,10)||0),0)); lbs = String(codes.reduce((t,c)=>t+(parseFloat(c.lbs)||0),0) || ''); } if(codes.length<2) codes = codes.length && codes[0].code!=='Code 1' ? codes : null; }
   if(lbs!=='' && !(parseFloat(lbs)>0)){ toast('Weight must be more than 0 — or leave it empty and add it later'); return; }
   if(!cur.end){ cur.end = openEndToday(cur.start); closeSideWaits(cur, cur.end); }
   if(!cur.jobId) cur.jobId = cur.id;
   sideEnd = null;
   if(!(await saveDayLogNow())) return;
-  const rec = await saveSideJob(todayStr(), cur.jobId, {qty, weight: lbs});
-  toast(rec && rec.plh.grossPLH!=null ? `${cur.machine} · ${rec.product} — finished, ${rec.plh.grossPLH.toFixed(0)} PLH` : `${cur.machine} finished — add Qty/Weight later in History for PLH`);
+  const rec = await saveSideJob(todayStr(), cur.jobId, {qty, weight: lbs, codes});
+  toast(rec && (rec.plh.weightLbs>0) ? `${cur.machine} finished — ${codes && codes.length ? codesText(codes) : `${rec.plh.quantity||0} boxes · ${rec.plh.weightLbs} lbs`}` : `${cur.machine} finished — add QTY / LBS later in History`);
 }
+/* v202: Vacuum Sealer seals several codes at once — each code gets its own QTY / LBS, the hours stay once */
+function vacCodesHTML(){ const e = sideEnd; if(!e.codes) e.codes = [{code:'', qty: e.qty||'', lbs: e.lbs||''}];
+  return e.codes.map((c,i)=>`<div style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;">
+    <span style="display:flex;gap:6px;align-items:center;"><b class="cb-mut" style="color:var(--text);">Code ${i+1}</b><input type="text" maxlength="30" placeholder="product code (optional)" value="${escapeHtml(c.code)}" oninput="sideEnd.codes[${i}].code=this.value" style="padding:7px;flex:1;min-width:0;">${i?`<button type="button" class="cb-btn" style="flex:0 0 auto;padding:6px 9px;" onclick="sideEnd.codes.splice(${i},1);render()">✕</button>`:''}</span>
+    <span style="display:flex;gap:6px;align-items:center;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" placeholder="boxes" value="${escapeHtml(c.qty)}" oninput="sideEnd.codes[${i}].qty=this.value" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="${escapeHtml(c.lbs)}" oninput="sideEnd.codes[${i}].lbs=this.value" style="padding:8px;flex:1.3;min-width:0;"></span></div>`).join('')
+  + `<button type="button" class="cb-btn" style="width:100%;" onclick="sideEnd.codes.push({code:'',qty:'',lbs:''});render()">＋ Add another code</button>`; }
+function codesClean(cs){ return (cs||[]).map((c,i)=>({code: String(c.code||'').trim() || `Code ${i+1}`, qty: String(c.qty||'').trim(), lbs: String(c.lbs||'').trim()})).filter(c=>c.qty!=='' || c.lbs!==''); }
+function codesText(cs){ return (cs||[]).map(c=>`${c.code}: ${c.qty||0} boxes · ${Number(parseFloat(c.lbs)||0).toLocaleString('en-US',{maximumFractionDigits:2})} lbs`).join(' + '); }
 function sideEndHTML(run){
   const e = sideEnd, sw = SIDE_PACK_SWITCH.includes(run.machine) && run.phase!=='pack';
   return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--wait);"><span class="cb-nm">End ${run.machine} · ${escapeHtml(sideJobLabel(run))}</span>
     ${sw?`<button class="cb-btn" style="width:100%;border-color:var(--brk);color:var(--brk);font-weight:700;padding:12px;" onclick="openSwitchToPack('${run.id}')">📦 Switch to Packaging</button>
     <div class="cb-mut" style="width:100%;">Sealing stops and a packing step starts now for the same product and crew. Weight is entered once, when packing finishes.</div>`:''}
-    <span class="cb-mut" style="width:100%;margin-top:4px;">Finish the job${sw?' here (no packing step)':''} — packed QTY / LBS</span>
-    <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" id="sideEndQty" placeholder="boxes" value="${escapeHtml(e.qty)}" oninput="sideEnd.qty=this.value" style="padding:8px;flex:1;min-width:0;">
-      <span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.01" id="sideEndLbs" placeholder="0.00" value="${escapeHtml(e.lbs)}" oninput="sideEnd.lbs=this.value" style="padding:8px;flex:1.3;min-width:0;"></span>
+    <span class="cb-mut" style="width:100%;margin-top:4px;">Finish the job${sw?' here (no packing step)':''} — packed QTY / LBS${run.machine==='Vacuum Sealer'?' · one box per code':''}</span>
+    ${run.machine==='Vacuum Sealer' ? vacCodesHTML() : `<span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">QTY</span><input type="number" inputmode="numeric" min="0" step="1" id="sideEndQty" placeholder="boxes" value="${escapeHtml(e.qty)}" oninput="sideEnd.qty=this.value" style="padding:8px;flex:1;min-width:0;">
+      <span class="cb-mut">LBS</span><input type="number" inputmode="decimal" min="0" step="0.01" id="sideEndLbs" placeholder="0.00" value="${escapeHtml(e.lbs)}" oninput="sideEnd.lbs=this.value" style="padding:8px;flex:1.3;min-width:0;"></span>`}
     <div class="cb-mut" style="width:100%;font-size:11.5px;">Optional now — you can add QTY / LBS later from History. PLH shows once the weight is in.</div>
     <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="sideEnd=null;render()">Cancel</button><button class="cb-btn" style="border-color:var(--run);color:var(--run);font-weight:700;" onclick="finishSideJob('${run.id}')">✓ Finish job</button></div></div>`;
 }
@@ -1377,14 +1389,18 @@ function garbageCardHTML(m, live, isRunning, lastSeg){
     <div class="btnrow" style="margin-top:4px;gap:6px;">${GARBAGE_KINDS.map(k=>`<button class="btn btn-secondary" style="padding:10px 4px;font-size:13px;" onclick="garbageTap('${m}','${k}')">${k}</button>`).join('')}</div>`;
 }
 /* Report rows: total + per kind + per line */
+function placeGarbageRuns(dt){ const d = dayLogFor(dt), out = []; if(!d || !d.where) return out;
+  Object.keys(d.where).forEach(n=>{ const lg = d.where[n]||[]; lg.forEach((e,i)=>{ if(e.w!=='Garbage run' || !e.gk) return; const nx = lg[i+1]; const end = nx ? nx.at : (dt===todayStr() ? nowHHMM() : '16:30'); out.push({machine:'(no line)', who:n, kind:e.gk, start:e.at, end, min: Math.max(0, toMin(end)-toMin(e.at))}); }); });
+  return out; }
 function garbageSummary(dates){
-  const all = []; dates.forEach(dt=>garbageEvents(dt).forEach(e=>{ const end = garbageEndOf(e, dt); all.push({...e, min: Math.max(0, toMin(end)-toMin(e.start))}); }));
+  const all = []; dates.forEach(dt=>{ garbageEvents(dt).forEach(e=>{ const end = garbageEndOf(e, dt); all.push({...e, min: Math.max(0, toMin(end)-toMin(e.start))}); }); placeGarbageRuns(dt).forEach(e=>all.push(e)); });
   const sum = l=>l.reduce((a,e)=>a+e.min,0);
   const kinds = GARBAGE_KINDS.map(k=>{ const l = all.filter(e=>e.kind===k); return l.length ? `${k} ${l.length} (${fmtDur(sum(l))})` : ''; }).filter(Boolean);
   const lines = [...new Set(all.map(e=>e.machine))].sort().map(m=>{ const l = all.filter(e=>e.machine===m); return `${m} ×${l.length} (${fmtDur(sum(l))})`; });
   const who = [...new Set(all.filter(e=>e.who).map(e=>e.who))].map(w=>{ const l = all.filter(e=>e.who===w); return `${w} ×${l.length} (${fmtDur(sum(l))})`; });
   return {who, n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind!=='Packaging').length, kinds, lines};
 }
+function lit0(c){ return `border-color:${c};color:${c};box-shadow:0 0 0 1px ${c}, 0 0 12px ${c};font-weight:700;`; }
 let sideBreakBusy = false;
 async function syncSideBreaks(){
   if(sideBreakBusy || !Store.ready) return;
@@ -1516,11 +1532,11 @@ function renderCrewBoard(mode){
     if(run && sideEnd && sideEnd.id===run.id) return SIDE_PREP.includes(run.machine) ? sideFinishSimpleHTML(run) : sideEndHTML(run);
     if(run && sidePause && sidePause.id===run.id) return sidePauseHTML(run);
     if(!run && sidePrep && sidePrep.machine===sm.name) return sidePrepHTML();
-    const afterHtml = (liveAfterFinish && liveAfterFinish.m===sm.name) ? afterFinishHTML(sm.name) : '';
+    const afterHtml = afterFinishHTML(sm.name);
     const bp = !run && breakPausedRun(todayStr(), sm.name);
     if(bp){
       const ppl = `${bp.pack} packaging${bp.trim?` + ${bp.trim} trimmer`:''}`;
-      return `<div class="cb-row" style="border-color:var(--brk);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">⏸ Paused for break since ${fmtTime12(bp.end)}</span>
+      return `<div class="cb-row" style="border-color:var(--brk);flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-btn" style="flex:0 0 auto;padding:7px 12px;${lit0('#4a90d9')}">● ☕ BREAK</span><span class="cb-mut" style="color:var(--brk);font-weight:600;width:100%;">⏸ Paused for break since ${fmtTime12(bp.end)}</span>
         <div class="cb-mut" style="width:100%;">Restarts with ${ppl} when the Variovacs come back from break.</div>
         <div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="dontRestartSide('${bp.id}')">Don't restart</button><button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="restartSideNow('${bp.id}')">▶ Restart now</button></div></div>`;
     }
@@ -1528,7 +1544,9 @@ function renderCrewBoard(mode){
       const dots = []; for(let i=0;i<run.pack;i++) dots.push(personDot(i>=run.pack-(run.train||0)?'trn':'side')); for(let i=0;i<run.trim;i++) dots.push(personDot('tr'));
       const w = sideOpenWait(run), vac = sm.name==='Vacuum Sealer';
       const info = [run.phase==='pack' ? `<b style="color:var(--brk);">📦 Packing${vac?'':' · '+escapeHtml(sideJobLabel(run))}</b>` : '', vac ? `<b style="color:var(--text);">${escapeHtml(sideProdLabel(run)||'product not picked')}</b>` : '', run.train ? `<span style="color:#F2C14E;">${escapeHtml(trainText(run))}</span>` : '', run.covering && !run.coverEnd ? `<span style="color:var(--wait);">covering ${run.covering} breakdown</span>` : ''].filter(Boolean).join(' · ');
+      const lc = w ? 'var(--wait)' : 'var(--run)';
       return `<div class="cb-row" style="border-color:${w?'var(--change)':'var(--amber)'};flex-wrap:wrap;gap:6px;"><span class="cb-nm">${sm.name} ${tag}</span><span class="cb-ppl">${dots.join('')}</span>
+        <div style="display:flex;gap:6px;width:100%;"><span class="cb-btn" style="flex:0 0 auto;padding:7px 12px;opacity:.35;">🔧 Set up</span>${SIDE_PREP.includes(sm.name)?`<span class="cb-btn" style="flex:0 0 auto;padding:7px 12px;opacity:.35;">🔩 ${disLabel(sm.name)}</span>`:''}<span class="cb-btn" style="flex:1;padding:7px 12px;text-align:center;${lit0(lc)}">● ${w?'⏸ PAUSED':'▶ RUNNING'}</span></div>
         ${info?`<div class="cb-mut" style="width:100%;">${info}</div>`:''}
         ${w?`<div style="width:100%;font-size:12.5px;color:var(--change);font-weight:600;">⏸ ${escapeHtml(w.reason||'Waiting for trimmers')} since ${fmtTime12(w.start)} — not counted as running time</div>`:''}
         ${(run.names||[]).length?`<div class="cb-mut" style="width:100%;">👥 ${escapeHtml(run.names.join(', '))}${(run.trimNames||[]).length?` + ${escapeHtml(run.trimNames.join(', '))} (trimmer)`:''}</div>`:''}
@@ -1537,7 +1555,8 @@ function renderCrewBoard(mode){
         <button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="openSideEnd('${run.id}')">✅ Finished</button></div></div>`;
     }
     const prepNow = peopleAtPlace('Set-up · '+sm.name), disNow = peopleAtPlace('Dismantle · '+sm.name);
-    return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}')">🔧 Set up</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="openSidePrep('${sm.name}','Dismantle')">🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
+    const lit = c=>`border-color:${c};color:${c};box-shadow:0 0 0 1px ${c}, 0 0 12px ${c};`; // v202: the button lights up while it's happening
+    return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${prepNow.length?lit('var(--amber)'):''}" onclick="openSidePrep('${sm.name}')">${prepNow.length?'● ':''}🔧 Set up</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${disNow.length?lit('#e8742a'):''}" onclick="openSidePrep('${sm.name}','Dismantle')">${disNow.length?'● ':''}🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
       ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div><div style="display:flex;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Set-up',true)">＋ Add person</button></div>`:''}
       ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Dismantle',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','__none')">✓ Done (free)</button></div>`:''}</div>`;
   }).join('');
@@ -1934,7 +1953,13 @@ const PLACES = [
 ];
 const PLACE_GROUPS = [['☕ Break', p=>p.w==='Break · own'], ['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
-function crewRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.slice(); }
+function baseRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.filter(n=>n!=='Krishan'); }
+/* v202: helpers from other departments — only part of today's crew after "Joined at …" */
+const DEFAULT_HELPERS = [{n:'Lin', dept:'Burger Room'},{n:'Fernando', dept:'Burger Room'},{n:'Richard', dept:'Burger Room'},{n:'Krishan', dept:'Burger Room'}];
+function helperList(){ const h = Store.settings && Store.settings.helpers; return Array.isArray(h) ? h : DEFAULT_HELPERS.slice(); }
+function helperOf(n){ return helperList().find(h=>h.n===n) || null; }
+function helperDay(date, n){ const c = (((dayLogFor(date)||{}).crewDay)||{})[n]; return c && c.helper ? c : null; }
+function crewRoster(){ const base = baseRoster(), T = todayStr(); const hj = helperList().map(h=>h.n).filter(n=>!base.includes(n) && helperDay(T, n)); return hj.length ? base.concat(hj) : base; }
 function trimmerList(){ const r = Store.settings && Store.settings.trimmerNames; return Array.isArray(r) ? r : []; }
 function namesOn(){ return crewRoster().length>0; }
 function segNamesOf(seg){ return seg && Array.isArray(seg.names) ? {names: seg.names.slice()} : {}; }
@@ -1966,7 +1991,7 @@ async function syncWhere(){
     if(map[n] && d.place[n]){ delete d.place[n]; ch = true; } // on a machine again → the place off the machines is over
     const w = map[n] || (d.place[n] ? d.place[n].w : '');
     const log = d.where[n] || (d.where[n] = []); const last = log.length ? log[log.length-1].w : '';
-    if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true; }
+    if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; delete log[log.length-1].gk; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true; }
     if(!log.length) delete d.where[n];
   });
   OFFLINE_ROLES.forEach(r=>{ if(map[r] && !(d.offline||[]).some(o=>o.role===r && !o.end)){ d.offline = d.offline || []; d.offline.push({id: uid(), role: r, start: at, end: null}); ch = true; } }); // v167: picked on a machine = On line
@@ -2055,7 +2080,7 @@ async function addPickName(ctx){
   if(ctx==='side' && !t.names.includes(name) && t.names.length>=SIDE_PACK_MAX){ toast(`Up to ${SIDE_PACK_MAX} packaging on a side machine`); return; }
   if(!t.names.includes(name)) t.names.push(name);
   syncPickCounts(ctx, t);
-  if(!ex && !OFFLINE_ROLES.includes(name)){ Store.settings = {...Store.settings, crewRoster: [...crewRoster(), name]}; await Store.saveSettings(); toast(`${name} added to the crew list (change it in Settings)`); }
+  if(!ex && !OFFLINE_ROLES.includes(name)){ Store.settings = {...Store.settings, crewRoster: [...baseRoster(), name]}; await Store.saveSettings(); toast(`${name} added to the crew list (change it in Settings)`); }
   render();
 }
 function toggleTrainee(i){ const t = sideSetup; if(!t) return; const n = (t.names||[])[i]; if(n==null) return; t.trainNames = t.trainNames || [];
@@ -2087,6 +2112,14 @@ function namesText(arr){ return (arr||[]).length ? arr.join(', ') : ''; }
 /* ---- WHERE EVERYONE IS (Crew Board) ---- */
 let placeSetup = null; // {name, w, at}
 function openPlace(i){ const n = crewRoster()[i]; if(n==null) return; placeSetup = {name: n, w: '', at: nowHHMM()}; render(); }
+/* v202: garbage kind is kept on the place and the time log */
+{ const _sp = savePlace; savePlace = async function(){
+    const ps = placeSetup; if(!ps || ps.w!=='Garbage run') return _sp.apply(this, arguments);
+    let gk = ps.gk || garbageKindNext; if(!gk){ gk = await askGarbageKind([ps.name]); if(!gk){ placeSetup = null; render(); return; } }
+    const n = ps.name; const r = await _sp.apply(this, arguments); if(placeSetup) return r;
+    const d = ensureDayLog(todayStr()); if(d.place && d.place[n] && d.place[n].w==='Garbage run') d.place[n].gk = gk;
+    const lg = (d.where||{})[n]; if(lg && lg.length && lg[lg.length-1].w==='Garbage run') lg[lg.length-1].gk = gk;
+    await Store.saveDayLog(); return r; }; }
 async function savePlace(){
   const p = placeSetup; if(!p) return;
   const el = document.getElementById('placeAt'); if(el && el.value) p.at = el.value;
@@ -2165,6 +2198,7 @@ function shiftWindow(date, n, log){
     if(end > b) b = end; });
   b = Math.min(b, DAY_TO);
   if(isToday) b = Math.min(b, Math.max(a, nowM));
+  { const hd = helperDay(date, n); if(hd){ a = toMin(hd.start); if(log && log.length && toMin(log[0].at) < a) a = Math.max(DAY_FROM, toMin(log[0].at)); if(hd.backAt) b = Math.min(b, toMin(hd.backAt)); } } // v202: helpers count from when they joined until they went back
   if(b < a) b = a;
   const otA = Math.max(0, Math.min(REG_A, b) - a), otB = Math.max(0, b - Math.max(REG_B, a));
   return {a, b, otA, otB};
@@ -2185,7 +2219,7 @@ function personDay(date){
     const log = effectiveLog(date, n), tot = {}, grp = {}, segs = [], isRole = OFFLINE_ROLES.includes(n);
     const win = shiftWindow(date, n, log);
     for(let t=win.a; t<win.b; t++){
-      let w = '', trn0 = false; for(const e of log){ if(toMin(e.at)<=t){ w = e.w; trn0 = !!e.trn; } else break; }
+      let w = '', trn0 = false, gk0 = ''; for(const e of log){ if(toMin(e.at)<=t){ w = e.w; trn0 = !!e.trn; gk0 = e.gk||''; } else break; }
       const i = t-DAY_FROM; let k, g;
       const wThru = wtl.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
       const onBrk = brk[i] && !(w.startsWith('Not here')) && !wThru; // v178: break time = break for everyone here, whatever they were on (a stopped line, a place, a paused side machine)
@@ -2196,7 +2230,7 @@ function personDay(date){
         const wo = iv && (iv.waits||[]).find(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         if(onBrk && (!iv || wt)){ k='Break'; g='Break'; } else if(wt){ k=`${w} — ${(wo && wo.reason) || 'Waiting for trimmers'}`; g='Side machines'; } else { k = w; g='Side machines'; } }
       else if(onBrk && (w || cbk[i])){ k='Break'; g='Break'; } // v200: crew break counts everyone here, placed or not
-      else if(w==='Garbage run'){ k = 'Garbage run'; g = 'Garbage run'; }
+      else if(w==='Garbage run'){ k = gk0 ? `Garbage run (${gk0})` : 'Garbage run'; g = 'Garbage run'; }
       else if(w.startsWith('Other · ')){ k = w.slice(8); g = 'Other duties'; }
       else if(w.startsWith('Planned · ')){ k = w.slice(10); g = 'Meetings & stretching'; }
       else if(w.startsWith('Set-up · ')){ k = `${w.slice(9)} set-up`; g = 'Side machines'; }
@@ -2260,8 +2294,8 @@ function renderCrewNamesSettings(){
 }
 async function addRosterName(){ const el = document.getElementById('rosterAdd'), n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
   if(crewRoster().some(x=>x.toLowerCase()===n.toLowerCase())){ toast('Already on the list'); return; }
-  Store.settings = {...Store.settings, crewRoster: [...crewRoster(), n]}; if(await Store.saveSettings()){ toast(`${n} added`); render(); } }
-async function removeRosterName(i){ const r = crewRoster(), n = r[i]; if(n==null) return;
+  Store.settings = {...Store.settings, crewRoster: [...baseRoster(), n]}; if(await Store.saveSettings()){ toast(`${n} added`); render(); } }
+async function removeRosterName(i){ const r = baseRoster(), n = r[i]; if(n==null) return;
   if(whereNowMap()[n]){ toast(`${n} is on ${whereNowMap()[n]} right now — take them off first`); return; }
   if(!confirm(`Remove ${n} from the crew list?\n\nTheir past hours stay in the reports.`)) return;
   Store.settings = {...Store.settings, crewRoster: r.filter((_,j)=>j!==i)}; if(await Store.saveSettings()){ toast(`${n} removed`); render(); } }
@@ -2599,16 +2633,24 @@ async function copyCrewHours(){ const r = crewRangeNow(), t = crewHoursText(r.st
 
 /* ============ v165: END OF DAY — after Finish, shutdown / clean-up, everyone went home ============ */
 let liveAfterFinish = null; // {m, names:[], sel:[], at}
+/* v202: each finished machine keeps its own card — a second finish no longer wipes the first */
+const afterStash = {};
+function afterSet(a){ if(liveAfterFinish && a && liveAfterFinish.m!==a.m) afterStash[liveAfterFinish.m] = liveAfterFinish; if(a) delete afterStash[a.m]; liveAfterFinish = a; }
+function afterNext(){ const ks = Object.keys(afterStash); for(const k of ks){ const a = afterStash[k]; delete afterStash[k]; const nm = a.names.filter(n=>{ const w = whereOf(n); return !w || w==='__none'; }); if(nm.length){ liveAfterFinish = {...a, names: nm, sel: nm.slice(), mode:'', dest:''}; return; } } liveAfterFinish = null; }
+function afterActivate(m){ const a = afterStash[m]; if(!a) return; afterSet(a); render(); }
+function afterStashHTML(m){ const a = afterStash[m]; if(!a || (liveAfterFinish && liveAfterFinish.m===m)) return '';
+  const nm = a.names.filter(n=>{ const w = whereOf(n); return !w || w==='__none'; }); if(!nm.length){ delete afterStash[m]; return ''; }
+  return `<div class="cb-row" style="border-color:var(--brk);margin-bottom:10px;flex-wrap:wrap;gap:6px;"><span style="font-size:12px;color:var(--brk);font-weight:700;">✅ ${escapeHtml(shortM(m))} ${SIDE_MACHINES.some(x=>x.name===m)?'ENDED':'FINISHED'} ${fmtTime12(a.at)} — ${escapeHtml(nm.join(', '))} not placed yet</span><button type="button" class="cb-btn" style="width:100%;border-color:var(--brk);color:var(--brk);" onclick="afterActivate('${m}')">Where did they go? →</button></div>`; }
 { const _f = confirmFinishProduct; confirmFinishProduct = async function(){
     const m = liveFinishSetup && liveFinishSetup.machine, l = m && Store.liveRuns[m];
     const nm = (l && namesOn()) ? liveNames(l) : [];
     const at = nowHHMM();
     await _f();
-    if(m && !Store.liveRuns[m] && nm.length){ liveAfterFinish = {m, names: nm, sel: nm.slice(), at}; render(); }
+    if(m && !Store.liveRuns[m] && nm.length){ afterSet({m, names: nm, sel: nm.slice(), at}); render(); }
   }; }
 function toggleAfterSel(i){ const a = liveAfterFinish; if(!a) return; const n = a.names[i]; if(n==null) return; a.sel = a.sel.includes(n) ? a.sel.filter(x=>x!==n) : [...a.sel, n]; render(); }
 function afterFinishHTML(m){
-  const a = liveAfterFinish; if(!a || a.m!==m) return '';
+  const a = liveAfterFinish; if(!a || a.m!==m) return afterStashHTML(m);
   const btn = (lab, js, col, on)=>`<button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12.5px;padding:12px 6px;${col?`border-color:${col};color:${col};`:''}${on?'background:var(--brk-dim);':''}" onclick="${js}">${lab}</button>`;
   const isSide = SIDE_MACHINES.some(x=>x.name===m), cleanW = isSide ? `Clean-up · ${m}` : `Clean-up · ${m}`;
   const dests = a.mode==='move' ? moveDests('') : [];
@@ -2631,7 +2673,7 @@ async function afterFinishGo(w){
   const ok = await sendNamesTo(a.sel.slice(), w, {at: a.at, otherText: a.otherText});
   if(!ok) return;
   const left = a.names.filter(n=>!a.sel.includes(n));
-  liveAfterFinish = left.length ? {...a, names: left, sel: left.slice(), mode:'', dest:''} : null;
+  if(left.length) liveAfterFinish = {...a, names: left, sel: left.slice(), mode:'', dest:''}; else afterNext();
   render();
 }
 async function afterFinishSend(){ const a = liveAfterFinish; if(!a) return; if(!a.dest){ toast('Pick where they are going'); return; } await afterFinishGo(a.dest); }
@@ -2801,6 +2843,15 @@ function otherInputHTML(holder, val){
 }
 /* send people to a line, side machine or place — one place for Move crew, After Finish, etc. Returns true when done. */
 /* v193: moving people to an idle Fajita / Slicer / Cutlet asks what for — set up, dismantle, or start the run */
+function askGarbageKind(sel){ return new Promise(res=>{
+  const ov = document.createElement('div'); ov.id = 'garbageAsk';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML = `<div style="background:var(--panel,#1e2228);border:1.5px solid var(--brk);border-radius:14px;padding:16px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:8px;">
+    <div style="font-weight:800;font-size:16px;">🗑 ${escapeHtml(sel.join(', '))} — garbage run</div><div class="cb-mut" style="margin-bottom:4px;">Whose garbage?</div>
+    ${GARBAGE_KINDS.map(k=>`<button type="button" class="cb-btn" data-k="${k}" style="width:100%;padding:14px;font-size:15px;">${k}</button>`).join('')}<button type="button" class="cb-btn" data-k="cancel" style="width:100%;padding:12px;">Cancel</button></div>`;
+  ov.addEventListener('click', e=>{ const k = e.target.closest('[data-k]'); if(!k && e.target!==ov) return; ov.remove(); res(k && k.dataset.k!=='cancel' ? k.dataset.k : null); });
+  document.body.appendChild(ov); }); }
+let garbageKindNext = null;
 function askSideKind(m, sel){ return new Promise(res=>{
   const ov = document.createElement('div'); ov.id = 'sideKindAsk';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -2812,6 +2863,7 @@ function askSideKind(m, sel){ return new Promise(res=>{
   document.body.appendChild(ov); }); }
 async function sendNamesTo(sel, dest, opt){
   opt = opt || {}; const T = todayStr();
+  if(dest==='Garbage run' && !garbageKindNext){ const k = opt.gk || await askGarbageKind(sel); if(!k) return false; garbageKindNext = k; try{ return await sendNamesTo(sel, dest, {...opt, gk:k}); } finally { garbageKindNext = null; } }
   if(SIDE_PREP.includes(dest) && !openSideRuns(T).some(s=>s.machine===dest)){
     const k = opt.sideKind || await askSideKind(dest, sel); if(!k) return false;
     if(k==='setup') dest = 'Set-up · '+dest; else if(k==='dismantle') dest = 'Dismantle · '+dest;
@@ -2838,6 +2890,15 @@ async function sendNamesTo(sel, dest, opt){
   const at = opt.at && toMin(opt.at) <= toMin(nowHHMM()) ? opt.at : nowHHMM();
   for(const n of sel){ placeSetup = {name: n, w: dest, at}; await savePlace(); if(placeSetup){ placeSetup = null; return false; } }
   render(); return true;
+}
+/* v202: Off line = off every line, side machine and place — straight back to Lead Hand / Yield duties */
+async function roleOffAll(role){
+  const on = openOffline(todayStr()).find(o=>o.role===role);
+  if(on){ await stopOffline(on.id); if(openOffline(todayStr()).some(o=>o.id===on.id)) return; }
+  else if(whereNowMap()[role]){ if(!(await moveFromOthers([role], '', nowHHMM()))) return; }
+  const w = whereOf(role);
+  if(w && w!=='__none' && !String(w).startsWith('Not here')){ placeSetup = {name: role, w:'__none', at: nowHHMM()}; await savePlace(); placeSetup = null; }
+  toast(`${role} off line — back to ${role} duties`); render();
 }
 /* Lead Hand / Yield Operator: tapping Off line takes them off the machine they were on */
 { const _so = stopOffline; stopOffline = async function(id){
@@ -2905,11 +2966,36 @@ async function toggleUsual(n){ const u = {...crewUsual()}, r = crewRowOf(todaySt
   Store.settings = {...Store.settings, crewUsual: u}; await Store.saveSettings(); render(); }
 async function addCrewName(){ const el = document.getElementById('crewAddIn'), n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
   if(crewRoster().some(x=>x.toLowerCase()===n.toLowerCase())){ toast('Already on the list'); return; }
-  Store.settings = {...Store.settings, crewRoster: [...crewRoster(), n]}; await Store.saveSettings(); toast(`${n} added`); render(); }
+  Store.settings = {...Store.settings, crewRoster: [...baseRoster(), n]}; await Store.saveSettings(); toast(`${n} added`); render(); }
+async function helperJoin(n){ const el = document.getElementById('hjoin-'+n.replace(/[^a-z0-9]/gi,'_')); const at = (el && el.value) || nowHHMM(); const h = helperOf(n);
+  const d = ensureDayLog(todayStr()); d.crewDay = d.crewDay || {}; d.crewDay[n] = {st:'here', start: at, end:'', helper:true, dept: (h && h.dept) || 'Other dept'};
+  await Store.saveDayLog(); toast(`🤝 ${n} joined packaging at ${fmtTime12(at)}`); render(); }
+async function helperBack(n){ const at = nowHHMM(); placeSetup = {name:n, w:'Not here · Went home', at}; await savePlace(); if(placeSetup){ placeSetup = null; return; }
+  const d = ensureDayLog(todayStr()); if(d.crewDay && d.crewDay[n]){ d.crewDay[n].end = at; d.crewDay[n].backAt = at; } await Store.saveDayLog(); toast(`${n} went back to ${(helperOf(n)||{}).dept||'their department'}`); render(); }
+async function helperUndoJoin(n){ if(whereNowMap()[n]){ toast(`${n} is on ${whereNowMap()[n]} — take them off first`); return; } if(!confirm(`Remove ${n} from today's crew? (joined by mistake)`)) return; const d = ensureDayLog(todayStr()); if(d.crewDay) delete d.crewDay[n]; if(d.where) delete d.where[n]; if(d.place) delete d.place[n]; await Store.saveDayLog(); render(); }
+async function helperAdd(){ const el = document.getElementById('helperAddIn'), dl = document.getElementById('helperAddDept'); const n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
+  if(helperList().some(h=>h.n.toLowerCase()===n.toLowerCase()) || baseRoster().some(x=>x.toLowerCase()===n.toLowerCase())){ toast('Already on a list'); return; }
+  Store.settings = {...Store.settings, helpers: [...helperList(), {n, dept: (dl && dl.value) || 'Burger Room'}]}; await Store.saveSettings(); toast(`${n} added to helpers`); render(); }
+async function helperRemove(n){ if(helperDay(todayStr(), n) && !helperDay(todayStr(), n).backAt){ toast(`${n} is with you today — tap Went back first`); return; } if(!confirm(`Remove ${n} from the helpers list?\n\nPast hours stay in the reports.`)) return; Store.settings = {...Store.settings, helpers: helperList().filter(h=>h.n!==n)}; await Store.saveSettings(); render(); }
+let helpersOpen = false;
+function helpersCardHTML(){
+  const T = todayStr(), hs = helperList(), now = nowHHMM();
+  const joined = hs.filter(h=>helperDay(T, h.n)), rest = hs.filter(h=>!helperDay(T, h.n));
+  const js = n=>n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="helpersOpen=!helpersOpen;render()"><h3 style="margin:0;">🤝 Helpers from other depts <span class="cb-mut" style="font-family:Inter,sans-serif;text-transform:none;letter-spacing:0;">· ${joined.filter(h=>!helperDay(T,h.n).backAt).length} with us</span></h3><span class="cb-mut">${helpersOpen?'▲':'▼'}</span></div>
+    ${joined.map(h=>{ const c = helperDay(T, h.n); return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm">${escapeHtml(h.n)} <span class="cb-mut">${escapeHtml(h.dept)}</span></span><span class="cb-mut" style="color:${c.backAt?'var(--muted)':'var(--run)'};">${c.backAt?`went back ${fmtTime12(c.backAt)}`:`with us from ${fmtTime12(c.start)}`}</span>
+      ${c.backAt?'':`<div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="helperBack('${js(h.n)}')">↩ Went back to ${escapeHtml(h.dept)}</button><button class="cb-btn" style="flex:0 0 auto;" onclick="helperUndoJoin('${js(h.n)}')">✕</button></div>`}</div>`; }).join('')}
+    ${helpersOpen ? `${rest.map(h=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm">${escapeHtml(h.n)} <span class="cb-mut">${escapeHtml(h.dept)}</span></span>
+      <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">Joined at</span><input type="time" id="hjoin-${h.n.replace(/[^a-z0-9]/gi,'_')}" value="${now}" style="padding:7px;flex:1;min-width:0;"><button class="cb-btn" style="flex:0 0 auto;border-color:var(--run);color:var(--run);" onclick="helperJoin('${js(h.n)}')">🤝 Join</button></span>
+      <span class="cb-link" style="font-size:11.5px;color:var(--wait);" onclick="helperRemove('${js(h.n)}')">✕ remove from helpers</span></div>`).join('')}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><input type="text" id="helperAddIn" maxlength="24" placeholder="Add a helper name" style="padding:8px;flex:1;min-width:120px;"><select id="helperAddDept" style="padding:7px;flex:0 0 auto;width:auto;">${['Burger Room','Warehouse','Dicer / Grinding','Trimmers','Other dept'].map(x=>`<option>${x}</option>`).join('')}</select><button class="cb-btn" style="flex:0 0 auto;" onclick="helperAdd()">+ Add</button></div>`
+    : (rest.length ? `<div class="cb-mut" style="margin-top:6px;font-size:12px;">Tap to show ${rest.length} more — ${escapeHtml(rest.map(h=>h.n).join(', '))}</div>` : '')}
+  </div>`;
+}
 async function removeCrewName(n){
   if(whereNowMap()[n]){ toast(`${n} is on ${whereNowMap()[n]} right now — take them off first`); return; }
   if(!confirm(`Remove ${n} from the crew list?\n\nTheir past hours stay in the reports.`)) return;
-  Store.settings = {...Store.settings, crewRoster: crewRoster().filter(x=>x!==n)}; await Store.saveSettings(); render(); }
+  Store.settings = {...Store.settings, crewRoster: baseRoster().filter(x=>x!==n)}; await Store.saveSettings(); render(); }
 function renderTodaysCrewPanel(embedded){
   const T = todayStr(), saved = todaysCrewActive(), open = embedded || (crewPanelOpen==null ? !saved : crewPanelOpen);
   const names = [...crewRoster(), ...OFFLINE_ROLES], usual = crewUsual();
@@ -3057,7 +3143,7 @@ function afterFinishSideBtns(m, btn){ return SIDE_PREP.includes(m) ? btn(`🔩 $
 function sideNamesNow(id){ const e = ((dayLogFor(todayStr())||{}).side||[]).find(x=>x.id===id); return e ? (e.names||[]).slice() : []; }
 { const _fs = finishSideJob; finishSideJob = async function(id){ const e = ((dayLogFor(todayStr())||{}).side||[]).find(x=>x.id===id); const m = e && e.machine, nm = sideNamesNow(id);
     await _fs(id); const e2 = ((dayLogFor(todayStr())||{}).side||[]).find(x=>x.id===id);
-    if(m && e2 && e2.end && nm.length){ liveAfterFinish = {m, names: nm, sel: nm.slice(), at: e2.end}; render(); } }; }
+    if(m && e2 && e2.end && nm.length){ afterSet({m, names: nm, sel: nm.slice(), at: e2.end}); render(); } }; }
 /* ✅ Finished without QTY / LBS for Fajita, Cutlet, Slicer — output comes from the Variovac run */
 function sideFinishSimpleHTML(run){
   return `<div class="cb-row" style="flex-wrap:wrap;gap:8px;border-color:var(--run);"><span class="cb-nm">✅ Finish ${escapeHtml(run.machine)} · ${escapeHtml(sideJobLabel(run))}</span>
@@ -3260,20 +3346,20 @@ function renderCrewList(){
     const on = role && here ? openOffline(T).find(o=>o.role===n) : null;
     const goneHome = String(whereOf(n))==='Not here · Went home';
     let html = `<div class="cb-row" style="flex-wrap:wrap;gap:4px 8px;${here&&!goneHome?'':'opacity:.6;'}">
-      <span class="cb-nm" style="min-width:86px;">${here&&!goneHome?'✓ ':''}${escapeHtml(n)}</span>
+      <span class="cb-nm" style="min-width:86px;">${here&&!goneHome?'✓ ':''}${escapeHtml(n)}${helperDay(T,n)?` <span class="cb-mut" style="font-size:11px;">🤝 ${escapeHtml(helperDay(T,n).dept||'')}</span>`:''}</span>
       ${here?`<span class="cb-link" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="crewEditRow=crewEditRow==='${js}'?null:'${js}';render()">${times}${r.end?' <span style="color:var(--change);">½</span>':''}</span>`:''}
       <span style="flex:1;"></span>
       <select onchange="setCrewDay('${js}',{st:this.value})" style="padding:5px 4px;font-size:12px;flex:0 0 auto;width:auto;">${CREW_ST.map(([k,l])=>`<option value="${k}" ${r.st===k?'selected':''}>${l}</option>`).join('')}</select>
       <div style="width:100%;display:flex;align-items:center;gap:8px;">
         ${here && !goneHome && !role ? `<span onclick="liveFree&&liveFree.name==='${js}'?(liveFree=null,render()):openLiveFree('${js}')" style="cursor:pointer;flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)} ›</span>` : `<span style="flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)}</span>`}
-        ${role && here ? (on ? `<button class="cb-btn" style="flex:0 0 auto;padding:7px 12px;border-color:var(--brk);color:var(--brk);" onclick="stopOffline('${on.id}')">Off line</button>` : `<button class="cb-btn" style="flex:0 0 auto;padding:7px 14px;" onclick="startOffline('${js}')">On line</button>`) : ''}
+        ${role && here ? (on || (whereOf(n) && whereOf(n)!=='__none' && !String(whereOf(n)).startsWith('Not here')) ? `<button class="cb-btn" style="flex:0 0 auto;padding:7px 12px;border-color:var(--brk);color:var(--brk);" onclick="roleOffAll('${js}')">Off line</button>` : `<button class="cb-btn" style="flex:0 0 auto;padding:7px 14px;" onclick="startOffline('${js}')">On line</button>`) : ''}
         ${r.st==='lent'?`<select onchange="setCrewDay('${js}',{dept:this.value})" style="padding:5px;font-size:12px;flex:0 0 auto;width:auto;">${LENT_DEPTS.map(x=>`<option ${r.dept===x?'selected':''}>${x}</option>`).join('')}</select>`:''}
       </div>`;
     if(crewEditRow===n && here) html += `<div style="width:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px;margin-top:4px;">
         <span class="cb-mut">Start</span><input type="time" value="${r.start}" onchange="setCrewDay('${js}',{start:this.value||'08:00'})" style="padding:6px;font-size:13px;flex:1 1 34%;min-width:108px;">
         ${r.end ? `<span class="cb-mut">End</span><input type="time" value="${r.end}" onchange="setCrewDay('${js}',{end:this.value})" style="padding:6px;font-size:13px;flex:1 1 34%;min-width:108px;"><span class="cb-link" style="color:var(--wait);" onclick="setCrewDay('${js}',{end:''})">✕ no end</span>`
                 : `<button class="cb-btn" style="flex:0 0 auto;font-size:12px;" onclick="setCrewDay('${js}',{end:'12:30'})">+ End time (half day)</button>`}
-        <span style="flex:1 1 100%;display:flex;gap:14px;justify-content:flex-end;"><span class="cb-link" style="${usual[n]===r.start?'color:var(--amber);':''}" onclick="toggleUsual('${js}')">${usual[n]===r.start?'★ usual start':'☆ make usual start'}</span>${role?'':`<span class="cb-link" style="color:var(--wait);" onclick="removeCrewName('${js}')">✕ remove from list</span>`}</span></div>`;
+        <span style="flex:1 1 100%;display:flex;gap:14px;justify-content:flex-end;">${role || helperDay(T, n) ? '' : `<span class="cb-link" style="color:var(--wait);" onclick="removeCrewName('${js}')">✕ remove from crew list</span>`}<span class="cb-link" style="${usual[n]===r.start?'color:var(--amber);':''}" onclick="toggleUsual('${js}')">${usual[n]===r.start?'★ usual start':'☆ make usual start'}</span>${role?'':`<span class="cb-link" style="color:var(--wait);" onclick="removeCrewName('${js}')">✕ remove from list</span>`}</span></div>`;
     html += `</div>`;
     if(liveFree && liveFree.name===n) html += liveFreeHTML();
     return html;
@@ -3286,10 +3372,35 @@ function renderCrewList(){
     ${saved?'':`<button class="btn btn-primary" style="margin-top:10px;" onclick="confirmTodaysCrew(false)">✓ Confirm today's crew</button>`}
   </div>`;
 }
+let crewView = 'list';
+function crewByStationHTML(){
+  const T = todayStr(), g = {}, order = [], add = (k, n)=>{ if(!g[k]){ g[k] = []; order.push(k); } g[k].push(n); };
+  const people = [...crewRoster(), ...OFFLINE_ROLES];
+  const stOf = n=>{ const r = crewRowOf(T, n), w = String(whereOf(n)||'');
+    if(r.st!=='here') return r.st==='lent' ? 'Lent out' : 'Not here';
+    if(w.startsWith('Not here')) return 'Not here'; if(w.startsWith('Lent')) return 'Lent out';
+    if(MACHINES.includes(w)) return w; if(SIDE_MACHINES.some(x=>x.name===w)) return w;
+    if(w.startsWith('Set-up · ') || w.startsWith('Dismantle · ')) return w.split(' · ')[1];
+    if(!w || w==='__none') return OFFLINE_ROLES.includes(n) ? 'Lead / Yield (off line)' : 'Free / not placed';
+    if(w.startsWith('Clean-up · ') || w.startsWith('Closing · ') || w==='Garbage run') return 'Cleaning / Closing';
+    if(w==='Break · own') return 'On break';
+    return 'Other duties'; };
+  const keys = [...MACHINES, ...SIDE_MACHINES.map(x=>x.name), 'Cleaning / Closing', 'Other duties', 'On break', 'Lead / Yield (off line)', 'Free / not placed', 'Lent out', 'Not here'];
+  const by = {}; people.forEach(n=>{ const k = stOf(n); (by[k] = by[k] || []).push(n); });
+  const col = k=>MACHINES.includes(k) ? (lineNowInfo(k).running ? 'var(--run)' : 'var(--change)') : SIDE_MACHINES.some(x=>x.name===k) ? 'var(--amber)' : k==='Free / not placed' ? 'var(--wait)' : k==='Not here'||k==='Lent out' ? 'var(--muted)' : 'var(--brk)';
+  const js = n=>n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<div class="card">${keys.filter(k=>by[k]).map(k=>{ const li = MACHINES.includes(k) ? lineNowInfo(k) : null; const what = (w=>w && w!=='__none' && !MACHINES.includes(w) && !SIDE_MACHINES.some(x=>x.name===w) ? shortWhere(w) : '');
+    return `<div style="border-left:4px solid ${col(k)};padding:6px 10px;margin-bottom:8px;background:var(--panel2,rgba(255,255,255,.03));border-radius:6px;">
+      <div style="display:flex;justify-content:space-between;gap:8px;"><b style="color:${col(k)};">${escapeHtml(MACHINES.includes(k)?shortM(k):k)}${li?` <span class="cb-mut" style="font-weight:400;">· ${li.running?'running':(li.word||'stopped')}</span>`:''}</b><b class="mono">${by[k].length}</b></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">${by[k].map(n=>`<button type="button" class="cb-btn" style="flex:0 0 auto;text-transform:none;font-family:inherit;font-size:13px;padding:6px 10px;" onclick="${k==='Not here'||k==='Lent out'?'':`openLiveFree('${js(n)}')`}">${escapeHtml(n)}${what(whereOf(n))?` <span class="cb-mut" style="font-size:11px;">${escapeHtml(what(whereOf(n)))}</span>`:''}${helperDay(T,n)?' <span class="cb-mut" style="font-size:11px;">🤝</span>':''}</button>`).join('')}</div></div>`; }).join('')}
+    ${liveFree ? liveFreeHTML() : ''}</div>`;
+}
 function renderCrewTab(){
   const T = todayStr(), active = namesCrewActive(T) || todaysCrewActive();
+  const tog = `<div class="filterbar" style="margin-bottom:10px;">${[['list','☰ List'],['station','▦ By station']].map(([v,l])=>`<div class="mchip ${crewView===v?'sel':''}" style="flex:1;text-align:center;padding:9px;font-family:'Oswald',sans-serif;letter-spacing:.04em;text-transform:uppercase;font-size:13px;" onclick="crewView='${v}';render()">${l}</div>`).join('')}</div>`;
   return `${active ? `<div class="card cb" style="padding:10px 12px;">${crewHeaderHTML()}</div>` : ''}
-    ${renderCrewList()}
+    ${tog}${crewView==='station' ? crewByStationHTML() : renderCrewList()}
+    ${helpersCardHTML()}
     ${active ? `<div class="card cb"><div class="cb-lbl" style="margin-top:0;">PACKAGING LINES</div>${packagingLinesNowHTML()}<div class="cb-mut" style="font-size:11.5px;margin-top:8px;">${STAFF_RULES_NOTE}.</div></div>` : ''}`;
 }
 
@@ -3725,7 +3836,7 @@ function sideHoursOutputHTML(start, end){
     return `<div class="hist-item" style="cursor:pointer;" onclick="openAddPLHData('${r.id}')">
       <div class="hist-top"><span class="mach">${escapeHtml(r.machine)}${vac && r.product && r.product!==r.machine?` · ${escapeHtml(r.product)}`:''}</span><span class="pill ${has?'run':'wait'}">${has?'✓ output in':(vac?'QTY / LBS needed':'not linked yet')}</span></div>
       <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ran ${fmtDur(r.durationMin||0)}${z?` (paused ${fmtDur(z)})`:''}</div>
-      <div class="hist-mid" style="color:var(--text);">${has ? `QTY ${p.quantity||0} · ${lb(parseFloat(p.weightLbs)||0)} lbs${p.outputFrom?` · packed on ${escapeHtml(shortM(p.outputFrom))}`:''}` : (vac ? 'Tap to add QTY / LBS' : 'Tick it when you Finish the Variovac that packs it — or tap to add')}</div>
+      <div class="hist-mid" style="color:var(--text);">${has ? (p.codes && p.codes.length>1 ? p.codes.map(c=>`${escapeHtml(c.code)}: QTY ${c.qty||0} · ${lb(parseFloat(c.lbs)||0)} lbs`).join('<br>') : `QTY ${p.quantity||0} · ${lb(parseFloat(p.weightLbs)||0)} lbs${p.outputFrom?` · packed on ${escapeHtml(shortM(p.outputFrom))}`:''}`) : (vac ? 'Tap to add QTY / LBS' : 'Tick it when you Finish the Variovac that packs it — or tap to add')}</div>
     </div>`; }).join('');
   return `<div class="cb-mut" style="margin-bottom:10px;">Side machines track running hours and output. PLH is on the Variovac that packed the product (Lines only).</div>${sum}${rows}`;
 }
@@ -7053,6 +7164,8 @@ async function startApp(){
   await migrateReasonLabels();
   await migrateRibeyeEye();
   await mergeSideJobs();
+  try{ if(Store.settings && !Store.settings.helpersV202){ // v202: Krishan moves to the Burger Room helpers
+    Store.settings = {...Store.settings, crewRoster: baseRoster().filter(n=>n!=='Krishan'), helpers: Array.isArray(Store.settings.helpers) ? Store.settings.helpers : DEFAULT_HELPERS.slice(), helpersV202: true}; await Store.saveSettings(); } }catch(e){}
   await repairOvernightRecords();
   render();
   if(!safeLocalGet(TOUR_SEEN_KEY)) openTour(true);
