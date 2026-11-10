@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203.1 - 2026-11-09 (Crew Setup: ✕ on every crew row to remove a name — always visible, past hours stay in the reports)';
+const APP_VERSION = 'v203.2 - 2026-11-09 (Live: V1–Manual on top, then side machines, then MAREL; Start break and Someone going home moved to the Crew tab — Live shows a slim On break · End break line only while a break is on; 👷 working through the break is in Crew)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1595,8 +1595,8 @@ function renderCrewBoard(mode){
       <span style="display:flex;gap:4px;align-items:center;"><input type="time" value="${s.start}" onchange="editSideTime('${s.id}','start',this.value)" style="padding:6px;width:auto;font-size:12px;">–${s.end?`<input type="time" value="${s.end}" onchange="editSideTime('${s.id}','end',this.value)" style="padding:6px;width:auto;font-size:12px;">`:'<span class="cb-mut">running</span>'}<span class="cb-link" style="color:var(--wait);" onclick="deleteSide('${s.id}')">✕</span></span></div>`).join('') : ''}</div>` : '';
   if(mode==='machines') return `<div class="card cb" style="border-color:var(--amber);">
     ${openAfterShift().length?`<div style="font-size:12px;color:var(--wait);margin:0 0 8px;line-height:1.4;">⚠ Still on after 4:30 PM: ${openAfterShift().join(', ')}. Still counting as overtime — tap Off / End when the job is done, or fix the time in the log.</div>`:''}
-    <div class="cb-lbl" style="margin-top:0;">MAREL</div>${marelRow}
-    <div class="cb-lbl">SIDE MACHINES</div>${sideRows}${logHtml}${sideJobsNeedWeightHTML(todayStr())}
+    <div class="cb-lbl" style="margin-top:0;">SIDE MACHINES</div>${sideRows}${logHtml}${sideJobsNeedWeightHTML(todayStr())}
+    <div class="cb-lbl">MAREL</div>${marelRow}
   </div>`;
   if(namesCrewActive(todayStr()) || (typeof todaysCrewActive==='function' && todaysCrewActive())) return `<div class="card cb" style="border-color:var(--line);">
     ${crewHeaderHTML()}
@@ -3478,6 +3478,7 @@ function crewQuickActions(){
   const onBrk = !!breakNow();
   const qa = (ic, lab, c, on)=>`<button type="button" onclick="${on}" style="flex:1;min-width:0;padding:10px 2px;border-radius:12px;border:none;background:${c};color:#fff;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;"><span style="font-size:18px;line-height:1;">${ic}</span>${lab}</button>`;
   return `<div style="display:flex;gap:6px;margin-bottom:10px;">${qa('▶','Start line','#2f8a4a',"Router.go('live')")}${qa('⇄','Move crew','#c4782a',"crewSec='move';render()")}${qa('☕', onBrk?'End break':'Start break','#3a78c0', onBrk?'endBreakAll()':'startBreakAll()')}${qa('⌂','Going home','#6b4fb8',"crewHomeOpen=!crewHomeOpen;homeQuick=crewHomeOpen?{open:true,arm:null}:null;render()")}</div>
+    ${breakNow() ? `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);padding:10px 12px;margin-bottom:10px;"><div style="font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--brk);text-transform:uppercase;letter-spacing:.04em;">☕ On break since ${fmtTime12(breakNow().start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(breakNow().start)))}</div><div class="cb-mut" style="font-size:12px;">Everyone in today · side machines paused · End break puts everyone back</div>${workThroughHTML()}</div>` : ''}
     ${crewHomeOpen && homeQuick ? homeQuickHTML() : ''}`;
 }
 function crewRowsHTML(){
@@ -4417,6 +4418,11 @@ function workThroughHTML(){
     <div class="nm-grid">${breakPresentNames().map(n=>`<button type="button" class="nm-chip${wt.includes(n)?' on':''}" onclick="toggleWorkThrough('${n.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${wt.includes(n)?'👷 ':''}${escapeHtml(n)}<small>${escapeHtml(pausedSideOf(n) || placeLabel(whereOf(n)))}</small></button>`).join('')}</div>
     <button type="button" class="cb-btn" style="margin-top:6px;" onclick="brkWtOpen=false;render()">Done</button></div>`;
 }
+/* v203.2: Live keeps only a slim break line while a break is on — Start break, Going home and "working through" live in the Crew tab */
+function liveBreakSlimHTML(){ const b = breakNow(); if(!b) return '';
+  return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);display:flex;align-items:center;gap:10px;padding:10px 12px;">
+    <span style="flex:1;min-width:0;font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--brk);text-transform:uppercase;letter-spacing:.04em;">☕ On break since ${fmtTime12(b.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(b.start)))}</span>
+    <button type="button" class="cb-btn" style="flex:0 0 auto;padding:9px 14px;border-color:var(--run);color:var(--run);" onclick="endBreakAll()">▶ End break</button></div>`; }
 function renderBreakAllBar(){
   const b = openBreakAll(), cb = openCrewBreak();
   if(!b && cb) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
@@ -4579,14 +4585,13 @@ function renderLive(){
   <div class="card" style="margin-bottom:16px;">
     <div style="color:var(--muted);font-size:13px;">Tap a machine to start tracking a run live — set the product now or later. Finishing a product writes it straight into History, same as manual entries.</div>
   </div>
-  ${renderBreakAllBar()}
+  ${liveBreakSlimHTML()}
   ${renderScalesBar()}
   ${crewAlertStripHTML()}
-  ${homeQuickHTML()}
-  ${renderCrewBoard('machines')}
   ${renderAllLineBanners()}${plannedPeopleBannerHTML()}
-  ${allLineSetup ? (namesOn() ? renderTodaysCrewPanel(true) : '') + renderAllLineSetupCard() : `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--planned);color:var(--planned);" onclick="openAllLineSetup()">⏸ All-Line Planned Stop</button>`}
-  ${cards}`;
+  ${cards}
+  ${renderCrewBoard('machines')}
+  ${allLineSetup ? (namesOn() ? renderTodaysCrewPanel(true) : '') + renderAllLineSetupCard() : `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--planned);color:var(--planned);" onclick="openAllLineSetup()">⏸ All-Line Planned Stop</button>`}`;
 }
 /* ---- Searchable Product Picker (grows as you add products) ---- */
 let productPickerResultsCache = [];
