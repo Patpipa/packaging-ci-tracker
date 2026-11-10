@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.6 - 2026-11-10 (side machines light up the next step: Set up → Start → Dismantle; set up again asks why; dismantled machines lock Start until ↩ Reopen)';
+const APP_VERSION = 'v205.7 - 2026-11-10 (Cleaning list: Clean V1, V2, V3, Fajita only — Slicer, Cutlet, Vacuum Sealer removed)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1958,7 +1958,7 @@ const PLACES = [
   {w:'Closing · Restocking film / boxes', g:'Shutdown / Clean-up', s:'Restocking film / boxes', hide:true},
   {w:'Closing · Paperwork', g:'Shutdown / Clean-up', s:'Paperwork', hide:true},
   {w:'Garbage run', g:'Garbage run', s:'Garbage'}, // v165: end-of-day garbage, not tied to a running line
-  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: true /* v205.5: cleaning goes under Closing tasks (Fajita: Dismantle / Clean) */, g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
+  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: !['Variovac 1','Variovac 2','Variovac 3','Fajita'].includes(m) /* v205.7: keep Clean V1–V3 + Fajita; Slicer / Cutlet / Vacuum Sealer / Manual / Area removed */, g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
 ];
 const PLACE_GROUPS = [['🏃 Runner / Floater', p=>p.w==='Runner / Floater'], ['☕ Break', p=>p.w==='Break · own'], ['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
