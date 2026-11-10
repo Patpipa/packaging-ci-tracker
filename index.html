@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v204 - 2026-11-09 (Compact move picker everywhere — Runner / Closing / Garbage quick tiles, Lines and Side machines 4 across with live status, Clean / Lent / Other folded away; one tap moves them, no Send button — ↩ Undo for 2 min)';
+const APP_VERSION = 'v204.1 - 2026-11-09 (Crew tab: Other activities box removed — just Lead / Yield and the crew list)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3517,7 +3517,7 @@ function crewSupportCard(){
   const acts = [['Cleaning', w=>w.startsWith('Clean-up · ')], ['Closing tasks', w=>w.startsWith('Closing · ')], ['Garbage run', w=>w==='Garbage run'], ['Other duties', w=>w.startsWith('Other · ') || w.startsWith('Planned · ')], ['Own break', w=>w==='Break · own'], ['Runner / Floater', w=>w==='Runner / Floater'], ['Not placed', (w,n)=>crewStatusOf(n).unplaced]];
   const actRows = acts.map(([lab, f])=>{ const ns = roster.filter(n=>{ const w = String(whereOf(n)||''); return f(w, n) && !crewStatusOf(n).away; }); const open = crewActOpen===lab && ns.length;
     return `<div onclick="crewActOpen=crewActOpen==='${lab}'?'':'${lab}';render()" style="cursor:pointer;padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;"><span>${lab}</span><span style="margin-left:auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--panel2);color:${ns.length?(lab==='Not placed'?'var(--wait)':'var(--text)'):'var(--muted)'};">${ns.length} crew</span></div>${open?`<div class="cb-mut" style="font-size:12px;margin-top:4px;">${escapeHtml(ns.join(', '))}</div>`:''}</div>`; }).join('');
-  return `<div class="card" style="padding:10px 12px;margin-bottom:10px;"><div class="cb-lbl" style="margin:0;">LEAD / YIELD</div>${OFFLINE_ROLES.map(roleRow).join('')}<div class="cb-lbl" style="margin:8px 0 0;">OTHER ACTIVITIES</div>${actRows}</div>`;
+  return `<div class="card" style="padding:10px 12px;margin-bottom:10px;"><div class="cb-lbl" style="margin:0;">LEAD / YIELD</div>${OFFLINE_ROLES.map(roleRow).join('')}</div>`; // v204.1: Other activities removed — the crew list shows where everyone is
 }
 function crewDowntimeAlerts(){
   return MACHINES.map(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || l.status==='RUNNING') return ''; const o = (l.downtimeSegments||[]).slice(-1)[0]; if(!o || o.end || !['WAITING','NO_WORK'].includes(o.status)) return '';
