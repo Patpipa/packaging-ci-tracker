@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v202 - 2026-11-09 (Lead / Yield Off line clears you from every line, side machine and place; Garbage from the place list asks Packaging / Trimmer / Burger Room; Side machine buttons light up — Set up amber, Dismantle orange, Running green, Paused red, Break blue; ✕ remove a person on the Crew list; 🤝 Helpers from other depts — Lin, Fernando, Richard, Krishan (Burger Room) join at a time and count from then; Each finished machine keeps its own where-next card; Crew tab ▦ By station view; Vacuum Sealer: several codes, each with its own QTY / LBS, hours counted once)';
+const APP_VERSION = 'v203 - 2026-11-09 (Crew tab redesigned — Crew Command Center: summary (Total · Here · Away · Late · Unplaced), V1–Manual cards, side machine lights, Lead / Yield and other activities, downtime alert, quick actions, compact crew rows; tap a name for a bottom sheet with every move; sections Crew List · Move Crew · Crew History · Crew Setup; nothing else in the tracker changed)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3392,16 +3392,153 @@ function crewByStationHTML(){
   return `<div class="card">${keys.filter(k=>by[k]).map(k=>{ const li = MACHINES.includes(k) ? lineNowInfo(k) : null; const what = (w=>w && w!=='__none' && !MACHINES.includes(w) && !SIDE_MACHINES.some(x=>x.name===w) ? shortWhere(w) : '');
     return `<div style="border-left:4px solid ${col(k)};padding:6px 10px;margin-bottom:8px;background:var(--panel2,rgba(255,255,255,.03));border-radius:6px;">
       <div style="display:flex;justify-content:space-between;gap:8px;"><b style="color:${col(k)};">${escapeHtml(MACHINES.includes(k)?shortM(k):k)}${li?` <span class="cb-mut" style="font-weight:400;">· ${li.running?'running':(li.word||'stopped')}</span>`:''}</b><b class="mono">${by[k].length}</b></div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">${by[k].map(n=>`<button type="button" class="cb-btn" style="flex:0 0 auto;text-transform:none;font-family:inherit;font-size:13px;padding:6px 10px;" onclick="${k==='Not here'||k==='Lent out'?'':`openLiveFree('${js(n)}')`}">${escapeHtml(n)}${what(whereOf(n))?` <span class="cb-mut" style="font-size:11px;">${escapeHtml(what(whereOf(n)))}</span>`:''}${helperDay(T,n)?' <span class="cb-mut" style="font-size:11px;">🤝</span>':''}</button>`).join('')}</div></div>`; }).join('')}
-    ${liveFree ? liveFreeHTML() : ''}</div>`;
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">${by[k].map(n=>`<button type="button" class="cb-btn" style="flex:0 0 auto;text-transform:none;font-family:inherit;font-size:13px;padding:6px 10px;" onclick="${k==='Not here'||k==='Lent out'?'':`crewSheet={n:'${js(n)}'};render()`}">${escapeHtml(n)}${what(whereOf(n))?` <span class="cb-mut" style="font-size:11px;">${escapeHtml(what(whereOf(n)))}</span>`:''}${helperDay(T,n)?' <span class="cb-mut" style="font-size:11px;">🤝</span>':''}</button>`).join('')}</div></div>`; }).join('')}
+    </div>`;
+}
+/* ============ v203: CREW COMMAND CENTER — Crew tab only (layout + buttons; every action uses the existing moves) ============ */
+let crewSec = 'list', crewSheet = null, crewActOpen = '', crewHomeOpen = false;
+const cjs = n=>String(n).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+function crewSinceMin(n){ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]), now = toMin(nowHHMM()); const e = lg[lg.length-1]; const st = e ? toMin(e.at) : toMin(crewRowOf(todayStr(), n).start||'08:00'); return Math.max(0, now - st); }
+function crewStatusOf(n){
+  const T = todayStr(), r = crewRowOf(T, n), w = String(whereOf(n)||''), role = OFFLINE_ROLES.includes(n);
+  if(r.st!=='here') return r.st==='lent' ? {t:'Lent', c:'var(--muted)', where: r.dept||'other dept', away:true} : {t:({sick:'Sick',absent:'Absent',vacation:'Vacation'}[r.st]||'Away'), c:'var(--muted)', where:'', away:true};
+  if(w==='Not here · Late') return {t:'Late', c:'var(--change)', where:'not in yet', late:true};
+  if(w.startsWith('Not here')) return {t:'Home', c:'var(--muted)', where:'went home', away:true};
+  if(w.startsWith('Lent')) return {t:'Lent', c:'var(--muted)', where: w.replace('Lent · ',''), away:true};
+  const bn = breakNow(), wt = bn && workingThrough().some(x=>x.name===n && x.brk===bn.id && !x.end);
+  if(bn && !wt && (w || pausedSideOf(n))) return {t:'Break', c:'var(--brk)', where: pausedSideOf(n) || placeLabel(w)};
+  if(MACHINES.includes(w)){ const li = lineNowInfo(w); return li.running ? {t:'On line', c:'var(--run)', where: shortM(w)} : {t: (li.word||'Stopped'), c: li.color||'var(--change)', where: shortM(w)}; }
+  if(SIDE_MACHINES.some(x=>x.name===w)){ const run = openSideRuns(T).find(x=>x.machine===w); const pz = run && sideOpenWait(run); return pz ? {t:'Paused', c:'var(--wait)', where:w} : {t:'Side', c:'var(--amber)', where:w}; }
+  if(w.startsWith('Set-up · ')) return {t:'Set-up', c:'var(--amber)', where: w.slice(9)};
+  if(w.startsWith('Dismantle · ')) return {t: disLabel(w.slice(12)).split(' ')[0], c:'#e8742a', where: w.slice(12)};
+  if(w==='Break · own') return {t:'Own break', c:'var(--brk)', where:'break'};
+  if(w.startsWith('Clean-up · ')) return {t:'Cleaning', c:'var(--brk)', where: placeLabel(w)};
+  if(w.startsWith('Closing · ') || w==='Garbage run') return {t:'Closing', c:'var(--brk)', where: placeLabel(w)};
+  if(w && w!=='__none') return {t:'Other', c:'var(--brk)', where: placeLabel(w)};
+  if(role) return {t:'Off line', c:'var(--muted)', where: n+' duties'};
+  const lg = ((((dayLogFor(T)||{}).where)||{})[n]||[]);
+  return lg.length ? {t:'Free', c:'var(--wait)', where:'not on anything', unplaced:true} : {t:'Not placed', c:'var(--wait)', where:'not placed yet', unplaced:true};
+}
+function crewSummaryBar(){
+  const T = todayStr(), ppl = crewRoster(); let here = 0, away = 0, late = 0, unp = 0;
+  ppl.forEach(n=>{ const st = crewStatusOf(n); if(st.away) away++; else if(st.late) late++; else { here++; if(st.unplaced) unp++; } });
+  const chip = (lab, v, c)=>`<div style="flex:1;min-width:0;text-align:center;padding:4px 1px;border-radius:9px;background:var(--panel2);"><div class="mono" style="font-size:16px;font-weight:800;color:${c||'var(--text)'};line-height:1.15;">${v}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">${lab}</div></div>`;
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 6px;"><div style="font-family:'Oswald',sans-serif;font-size:17px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;">Crew Command Center</div><div class="cb-mut" style="font-size:11px;white-space:nowrap;">${fmtTime12(m2hh(REG_A)).replace(':00','')} – ${fmtTime12(m2hh(REG_B))}</div></div>
+    <div style="position:sticky;top:64px;z-index:15;background:var(--bg);padding:4px 0 8px;margin:0 -2px;">
+    <div style="display:flex;gap:5px;">${chip('Total', ppl.length)}${chip('Here', here, 'var(--run)')}${chip('Away', away, 'var(--muted)')}${chip('Late', late, late?'var(--change)':'var(--muted)')}${chip('Unplaced', unp, unp?'var(--wait)':'var(--muted)')}</div>
+    <div style="display:flex;gap:4px;margin-top:8px;">${[['list','List'],['move','Move'],['history','History'],['setup','Setup']].map(([v,l])=>`<button type="button" onclick="crewSec='${v}';crewSheet=null;render()" style="flex:1;padding:8px 2px;border-radius:9px;white-space:nowrap;border:1.5px solid ${crewSec===v?'var(--amber)':'var(--line)'};background:${crewSec===v?'var(--amber-dim)':'var(--panel)'};color:${crewSec===v?'var(--amber)':'var(--muted)'};font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:.03em;text-transform:uppercase;">${l}</button>`).join('')}</div></div>`;
+}
+function m2hh(x){ return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'); }
+function lineSinceMin(m){ const l = Store.liveRuns[m]; if(!l) return 0; const now = toMin(nowHHMM());
+  if(l.status==='RUNNING'){ const ends = (l.downtimeSegments||[]).filter(d=>d.end).map(d=>toMin(d.end)); const st = ends.length ? Math.max(...ends) : toMin(((l.segments||[])[0]||{}).start||nowHHMM()); return Math.max(0, now-st); }
+  const o = (l.downtimeSegments||[]).slice(-1)[0]; return o ? Math.max(0, now - toMin(o.start)) : 0; }
+function crewLineCards(){
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">${MACHINES.map(m=>{ const li = lineNowInfo(m), c = li.active ? (li.running ? 'var(--run)' : (li.color||'var(--change)')) : 'var(--line)';
+    const st = !li.active ? 'Not started' : li.running ? 'Running' : (li.word || 'Stopped'), warn = li.active && !li.running && /wait|no work/i.test(st);
+    return `<div onclick="goToLiveMachine('${m}')" style="cursor:pointer;border:1.5px solid ${c};border-radius:12px;padding:10px;background:${li.active?'var(--panel)':'var(--panel)'};${warn?`box-shadow:0 0 12px ${c};`:''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:.04em;text-transform:uppercase;">${escapeHtml(shortM(m)==='Manual'?'Manual Pack':m)}</span>${warn?'<span style="color:var(--wait);">⚠</span>':''}</div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-top:4px;"><b class="mono" style="font-size:24px;">${li.names.length}</b><span class="cb-mut">crew</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:2px;"><span style="width:9px;height:9px;border-radius:50%;background:${c};display:inline-block;"></span><span style="font-size:13px;font-weight:700;color:${li.active?c:'var(--muted)'};">${escapeHtml(st)}</span>${li.active?`<span class="cb-mut" style="margin-left:auto;font-size:12px;">⏱ ${fmtShort(lineSinceMin(m))}</span>`:''}</div>
+      ${li.names.length?`<div class="cb-mut" style="font-size:11.5px;margin-top:4px;line-height:1.3;">${escapeHtml(li.names.join(', '))}</div>`:''}</div>`; }).join('')}</div>`;
+}
+function crewSideCard(){
+  const T = todayStr();
+  const rows = SIDE_MACHINES.map(sm=>{ const m = sm.name, run = openSideRuns(T).find(x=>x.machine===m), bp = !run && breakPausedRun(T, m), pr = peopleAtPlace('Set-up · '+m), di = peopleAtPlace('Dismantle · '+m);
+    let t = 'Idle', c = 'var(--muted2)', names = [], since = 0;
+    if(run){ const pz = sideOpenWait(run); t = pz ? 'Paused' : 'Running'; c = pz ? 'var(--wait)' : 'var(--run)'; names = run.names||[]; since = Math.max(0, toMin(nowHHMM()) - toMin(pz ? pz.start : run.start)); }
+    else if(bp){ t = 'Break'; c = 'var(--brk)'; names = bp.names||[]; }
+    else if(pr.length){ t = 'Set-up'; c = 'var(--amber)'; names = pr; }
+    else if(di.length){ t = disLabel(m); c = '#e8742a'; names = di; }
+    return `<div onclick="Router.go('live')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);">
+      <span style="width:10px;height:10px;border-radius:50%;background:${c};${t!=='Idle'?`box-shadow:0 0 8px ${c};`:''}flex:0 0 auto;"></span>
+      <span style="font-weight:700;min-width:96px;">${escapeHtml(m)}</span><span style="font-size:12.5px;font-weight:700;color:${c};">${escapeHtml(t)}</span>
+      <span class="cb-mut" style="margin-left:auto;font-size:12px;text-align:right;">${names.length?escapeHtml(names.join(', ')):''}${since?` · ${fmtShort(since)}`:''}</span></div>`; }).join('');
+  return `<div class="card" style="padding:10px 12px;margin-bottom:10px;"><div class="cb-lbl" style="margin:0 0 2px;">SIDE MACHINES</div>${rows}</div>`;
+}
+function crewSupportCard(){
+  const T = todayStr(), roster = crewRoster();
+  const roleRow = r=>{ const on = openOffline(T).find(o=>o.role===r), w = whereOf(r), inn = crewRowOf(T, r).st==='here';
+    const t = !inn ? 'Off today' : on || MACHINES.includes(w) ? `On line${MACHINES.includes(w)?' · '+shortM(w):''}` : (w && w!=='__none' && !String(w).startsWith('Not here')) ? placeLabel(w) : 'Off line · on duty', c = !inn ? 'var(--muted)' : (on || MACHINES.includes(w)) ? 'var(--run)' : 'var(--brk)';
+    return `<div onclick="crewSheet={n:'${cjs(r)}'};render()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 0;"><span style="font-weight:700;">${r}</span><span style="margin-left:auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${c};color:${c};">${escapeHtml(t)}</span></div>`; };
+  const acts = [['Cleaning', w=>w.startsWith('Clean-up · ')], ['Closing tasks', w=>w.startsWith('Closing · ')], ['Garbage run', w=>w==='Garbage run'], ['Other duties', w=>w.startsWith('Other · ') || w.startsWith('Planned · ')], ['Own break', w=>w==='Break · own'], ['Free / available', (w,n)=>crewStatusOf(n).unplaced]];
+  const actRows = acts.map(([lab, f])=>{ const ns = roster.filter(n=>{ const w = String(whereOf(n)||''); return f(w, n) && !crewStatusOf(n).away; }); const open = crewActOpen===lab && ns.length;
+    return `<div onclick="crewActOpen=crewActOpen==='${lab}'?'':'${lab}';render()" style="cursor:pointer;padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;"><span>${lab}</span><span style="margin-left:auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--panel2);color:${ns.length?(lab==='Free / available'?'var(--wait)':'var(--text)'):'var(--muted)'};">${ns.length} crew</span></div>${open?`<div class="cb-mut" style="font-size:12px;margin-top:4px;">${escapeHtml(ns.join(', '))}</div>`:''}</div>`; }).join('');
+  return `<div class="card" style="padding:10px 12px;margin-bottom:10px;"><div class="cb-lbl" style="margin:0;">LEAD / YIELD</div>${OFFLINE_ROLES.map(roleRow).join('')}<div class="cb-lbl" style="margin:8px 0 0;">OTHER ACTIVITIES</div>${actRows}</div>`;
+}
+function crewDowntimeAlerts(){
+  return MACHINES.map(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || l.status==='RUNNING') return ''; const o = (l.downtimeSegments||[]).slice(-1)[0]; if(!o || o.end || !['WAITING','NO_WORK'].includes(o.status)) return '';
+    const mins = Math.max(0, toMin(nowHHMM()) - toMin(o.start)), n = liveNames(l).length;
+    return `<div class="card" style="border-color:var(--wait);background:var(--wait-dim);padding:10px 12px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--wait);">⚠ DOWNTIME ALERT</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:4px;"><div style="flex:1;min-width:0;"><div style="font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;">${escapeHtml(m)}</div><div style="font-size:13px;">${escapeHtml(o.reason||'Waiting')}</div><div class="cb-mut" style="font-size:11.5px;">since ${fmtTime12(o.start)} · ${n} crew on it</div></div><b class="mono" style="font-size:22px;color:var(--wait);white-space:nowrap;">${fmtShort(mins)}</b></div>
+      <div style="display:flex;gap:6px;margin-top:8px;">${n?`<button class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="goToLiveMachine('${m}');openMoveCrew('${m}')">Move crew</button>`:''}<button class="cb-btn" onclick="goToLiveMachine('${m}')">Go to ${escapeHtml(shortM(m))} ›</button></div></div>`; }).join('');
+}
+function crewQuickActions(){
+  const onBrk = !!breakNow();
+  const qa = (ic, lab, c, on)=>`<button type="button" onclick="${on}" style="flex:1;min-width:0;padding:10px 2px;border-radius:12px;border:none;background:${c};color:#fff;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;"><span style="font-size:18px;line-height:1;">${ic}</span>${lab}</button>`;
+  return `<div style="display:flex;gap:6px;margin-bottom:10px;">${qa('▶','Start line','#2f8a4a',"Router.go('live')")}${qa('⇄','Move crew','#c4782a',"crewSec='move';render()")}${qa('☕', onBrk?'End break':'Start break','#3a78c0', onBrk?'endBreakAll()':'startBreakAll()')}${qa('⌂','Going home','#6b4fb8',"crewHomeOpen=!crewHomeOpen;homeQuick=crewHomeOpen?{open:true,arm:null}:null;render()")}</div>
+    ${crewHomeOpen && homeQuick ? homeQuickHTML() : ''}`;
+}
+function crewRowsHTML(){
+  const ppl = [...crewRoster(), ...OFFLINE_ROLES], T = todayStr();
+  const ord = n=>{ const st = crewStatusOf(n); return st.unplaced ? 0 : st.away ? 3 : st.late ? 2 : 1; };
+  const sorted = ppl.slice().sort((a,b)=>ord(a)-ord(b));
+  return `<div class="card" style="padding:4px 12px;">${sorted.map(n=>{ const st = crewStatusOf(n), since = st.away ? '' : fmtShort(crewSinceMin(n));
+    return `<div onclick="crewSheet={n:'${cjs(n)}'};render()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--line);${st.away?'opacity:.55;':''}">
+      <span style="width:10px;height:10px;border-radius:50%;background:${st.c};flex:0 0 auto;"></span>
+      <span style="font-weight:700;flex:0 0 auto;min-width:84px;">${escapeHtml(n)}${helperDay(T,n)?' <span style="font-size:11px;">🤝</span>':''}</span>
+      <span style="font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid ${st.c};color:${st.c};white-space:nowrap;">${escapeHtml(st.t)}</span>
+      <span class="cb-mut" style="flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(st.where||'')}</span>
+      <span class="mono cb-mut" style="font-size:12px;white-space:nowrap;">${since}</span><span style="color:var(--muted);font-size:16px;">›</span></div>`; }).join('')}</div>`;
+}
+/* bottom sheet: everything you can do with one person — each button uses the same move as Live */
+async function crewSheetGo(dest){ const sh = crewSheet; if(!sh) return; const n = sh.n;
+  if(dest==='__other' && !(sh.text||'').trim()){ toast('Type what they are doing'); return; }
+  const ok = await sendNamesTo([n], dest, {otherText: sh.text||''}); if(ok){ crewSheet = null; render(); } }
+async function crewSheetOff(){ const n = crewSheet && crewSheet.n; if(!n) return; await roleOffAll(n); crewSheet = null; render(); }
+function personMovesToday(n){ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); return lg.map(e=>({at:e.at, to: e.w==='Garbage run' && e.gk ? `Garbage run (${e.gk})` : (String(e.w).startsWith('Not here') ? e.w.replace('Not here · ','') : placeLabel(e.w))})); }
+function crewSheetHTML(){
+  const sh = crewSheet; if(!sh) return ''; const n = sh.n, T = todayStr(), st = crewStatusOf(n), cur = whereOf(n), role = OFFLINE_ROLES.includes(n);
+  const tile = (lab, sub, dest, c, dis)=>`<button type="button" ${dis?'disabled':''} onclick="crewSheetGo('${cjs(dest)}')" style="padding:10px 6px;border-radius:10px;border:1.5px solid ${dis?'var(--amber)':'var(--line)'};background:${dis?'var(--amber-dim)':'var(--panel2)'};color:var(--text);text-align:left;min-height:52px;${dis?'opacity:.8;':''}"><div style="font-weight:700;font-size:13.5px;">${escapeHtml(lab)}</div>${sub?`<div style="font-size:11px;color:${c||'var(--muted)'};margin-top:2px;">${escapeHtml(sub)}</div>`:''}</button>`;
+  const grid = (title, items)=>items.length ? `<div class="cb-lbl" style="margin:12px 0 6px;">${title}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${items.join('')}</div>` : '';
+  const lines = MACHINES.map(m=>{ const li = lineNowInfo(m); return tile(m==='Manual Pack'?'Manual Pack':m, !li.active ? 'not started' : `${li.running?'running':(li.word||'stopped')} · ${li.names.length} crew`, m, li.active?(li.running?'var(--run)':(li.color||'var(--change)')):'', cur===m); });
+  const sides = SIDE_MACHINES.map(x=>{ const run = openSideRuns(T).find(r=>r.machine===x.name); return tile(x.name, run ? `${sideOpenWait(run)?'paused':'running'} · ${(run.names||[]).length} crew` : 'idle — asks what for', x.name, run?'var(--run)':'', cur===x.name); });
+  const cleans = PLACES.filter(p=>!p.hide && p.w.startsWith('Clean-up · ')).map(p=>tile(p.s.replace('Clean-up ','Clean '), '', p.w, '', cur===p.w));
+  const support = [tile('Closing tasks','', 'Closing · Closing tasks','',cur==='Closing · Closing tasks'), tile('Garbage run','asks whose','Garbage run','',cur==='Garbage run'), tile('Free / available','not on anything','__none','',!cur||cur==='__none'), tile('Own break','↩ Back on Live','Break · own','',cur==='Break · own')];
+  const lent = LENT_DEPTS.map(dp=>{ const w = 'Lent · '+(dp==='Other dept'?'Other dept':dp); return tile('Lent · '+dp, 'part of the day', w, '', cur===w); });
+  const moves = personMovesToday(n);
+  return `<div onclick="if(event.target===this){crewSheet=null;render()}" style="position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;">
+    <div style="width:100%;max-width:560px;max-height:82vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--panel);border-radius:18px 18px 0 0;border-top:2px solid var(--amber);padding:14px 14px calc(18px + env(safe-area-inset-bottom));">
+      <div style="width:40px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 10px;"></div>
+      <div style="display:flex;align-items:center;gap:10px;"><span style="width:12px;height:12px;border-radius:50%;background:${st.c};"></span><div style="flex:1;min-width:0;"><div style="font-size:19px;font-weight:800;">${escapeHtml(n)}</div><div class="cb-mut" style="font-size:12.5px;">${escapeHtml(st.t)}${st.where?' · '+escapeHtml(st.where):''}${st.away?'':' · '+fmtShort(crewSinceMin(n))}</div></div><button type="button" class="cb-btn" style="flex:0 0 auto;padding:8px 12px;" onclick="crewSheet=null;render()">✕</button></div>
+      ${role ? `<button type="button" class="cb-btn" style="width:100%;margin-top:12px;padding:12px;border-color:var(--brk);color:var(--brk);" onclick="crewSheetOff()">Off line — back to ${escapeHtml(n)} duties</button>` : ''}
+      ${st.away && !role ? `<div class="cb-mut" style="margin-top:12px;">${escapeHtml(n)} is ${escapeHtml(st.t.toLowerCase())} today — change that in Crew Setup.</div>` : `
+      ${grid('Move to a line', lines)}${grid('Move to a side machine', sides)}${grid('Cleaning', cleans)}${grid('Closing &amp; support', support)}
+      <div class="cb-lbl" style="margin:12px 0 6px;">Other</div><div style="display:flex;gap:6px;"><input type="text" maxlength="40" placeholder="What are they doing?" value="${escapeHtml(sh.text||'')}" oninput="crewSheet.text=this.value" style="padding:10px;flex:1;min-width:0;"><button type="button" class="cb-btn" style="flex:0 0 auto;padding:10px 14px;" onclick="crewSheetGo('__other')">Assign</button></div>
+      ${recentOther().length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">${recentOther().map(t=>`<button type="button" class="cb-btn" style="flex:0 0 auto;font-size:12px;text-transform:none;font-family:inherit;" onclick="crewSheet.text='${cjs(t)}';crewSheetGo('__other')">${escapeHtml(t)}</button>`).join('')}</div>`:''}
+      ${grid('Lent to another department', lent)}
+      ${role ? '' : `<button type="button" class="cb-btn" style="width:100%;margin-top:12px;padding:12px;border-color:#6b4fb8;color:#b9a6f0;" onclick="crewSheetGo('Not here · Went home')">⌂ Going home now</button>`}`}
+      <div class="cb-lbl" style="margin:14px 0 6px;">Today's moves</div>
+      ${moves.length ? moves.map(e=>`<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;"><span class="mono cb-mut" style="min-width:64px;">${fmtTime12(e.at)}</span><span>→ ${escapeHtml(e.to)}</span></div>`).join('') : '<div class="cb-mut" style="font-size:12.5px;">No moves yet today.</div>'}
+    </div></div>`;
+}
+function crewHistoryHTML(){
+  const T = todayStr(), d = dayLogFor(T) || {}, W = d.where || {};
+  const ppl = [...crewRoster(), ...OFFLINE_ROLES].filter(n=>(W[n]||[]).length);
+  const und = d.undoLog || [];
+  return `${ppl.length ? ppl.map(n=>`<div class="card" style="padding:10px 12px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><b>${escapeHtml(n)}</b><span class="cb-mut" style="font-size:12px;">${(W[n]||[]).length} move${(W[n]||[]).length===1?'':'s'}</span></div>
+      ${personMovesToday(n).map(e=>`<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;"><span class="mono cb-mut" style="min-width:64px;">${fmtTime12(e.at)}</span><span>→ ${escapeHtml(e.to)}</span></div>`).join('')}</div>`).join('') : '<div class="card"><div class="cb-mut">No crew moves recorded yet today.</div></div>'}
+    ${und.length ? `<div class="card" style="padding:10px 12px;"><div class="cb-lbl" style="margin:0 0 6px;">UNDONE TODAY</div>${und.map(u=>`<div style="font-size:13px;padding:3px 0;"><span class="mono cb-mut">${fmtTime12(u.at)}</span> ↩ ${escapeHtml(u.what)}</div>`).join('')}</div>` : ''}
+    <div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Full hours by person: Reports → 👥 Crew Hours &amp; Positions.</div>`;
 }
 function renderCrewTab(){
   const T = todayStr(), active = namesCrewActive(T) || todaysCrewActive();
-  const tog = `<div class="filterbar" style="margin-bottom:10px;">${[['list','☰ List'],['station','▦ By station']].map(([v,l])=>`<div class="mchip ${crewView===v?'sel':''}" style="flex:1;text-align:center;padding:9px;font-family:'Oswald',sans-serif;letter-spacing:.04em;text-transform:uppercase;font-size:13px;" onclick="crewView='${v}';render()">${l}</div>`).join('')}</div>`;
-  return `${active ? `<div class="card cb" style="padding:10px 12px;">${crewHeaderHTML()}</div>` : ''}
-    ${tog}${crewView==='station' ? crewByStationHTML() : renderCrewList()}
-    ${helpersCardHTML()}
-    ${active ? `<div class="card cb"><div class="cb-lbl" style="margin-top:0;">PACKAGING LINES</div>${packagingLinesNowHTML()}<div class="cb-mut" style="font-size:11.5px;margin-top:8px;">${STAFF_RULES_NOTE}.</div></div>` : ''}`;
+  let body = '';
+  if(crewSec==='list') body = `${active ? `${crewLineCards()}${crewSideCard()}${crewDowntimeAlerts()}${crewQuickActions()}${crewSupportCard()}` : `<div class="card"><div class="cb-mut">Today's crew isn't confirmed yet — open <b>Crew Setup</b> and tap ✓ Confirm today's crew.</div></div>`}<div class="cb-lbl" style="margin:4px 0 6px;">CREW LIST · tap a name to move them</div>${crewRowsHTML()}`;
+  else if(crewSec==='move') body = `<div class="cb-mut" style="margin-bottom:8px;">Tap a name to move them — the full move screen (pick several, then where) comes next.</div>${crewByStationHTML()}`;
+  else if(crewSec==='history') body = crewHistoryHTML();
+  else body = `${renderCrewList()}${helpersCardHTML()}${active ? `<div class="card cb"><div class="cb-lbl" style="margin-top:0;">PACKAGING LINES</div>${packagingLinesNowHTML()}<div class="cb-mut" style="font-size:11.5px;margin-top:8px;">${STAFF_RULES_NOTE}.</div></div>` : ''}`;
+  return `${crewSummaryBar()}${body}${crewSheetHTML()}`;
 }
 
 /* v183: the Dashboard no longer shows the floor photo / embedded 3D — one button opens the 3D floor full screen (nothing 3D loads until tapped) */
@@ -6755,7 +6892,7 @@ function undoWrap(name){
     }catch(e){}
     return res; };
 }
-['sendNamesTo','doMoveCrew','savePlace','doBringBack','confirmSide','confirmSidePrep','prepDone','confirmGoHome','tapHomeQuick','confirmStaffChange','confirmStartRun','afterFinishGo','backFromBreak'].forEach(undoWrap);
+['roleOffAll','sendNamesTo','doMoveCrew','savePlace','doBringBack','confirmSide','confirmSidePrep','prepDone','confirmGoHome','tapHomeQuick','confirmStaffChange','confirmStartRun','afterFinishGo','backFromBreak'].forEach(undoWrap);
 /* anything else saved after the move (a stop, a finish …) closes the undo window, so Undo never rolls back other work */
 ['saveLiveRuns','saveDayLog','saveRecords'].forEach(k=>{ const f = Store[k].bind(Store); Store[k] = async function(...a){ if(undoDepth===0 && !undoRestoring && undoSnap && Date.now()-undoSnap.at > 1500) undoSnap = null; return f(...a); }; });
 async function undoLast(){
