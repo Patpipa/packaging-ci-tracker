@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203.5 - 2026-11-09 (Planned stop card always lists all four lines — lines that are on are ticked to stop (tap to keep running), lines not started are shown greyed)';
+const APP_VERSION = 'v203.6 - 2026-11-09 (Free / not on anything is now 🏃 Runner / Floater — a real job (support hours), so runners are not flagged as unplaced)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1558,7 +1558,7 @@ function renderCrewBoard(mode){
     const lit = c=>`border-color:${c};color:${c};box-shadow:0 0 0 1px ${c}, 0 0 12px ${c};`; // v202: the button lights up while it's happening
     return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${prepNow.length?lit('var(--amber)'):''}" onclick="openSidePrep('${sm.name}')">${prepNow.length?'● ':''}🔧 Set up</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${disNow.length?lit('#e8742a'):''}" onclick="openSidePrep('${sm.name}','Dismantle')">${disNow.length?'● ':''}🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
       ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div><div style="display:flex;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Set-up',true)">＋ Add person</button></div>`:''}
-      ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Dismantle',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','__none')">✓ Done (free)</button></div>`:''}</div>`;
+      ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Dismantle',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','Runner / Floater')">✓ Done → 🏃 Runner</button></div>`:''}</div>`;
   }).join('');
   const ctl = crewTimeline(todayStr());
   let crewRow;
@@ -1937,6 +1937,7 @@ const DEFAULT_ROSTER = ['Mandy','Harpreet','Stanley','Winston','Sandeep','Krisha
 const PLACES = [
   {w:'Setup / Opening', g:'Setup / Opening', s:'Setup'},
   {w:'Cleaning / Sanitation', g:'Cleaning / Sanitation', s:'Cleaning'},
+  {w:'Runner / Floater', g:'Other duties', s:'🏃 Runner / Floater'}, // v203.6: whoever is available — runs, helps, fills in (support, not 'free')
   {w:'Break · own', g:'Break', s:'☕ Break (own time)'}, // v201: one person's own break — ↩ Back on Live returns them
   {w:'Lent · Warehouse', g:'Lent to other dept', s:'Warehouse'}, {w:'Lent · Burger Room', g:'Lent to other dept', s:'Burger Rm'},
   {w:'Lent · Dicer / Grinding', g:'Lent to other dept', s:'Dicer'}, {w:'Lent · Other dept', g:'Lent to other dept', s:'Lent out'},
@@ -1951,7 +1952,7 @@ const PLACES = [
   {w:'Garbage run', g:'Garbage run', s:'Garbage'}, // v165: end-of-day garbage, not tied to a running line
   ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: m==='Manual Pack' || m==='Area / floor', g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
 ];
-const PLACE_GROUPS = [['☕ Break', p=>p.w==='Break · own'], ['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
+const PLACE_GROUPS = [['🏃 Runner / Floater', p=>p.w==='Runner / Floater'], ['☕ Break', p=>p.w==='Break · own'], ['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
 function baseRoster(){ const r = Store.settings && Store.settings.crewRoster; return Array.isArray(r) ? r : DEFAULT_ROSTER.filter(n=>n!=='Krishan'); }
 /* v202: helpers from other departments — only part of today's crew after "Joined at …" */
@@ -2153,7 +2154,7 @@ function renderPeopleRows(){
         ${PLACE_GROUPS.map(([gt,f])=>`<span class="cb-mut" style="width:100%;margin-top:2px;">${gt}</span><div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">${PLACES.map((x,j)=>!f(x)?'':`<button type="button" class="cb-btn" style="flex:1 1 30%;font-size:11.5px;${p.w===x.w?sel:''}" onclick="placeSetup.w=PLACES[${j}].w;render()">${escapeHtml(x.w.startsWith('Clean-up · ') ? '🧽 Clean '+shortM(x.w.replace('Clean-up · ','')) : x.w.replace('Closing · ','').replace('Lent · ','').replace('Not here · ',''))}</button>`).join('')}</div>`).join('')}
         <div style="display:flex;gap:5px;flex-wrap:wrap;width:100%;">
         <button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;${p.w==='__other'?sel:''}" onclick="placeSetup.w='__other';render()">✏️ Other…</button>
-        <button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;${p.w==='__none'?sel:''}" onclick="placeSetup.w='__none';render()">Free / not on anything</button></div>
+        <button type="button" class="cb-btn" style="flex:1 1 45%;font-size:12px;${p.w==='__none'?sel:''}" onclick="placeSetup.w='Runner / Floater';render()">🏃 Runner / Floater</button></div>
         ${p.w==='__other' ? otherInputHTML('placeSetup', p.otherText) : ''}
         <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">From</span><input type="time" id="placeAt" value="${p.at}" style="padding:8px;flex:1;min-width:0;"></span>
         <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="placeSetup=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--amber);color:var(--amber);" onclick="savePlace()">Save</button></div>
@@ -2234,6 +2235,7 @@ function personDay(date){
         if(onBrk && (!iv || wt)){ k='Break'; g='Break'; } else if(wt){ k=`${w} — ${(wo && wo.reason) || 'Waiting for trimmers'}`; g='Side machines'; } else { k = w; g='Side machines'; } }
       else if(onBrk && (w || cbk[i])){ k='Break'; g='Break'; } // v200: crew break counts everyone here, placed or not
       else if(w==='Garbage run'){ k = gk0 ? `Garbage run (${gk0})` : 'Garbage run'; g = 'Garbage run'; }
+      else if(w==='Runner / Floater'){ k = 'Runner / Floater'; g = 'Other duties'; }
       else if(w.startsWith('Other · ')){ k = w.slice(8); g = 'Other duties'; }
       else if(w.startsWith('Planned · ')){ k = w.slice(10); g = 'Meetings & stretching'; }
       else if(w.startsWith('Set-up · ')){ k = `${w.slice(9)} set-up`; g = 'Side machines'; }
@@ -2315,9 +2317,9 @@ function moveDests(m){
   SIDE_MACHINES.forEach(sm=>{ const on = openSideRuns(T).some(s=>s.machine===sm.name); out.push({key:sm.name, grp:'Side machines', label: sm.name, sub: on ? 'on' : 'off'}); });
   PLACES.filter(p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')).forEach(p=>out.push({key:p.w, grp:'🌙 Closing', label:p.w.replace('Closing · ',''), sub:''}));
   PLACES.filter(p=>!p.hide && p.w.startsWith('Clean-up · ')).forEach(p=>out.push({key:p.w, grp:'🧽 Clean a machine', label:'🧽 Clean '+shortM(p.w.replace('Clean-up · ','')).replace('Area / floor','area / floor'), sub:''})); // v172: says "Clean V1", not just "Variovac 1"
-  PLACES.filter(p=>!p.w.startsWith('Not here') && p.w!=='Setup / Opening' && p.g!=='Shutdown / Clean-up' && p.w!=='Garbage run').forEach(p=>out.push({key:p.w, grp:'Other', label:p.w.replace('Lent · ','Lent: '), sub:''}));
+  PLACES.filter(p=>!p.w.startsWith('Not here') && p.w!=='Setup / Opening' && p.g!=='Shutdown / Clean-up' && p.w!=='Garbage run' && p.w!=='Runner / Floater').forEach(p=>out.push({key:p.w, grp:'Other', label:p.w.replace('Lent · ','Lent: '), sub:''}));
   out.push({key:'__other', grp:'Other', label:'✏️ Other…', sub:''});
-  out.push({key:'__none', grp:'Other', label:'Free / not on anything', sub:''});
+  out.push({key:'Runner / Floater', grp:'Other', label:'🏃 Runner / Floater', sub:''});
   return out;
 }
 function openMoveCrew(m){ moveCrew = {m, sel: [], dest: ''}; liveBringBack = null; render(); }
@@ -2668,7 +2670,7 @@ function afterFinishHTML(m){
     : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
       ${typeof afterFinishSideBtns==='function' && isSide ? afterFinishSideBtns(m, btn) : btn(`🧽 Shutdown & clean ${shortM(m)}`, `afterFinishGo('${cleanW}')`, 'var(--brk)') + btn('🌙 Closing tasks', `afterFinishGo('Closing · Closing tasks')`)}
       ${btn('🗑 Garbage', `afterFinishGo('Garbage run')`)}${btn('👥 Another job', `liveAfterFinish.mode='move';liveAfterFinish.dest='';render()`)}
-      ${btn('✏️ Other…', `liveAfterFinish.mode='other';render()`)}${btn('Free / not on anything', `afterFinishGo('__none')`)}</div>`}
+      ${btn('✏️ Other…', `liveAfterFinish.mode='other';render()`)}${btn('🏃 Runner / Floater', `afterFinishGo('Runner / Floater')`)}</div>`}
     <div class="cb-mut" style="margin-top:6px;font-size:11.5px;">Counted from ${fmtTime12(a.at)}, when ${escapeHtml(m)} ${isSide?'ended':'finished'} — no gap in their time.</div></div>`;
 }
 async function afterFinishGo(w){
@@ -3441,6 +3443,7 @@ function crewStatusOf(n){
   if(w==='Break · own') return {t:'Own break', c:'var(--brk)', where:'break'};
   if(w.startsWith('Clean-up · ')) return {t:'Cleaning', c:'var(--brk)', where: placeLabel(w)};
   if(w.startsWith('Closing · ') || w==='Garbage run') return {t:'Closing', c:'var(--brk)', where: placeLabel(w)};
+  if(w==='Runner / Floater') return {t:'Runner', c:'var(--brk)', where:'runner / floater'};
   if(w && w!=='__none') return {t:'Other', c:'var(--brk)', where: placeLabel(w)};
   if(role) return {t:'Off line', c:'var(--muted)', where: n+' duties'};
   const lg = ((((dayLogFor(T)||{}).where)||{})[n]||[]);
@@ -3487,9 +3490,9 @@ function crewSupportCard(){
   const roleRow = r=>{ const on = openOffline(T).find(o=>o.role===r), w = whereOf(r), inn = crewRowOf(T, r).st==='here';
     const t = !inn ? 'Off today' : on || MACHINES.includes(w) ? `On line${MACHINES.includes(w)?' · '+shortM(w):''}` : (w && w!=='__none' && !String(w).startsWith('Not here')) ? placeLabel(w) : 'Off line · on duty', c = !inn ? 'var(--muted)' : (on || MACHINES.includes(w)) ? 'var(--run)' : 'var(--brk)';
     return `<div onclick="crewSheet={n:'${cjs(r)}'};render()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 0;"><span style="font-weight:700;">${r}</span><span style="margin-left:auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${c};color:${c};">${escapeHtml(t)}</span></div>`; };
-  const acts = [['Cleaning', w=>w.startsWith('Clean-up · ')], ['Closing tasks', w=>w.startsWith('Closing · ')], ['Garbage run', w=>w==='Garbage run'], ['Other duties', w=>w.startsWith('Other · ') || w.startsWith('Planned · ')], ['Own break', w=>w==='Break · own'], ['Free / available', (w,n)=>crewStatusOf(n).unplaced]];
+  const acts = [['Cleaning', w=>w.startsWith('Clean-up · ')], ['Closing tasks', w=>w.startsWith('Closing · ')], ['Garbage run', w=>w==='Garbage run'], ['Other duties', w=>w.startsWith('Other · ') || w.startsWith('Planned · ')], ['Own break', w=>w==='Break · own'], ['Runner / Floater', w=>w==='Runner / Floater'], ['Not placed', (w,n)=>crewStatusOf(n).unplaced]];
   const actRows = acts.map(([lab, f])=>{ const ns = roster.filter(n=>{ const w = String(whereOf(n)||''); return f(w, n) && !crewStatusOf(n).away; }); const open = crewActOpen===lab && ns.length;
-    return `<div onclick="crewActOpen=crewActOpen==='${lab}'?'':'${lab}';render()" style="cursor:pointer;padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;"><span>${lab}</span><span style="margin-left:auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--panel2);color:${ns.length?(lab==='Free / available'?'var(--wait)':'var(--text)'):'var(--muted)'};">${ns.length} crew</span></div>${open?`<div class="cb-mut" style="font-size:12px;margin-top:4px;">${escapeHtml(ns.join(', '))}</div>`:''}</div>`; }).join('');
+    return `<div onclick="crewActOpen=crewActOpen==='${lab}'?'':'${lab}';render()" style="cursor:pointer;padding:7px 0;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;"><span>${lab}</span><span style="margin-left:auto;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--panel2);color:${ns.length?(lab==='Not placed'?'var(--wait)':'var(--text)'):'var(--muted)'};">${ns.length} crew</span></div>${open?`<div class="cb-mut" style="font-size:12px;margin-top:4px;">${escapeHtml(ns.join(', '))}</div>`:''}</div>`; }).join('');
   return `<div class="card" style="padding:10px 12px;margin-bottom:10px;"><div class="cb-lbl" style="margin:0;">LEAD / YIELD</div>${OFFLINE_ROLES.map(roleRow).join('')}<div class="cb-lbl" style="margin:8px 0 0;">OTHER ACTIVITIES</div>${actRows}</div>`;
 }
 function crewDowntimeAlerts(){
@@ -3532,7 +3535,7 @@ function crewSheetHTML(){
   const lines = MACHINES.map(m=>{ const li = lineNowInfo(m); return tile(m==='Manual Pack'?'Manual Pack':m, !li.active ? 'not started' : `${li.running?'running':(li.word||'stopped')} · ${li.names.length} crew`, m, li.active?(li.running?'var(--run)':(li.color||'var(--change)')):'', cur===m); });
   const sides = SIDE_MACHINES.map(x=>{ const run = openSideRuns(T).find(r=>r.machine===x.name); return tile(x.name, run ? `${sideOpenWait(run)?'paused':'running'} · ${(run.names||[]).length} crew` : 'idle — asks what for', x.name, run?'var(--run)':'', cur===x.name); });
   const cleans = PLACES.filter(p=>!p.hide && p.w.startsWith('Clean-up · ')).map(p=>tile(p.s.replace('Clean-up ','Clean '), '', p.w, '', cur===p.w));
-  const support = [tile('Closing tasks','', 'Closing · Closing tasks','',cur==='Closing · Closing tasks'), tile('Garbage run','asks whose','Garbage run','',cur==='Garbage run'), tile('Free / available','not on anything','__none','',!cur||cur==='__none'), tile('Own break','↩ Back on Live','Break · own','',cur==='Break · own')];
+  const support = [tile('Closing tasks','', 'Closing · Closing tasks','',cur==='Closing · Closing tasks'), tile('Garbage run','asks whose','Garbage run','',cur==='Garbage run'), tile('Runner / Floater','helping wherever needed','Runner / Floater','',cur==='Runner / Floater'), tile('Own break','↩ Back on Live','Break · own','',cur==='Break · own')];
   const lent = LENT_DEPTS.map(dp=>{ const w = 'Lent · '+(dp==='Other dept'?'Other dept':dp); return tile('Lent · '+dp, 'part of the day', w, '', cur===w); });
   const moves = personMovesToday(n);
   return `<div onclick="if(event.target===this){crewSheet=null;render()}" style="position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;">
