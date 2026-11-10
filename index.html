@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203 - 2026-11-09 (Crew tab redesigned — Crew Command Center: summary (Total · Here · Away · Late · Unplaced), V1–Manual cards, side machine lights, Lead / Yield and other activities, downtime alert, quick actions, compact crew rows; tap a name for a bottom sheet with every move; sections Crew List · Move Crew · Crew History · Crew Setup; nothing else in the tracker changed)';
+const APP_VERSION = 'v203.1 - 2026-11-09 (Crew Setup: ✕ on every crew row to remove a name — always visible, past hours stay in the reports)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3350,6 +3350,7 @@ function renderCrewList(){
       ${here?`<span class="cb-link" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="crewEditRow=crewEditRow==='${js}'?null:'${js}';render()">${times}${r.end?' <span style="color:var(--change);">½</span>':''}</span>`:''}
       <span style="flex:1;"></span>
       <select onchange="setCrewDay('${js}',{st:this.value})" style="padding:5px 4px;font-size:12px;flex:0 0 auto;width:auto;">${CREW_ST.map(([k,l])=>`<option value="${k}" ${r.st===k?'selected':''}>${l}</option>`).join('')}</select>
+      ${role || helperDay(T,n) ? '' : `<button type="button" class="cb-btn" style="flex:0 0 auto;padding:4px 10px;color:var(--wait);border-color:var(--wait);" onclick="removeCrewName('${js}')" aria-label="Remove ${escapeHtml(n)}">✕</button>`}
       <div style="width:100%;display:flex;align-items:center;gap:8px;">
         ${here && !goneHome && !role ? `<span onclick="liveFree&&liveFree.name==='${js}'?(liveFree=null,render()):openLiveFree('${js}')" style="cursor:pointer;flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)} ›</span>` : `<span style="flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)}</span>`}
         ${role && here ? (on || (whereOf(n) && whereOf(n)!=='__none' && !String(whereOf(n)).startsWith('Not here')) ? `<button class="cb-btn" style="flex:0 0 auto;padding:7px 12px;border-color:var(--brk);color:var(--brk);" onclick="roleOffAll('${js}')">Off line</button>` : `<button class="cb-btn" style="flex:0 0 auto;padding:7px 14px;" onclick="startOffline('${js}')">On line</button>`) : ''}
