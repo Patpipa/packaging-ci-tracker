@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.3 - 2026-11-10 (History: a side machine paused for a planned stop shows the stop name (e.g. ⏸ Crew Talk) instead of Break pause)';
+const APP_VERSION = 'v205.4 - 2026-11-10 (3D floor v28: Not at a station panel now shows crew break and planned stops for everyone, Runner / Floater, own break, set-up / dismantle / cleaning, garbage kind and people not placed yet; free / not placed turn amber at 5 min and red at 10 like the tracker; sick / away crew hidden)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3708,7 +3708,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v27';
+const FLOOR3D_REV = 'v28';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }

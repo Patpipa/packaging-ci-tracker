@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v27 · CI Tracker</title>
+<title>3D Floor · v28 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -2253,17 +2253,29 @@ function updateNameTags(){const named=new Set(),lists={};
 function renderWhoPanel(){let el=document.getElementById("whoPanel");
   const d=(rawDay||{})[dateKey()]||{},W=d.where||{},rows=[],now=(()=>{const n=new Date();return n.getHours()*60+n.getMinutes()})();
   const toM=t=>{const p=String(t||"").split(":");return (+p[0])*60+(+p[1]||0)};
-  Object.keys(W).forEach(n=>{const lg=W[n]||[];if(!lg.length||n==="Lead Hand"||n==="Yield Operator")return;const e=lg[lg.length-1];const w=e.w||"";
+  const fm=m=>(m>=60?Math.floor(m/60)+"h ":"")+(m%60)+"m";
+  // v28: whole-crew break / planned stop from the tracker — everyone here joins unless marked working through / not attending
+  const cb=(d.crewBreaks||[]).find(x=>!x.end), cp=(d.crewPlanned||[]).find(x=>!x.end);
+  const wt=n=>(d.workThrough||[]).some(x=>x.name===n&&!x.end), na=n=>(d.notAttend||[]).some(x=>x.name===n&&!x.end);
+  const lab=(w,e)=>{ if(w==="Garbage run") return "🗑 garbage"+(e&&e.gk?" ("+e.gk+")":""); if(w==="Runner / Floater") return "🏃 runner / floater"; if(w==="Break · own") return "☕ own break";
+    if(w.startsWith("Set-up · ")) return "🔧 set-up "+w.slice(9); if(w.startsWith("Dismantle · ")) return "🔩 dismantle "+w.slice(12); if(w.startsWith("Clean-up · ")) return "🧽 clean "+w.slice(11);
+    if(w.startsWith("Closing · ")) return "🌙 "+w.slice(10).toLowerCase(); if(w.startsWith("Other · ")) return "✏️ "+w.slice(8); if(w.startsWith("Planned · ")) return "⏸ "+w.slice(10);
+    if(w.startsWith("Lent")) return "→ "+w.replace("Lent · ",""); if(w.startsWith("Not here")) return w.replace("Not here · ","not here: ").toLowerCase(); return w; };
+  const names=new Set(Object.keys(W)); Object.keys(d.crewDay||{}).forEach(n=>{const c=d.crewDay[n];if(c&&c.st==="here")names.add(n)});
+  names.forEach(n=>{ if(n==="Lead Hand"||n==="Yield Operator")return; const lg=W[n]||[], e=lg[lg.length-1], w=(e&&e.w)||"";
+    const c0=(d.crewDay||{})[n]; if(c0&&c0.st&&c0.st!=="here")return; // sick / absent / vacation / lent all day: not on the floor
     if(w&&(/^Variovac|^Manual Pack|^Fajita|^Slicer|^Cutlet|^Vacuum Sealer/.test(w)))return;
-    const mins=Math.max(0,now-toM(e.at));
-    if(!w){const c=mins>=30?"#ff6b6b":mins>=15?"#f0a04b":"#cfd6de";rows.push({o:0,h:`<div><b>${n}</b> <span style="color:${c};font-weight:700;">free · ${mins>=60?Math.floor(mins/60)+"h ":""}${mins%60}m</span></div>`});return}
-    const lab=w==="Garbage run"?"🗑 garbage":w.startsWith("Lent")?"→ "+w.replace("Lent · ",""):w.startsWith("Not here")?w.replace("Not here · ","not here: ").toLowerCase():w;
-    rows.push({o:w==="Garbage run"?1:w.startsWith("Not here")?3:2,h:`<div><b>${n}</b> <span style="opacity:.8;">${lab}</span></div>`})});
+    const away=w.startsWith("Not here")||w.startsWith("Lent");
+    if(!away&&cb&&!wt(n)){rows.push({o:0,h:`<div><b>${n}</b> <span style="color:#7fb2ff;font-weight:700;">☕ break</span></div>`});return}
+    if(!away&&cp&&!na(n)){rows.push({o:0,h:`<div><b>${n}</b> <span style="color:#b79cff;font-weight:700;">⏸ ${cp.reason}</span></div>`});return}
+    if(!w){const st=e?toM(e.at):toM((c0&&c0.start)||"08:00"),mins=Math.max(0,now-st);const c=mins>=10?"#ff6b6b":mins>=5?"#f0a04b":"#cfd6de";
+      rows.push({o:0,h:`<div><b>${n}</b> <span style="color:${c};font-weight:700;">${e?"free":"not placed"} · ${fm(mins)}</span></div>`});return}
+    rows.push({o:w==="Garbage run"?1:w.startsWith("Not here")?3:2,h:`<div><b>${n}</b> <span style="opacity:.8;">${lab(w,e)}</span></div>`})});
   if(!rows.length){if(el)el.remove();return}
   if(!el){el=document.createElement("div");el.id="whoPanel";el.style.cssText="position:fixed;left:10px;bottom:84px;z-index:30;max-width:240px;background:rgba(10,19,34,.82);color:#e8edf3;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 10px;font:12px/1.45 Arial,sans-serif;pointer-events:auto;";
     el.onclick=()=>{el.dataset.min=el.dataset.min==="1"?"0":"1";renderWhoPanel()};document.body.appendChild(el)}
   rows.sort((a,b)=>a.o-b.o);
-  el.innerHTML=`<div style="font-weight:700;letter-spacing:.4px;font-size:11px;opacity:.85;">NOT AT A STATION (${rows.length}) ${el.dataset.min==="1"?"▸":"▾"}</div>`+(el.dataset.min==="1"?"":rows.map(r=>r.h).join(""))}
+  el.innerHTML=`<div style="font-weight:700;letter-spacing:.4px;font-size:11px;opacity:.85;">${cb?"☕ CREW ON BREAK · ":cp?"⏸ "+String(cp.reason).toUpperCase()+" · ":""}NOT AT A STATION (${rows.length}) ${el.dataset.min==="1"?"▸":"▾"}</div>`+(el.dataset.min==="1"?"":rows.map(r=>r.h).join(""))}
 setInterval(()=>{try{updateNameTags()}catch(e){}},3000);
 
 /* ---------- camera ---------- */
