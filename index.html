@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.4 - 2026-11-10 (3D floor v28: Not at a station panel now shows crew break and planned stops for everyone, Runner / Floater, own break, set-up / dismantle / cleaning, garbage kind and people not placed yet; free / not placed turn amber at 5 min and red at 10 like the tracker; sick / away crew hidden)';
+const APP_VERSION = 'v205.5 - 2026-11-10 (Clean a machine list removed from every picker and the crew sheet — use Closing tasks; Fajita keeps Dismantle / Clean, Slicer / Cutlet Dismantle; earlier days still show their cleaning labels)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1950,7 +1950,7 @@ const PLACES = [
   {w:'Closing · Restocking film / boxes', g:'Shutdown / Clean-up', s:'Restocking film / boxes', hide:true},
   {w:'Closing · Paperwork', g:'Shutdown / Clean-up', s:'Paperwork', hide:true},
   {w:'Garbage run', g:'Garbage run', s:'Garbage'}, // v165: end-of-day garbage, not tied to a running line
-  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: m==='Manual Pack' || m==='Area / floor', g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
+  ...['Variovac 1','Variovac 2','Variovac 3','Manual Pack','Fajita','Slicer','Cutlet','Vacuum Sealer','Area / floor'].map(m=>({w:'Clean-up · '+m, hide: true /* v205.5: cleaning goes under Closing tasks (Fajita: Dismantle / Clean) */, g:'Shutdown / Clean-up', s:'Clean-up '+m.replace('Variovac ','V').replace('Manual Pack','Manual')}))
 ];
 const PLACE_GROUPS = [['🏃 Runner / Floater', p=>p.w==='Runner / Floater'], ['☕ Break', p=>p.w==='Break · own'], ['🌙 Closing', p=>!p.hide && (p.w.startsWith('Closing · ') || p.w==='Garbage run')], ['🧽 Clean a machine', p=>!p.hide && p.w.startsWith('Clean-up · ')], ['Setup · Cleaning', p=>['Setup / Opening','Cleaning / Sanitation'].includes(p.w)], ['Lent to other dept', p=>p.g==='Lent to other dept'], ['Not here', p=>p.g==='Not here']];
 const SHIFT_START_MIN = 8*60;
@@ -3192,7 +3192,7 @@ function peopleAtPlace(w){ const P = (((dayLogFor(todayStr())||{}).place)||{}); 
 /* Start after set-up: the set-up people are already ticked */
 { const _os = openSideSetup; openSideSetup = function(machine, changeId){ _os(machine, changeId); if(!changeId && sideSetup && !(sideSetup.names||[]).length){ const pre = peopleAtPlace('Set-up · '+machine); if(pre.length){ sideSetup.names = pre.slice(0, SIDE_PACK_MAX); syncPickCounts('side', sideSetup); render(); } } }; }
 /* after End: dismantle / clean / garbage / another job / other / free */
-function afterFinishSideBtns(m, btn){ return SIDE_PREP.includes(m) ? btn(`🔩 ${disLabel(m)} ${m}`, `afterFinishGo('Dismantle · ${m}')`, 'var(--brk)') + (m==='Fajita' ? '' : btn(`🧽 Clean ${m}`, `afterFinishGo('Clean-up · ${m}')`, 'var(--brk)')) : ''; }
+function afterFinishSideBtns(m, btn){ return SIDE_PREP.includes(m) ? btn(`🔩 ${disLabel(m)} ${m}`, `afterFinishGo('Dismantle · ${m}')`, 'var(--brk)') + '' : ''; }
 function sideNamesNow(id){ const e = ((dayLogFor(todayStr())||{}).side||[]).find(x=>x.id===id); return e ? (e.names||[]).slice() : []; }
 { const _fs = finishSideJob; finishSideJob = async function(id){ const e = ((dayLogFor(todayStr())||{}).side||[]).find(x=>x.id===id); const m = e && e.machine, nm = sideNamesNow(id);
     await _fs(id); const e2 = ((dayLogFor(todayStr())||{}).side||[]).find(x=>x.id===id);
