@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203.2 - 2026-11-09 (Live: V1–Manual on top, then side machines, then MAREL; Start break and Someone going home moved to the Crew tab — Live shows a slim On break · End break line only while a break is on; 👷 working through the break is in Crew)';
+const APP_VERSION = 'v203.3 - 2026-11-09 (All-line planned stop now summons everyone who is here, wherever they are — lines that are on stop, side machines and Lead / Yield pause, people at cleaning / garbage / not placed are counted in it; End puts everyone back; 🙋 Someone not attending? keeps their time where it is)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1281,7 +1281,7 @@ const VARIOVACS = ['Variovac 1','Variovac 2','Variovac 3'];
 function openCrewBreak(date){ const d = dayLogFor(date||todayStr()); return d && (d.crewBreaks||[]).find(x=>!x.end) || null; }
 function variovacBreakState(){
   const act = VARIOVACS.map(m=>({m, live:Store.liveRuns[m]})).filter(x=>x.live && !isStaleLive(x.live) && lineStaffNow(x.m).active);
-  const cb = openCrewBreak();
+  const cb = openCrewBreak() || openCrewPlanned();
   if(cb) return {any:true, all:true, start: cb.start};
   if(!act.length){ const d = dayLogFor(todayStr()); return (d && d.breakPause) ? {any:true, all:false} : {any:false}; }
   const open = act.map(x=>{ const dts = x.live.downtimeSegments||[], o = dts[dts.length-1]; return (x.live.status!=='RUNNING' && o && !o.end && o.status==='BREAK') ? o : null; });
@@ -1289,7 +1289,7 @@ function variovacBreakState(){
   return {any:true, all, start: all ? open.map(o=>o.start).sort().pop() : null};
 }
 function breakEndAfter(t){
-  const ends = []; const d0 = dayLogFor(todayStr()); ((d0 && d0.crewBreaks)||[]).forEach(x=>{ if(x.end && x.end>=t) ends.push(x.end); });
+  const ends = []; const d0 = dayLogFor(todayStr()); [ ...((d0 && d0.crewBreaks)||[]), ...((d0 && d0.crewPlanned)||[]) ].forEach(x=>{ if(x.end && x.end>=t) ends.push(x.end); });
   VARIOVACS.forEach(m=>{ const live = Store.liveRuns[m]; if(!live) return; (live.downtimeSegments||[]).forEach(o=>{ if(o.status==='BREAK' && o.end && o.end>=t) ends.push(o.end); }); });
   return ends.sort()[0] || nowHHMM();
 }
@@ -2211,7 +2211,8 @@ function personDay(date){
   const isToday = date===todayStr();
   const st = {}; MACHINES.forEach(m=>st[m] = lineMinuteStatus(date, m, DAY_TO));
   const brk = new Array(DAY_TO-DAY_FROM).fill(false); MACHINES.forEach(m=>st[m].forEach((x,i)=>{ if(x==='BREAK') brk[i] = true; }));
-  const wtl = d.workThrough || [];
+  const wtl = d.workThrough || [], nal = d.notAttend || [];
+  const cpr = new Array(DAY_TO-DAY_FROM).fill(''); (d.crewPlanned||[]).forEach(x=>{ const a = toMin(x.start), b = x.end ? toMin(x.end) : (isToday ? toMin(nowHHMM()) : a); for(let t=Math.max(a,DAY_FROM); t<Math.min(b,DAY_TO); t++) cpr[t-DAY_FROM] = x.reason; });
   const cbk = new Array(DAY_TO-DAY_FROM).fill(false); (d.crewBreaks||[]).forEach(x=>{ const a = toMin(x.start), b = x.end ? toMin(x.end) : (isToday ? toMin(nowHHMM()) : a); for(let t=Math.max(a,DAY_FROM); t<Math.min(b,DAY_TO); t++){ brk[t-DAY_FROM] = true; cbk[t-DAY_FROM] = true; } });
   const side = sideIntervals(date);
   const people = names.map(n=>{
@@ -2223,7 +2224,9 @@ function personDay(date){
       const i = t-DAY_FROM; let k, g;
       const wThru = wtl.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
       const onBrk = brk[i] && !(w.startsWith('Not here')) && !wThru; // v178: break time = break for everyone here, whatever they were on (a stopped line, a place, a paused side machine)
-      if(w==='Break · own'){ k='Break (own)'; g='Break'; } // v201
+      const inCP = cpr[i] && !w.startsWith('Not here') && !w.startsWith('Lent') && !nal.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
+      if(inCP && !MACHINES.includes(w)){ k = cpr[i]; g = 'Meetings & stretching'; } // v203.3: summoned to the planned stop
+      else if(w==='Break · own'){ k='Break (own)'; g='Break'; } // v201
       else if(MACHINES.includes(w)){ const s = st[w][i]; if((s==='BREAK' && !wThru) || (onBrk && s!=='RUNNING')){ k='Break'; g='Break'; } else if(s==='BREAK'){ k='Worked through break'; g='Other duties'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
       else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
@@ -3061,21 +3064,43 @@ function allLinePeopleHTML(){
     <div class="nm-grid">${crewRoster().map((n,i)=>{ if(map[n]) return ''; const w = whereOf(n); if(w.startsWith('Not here')||w.startsWith('Lent')) return ''; const on = (a.people||[]).includes(n); return `<button type="button" class="nm-chip${on?' on':''}" onclick="toggleAllLinePerson(${i})">${on?'✓ ':''}${escapeHtml(n)}</button>`; }).join('')}</div>
     <div class="cb-mut" style="margin-top:4px;font-size:11.5px;">People on the checked lines are included through their line. Not here / lent today are left out.</div></div>`;
 }
+/* v203.3: a planned stop SUMMONS EVERYONE who is here — wherever they are. Running / stopped lines get the Planned Stop,
+side machines and Lead / Yield pause (like a break), places and unplaced people are counted in the meeting. End puts everyone back. */
+function openCrewPlanned(date){ const d = dayLogFor(date||todayStr()); return d && (d.crewPlanned||[]).find(x=>!x.end) || null; }
+function activeLinesNow(){ const T = todayStr(); return MACHINES.filter(m=>{ const l = Store.liveRuns[m]; return l && !isStaleLive(l) && (!l.date || l.date===T); }); }
+function notAttending(date){ const d = dayLogFor(date||todayStr()); return (d && d.notAttend) || []; }
 { const _sa = startAllLineStop; startAllLineStop = async function(){
-    const a = allLineSetup; if(!a) return _sa();
-    const people = (a.people||[]).slice(), reason = a.reason==='Other' ? (a.other.trim()||'Other') : a.reason;
-    if(!a.machines.length && people.length){ // nobody running yet — e.g. 8:00 crew talk before any line starts
-      allLineSetup = null; if(!todaysCrewActive()) await confirmTodaysCrew(true);
-      for(const n of people){ placeSetup = {name:n, w:'Planned · '+reason, at: nowHHMM()}; await savePlace(); placeSetup = null; }
-      toast(`${reason} — ${people.length} people`); render(); return; }
-    await _sa();
-    if(allLineSetup) return; // not started
+    const a = allLineSetup; if(!a) return;
+    const reason = a.reason==='Other' ? (a.other.trim()||'Other') : a.reason; if(a.reason==='Other' && !a.other.trim()){ toast('Type what the stop is for'); return; }
     if(!todaysCrewActive() && namesOn()) await confirmTodaysCrew(true);
-    for(const n of people){ placeSetup = {name:n, w:'Planned · '+reason, at: nowHHMM()}; await savePlace(); placeSetup = null; }
-    render(); }; }
+    a.machines = activeLinesNow();
+    if(a.machines.length){ await _sa(); if(allLineSetup) return; } else allLineSetup = null;
+    const T = todayStr(), d = ensureDayLog(T), g = openAllLineStops()[0], now = nowHHMM();
+    d.crewPlanned = (d.crewPlanned||[]).filter(x=>x.end); d.crewPlanned.push({id: g ? g.id : uid(), start: g ? g.start : now, end:null, reason});
+    await saveDayLogNow(); toast(`⏸ ${reason} — everyone`); render(); }; }
+async function endCrewPlanned(){ const cp = openCrewPlanned(); if(!cp) return; const now = nowHHMM(); cp.end = toMin(now) < toMin(cp.start) ? cp.start : now;
+  const d = dayLogFor(todayStr()); (d.notAttend||[]).forEach(x=>{ if(x.cp===cp.id && !x.end) x.end = now; }); cpNaOpen = false;
+  await saveDayLogNow(); toast(`▶ ${cp.reason} over — everyone back`); render(); }
+let cpNaOpen = false;
+async function toggleNotAttend(n){ const cp = openCrewPlanned(); if(!cp) return; const d = ensureDayLog(todayStr()); d.notAttend = d.notAttend || [];
+  const i = d.notAttend.findIndex(x=>x.name===n && x.cp===cp.id && !x.end); if(i>-1){ d.notAttend.splice(i,1); await saveDayLogNow(); return; }
+  d.notAttend.push({name:n, cp:cp.id, start:cp.start, end:null}); keepSideRunningFor(d, n, cp.start); await saveDayLogNow(); }
+function keepSideRunningFor(d, n, start){ const x = (d.side||[]).filter(y=>y.breakPaused && y.end===start && (y.names||[]).includes(n)).pop();
+  if(x && !(d.side||[]).some(y=>y.machine===x.machine && !y.end)){ x.end = null; delete x.breakPaused; if(d.breakPause) d.breakPause.ids = (d.breakPause.ids||[]).filter(id=>id!==x.id);
+    (x.names||[]).forEach(nm=>{ const lg = (d.where||{})[nm]; if(lg && lg.length && lg[lg.length-1].w==='' && lg[lg.length-1].at===start) lg.pop(); }); toast(`${x.machine} keeps running — ${n} not attending`); } }
+function notAttendHTML(){ const cp = openCrewPlanned(); if(!cp) return ''; const na = notAttending().filter(x=>x.cp===cp.id && !x.end).map(x=>x.name);
+  if(!cpNaOpen) return `<button type="button" class="cb-btn" style="margin-top:8px;text-transform:none;font-family:inherit;font-size:12.5px;" onclick="cpNaOpen=true;render()">🙋 Someone not attending?${na.length?` · ${escapeHtml(na.join(', '))}`:''}</button>`;
+  return `<div style="margin-top:8px;"><div class="cb-mut" style="margin-bottom:6px;">Tap who is <b style="color:var(--text);">not attending</b> — their time stays on what they're doing:</div>
+    <div class="nm-grid">${breakPresentNames().map(n=>`<button type="button" class="nm-chip${na.includes(n)?' on':''}" onclick="toggleNotAttend('${cjs(n)}')">${na.includes(n)?'🙋 ':''}${escapeHtml(n)}<small>${escapeHtml(pausedSideOf(n) || placeLabel(whereOf(n)))}</small></button>`).join('')}</div>
+    <button type="button" class="cb-btn" style="margin-top:6px;" onclick="cpNaOpen=false;render()">Done</button></div>`; }
+function crewPlannedBannerHTML(){ const cp = openCrewPlanned(); if(!cp || openAllLineStops().length) return '';
+  return `<div class="card" style="border-color:var(--planned);background:var(--planned-dim);"><div style="font-family:'Oswald';font-size:16px;color:var(--planned);text-transform:uppercase;letter-spacing:.04em;">⏸ ${escapeHtml(cp.reason)} · everyone</div>
+    <div class="cb-mut" style="font-size:12.5px;">started ${fmtTime12(cp.start)} · ${fmtDur(elapsedMinutesSince(cp.start))} · side machines paused</div>${notAttendHTML()}
+    <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="endCrewPlanned()">▶ End — everyone back</button></div>`; }
 function openPlannedPeople(){ const T = todayStr(), P = ((dayLogFor(T)||{}).place)||{}; return Object.keys(P).filter(n=>String(P[n].w).startsWith('Planned · ')); }
 { const _ra = resumeAllLineStop; resumeAllLineStop = async function(gid){
     await _ra(gid);
+    { const cp = openCrewPlanned(); if(cp && !openAllLineStops().some(g=>g.id===gid)){ await endCrewPlanned(); } }
     const ppl = openPlannedPeople(); if(!ppl.length) return;
     for(const n of ppl){ placeSetup = {name:n, w:'__none', at: nowHHMM()}; await savePlace(); placeSetup = null; }
     toast(`${ppl.length} free — start them on machines (Crew tab)`); render(); }; }
@@ -3406,6 +3431,7 @@ function crewStatusOf(n){
   if(w==='Not here · Late') return {t:'Late', c:'var(--change)', where:'not in yet', late:true};
   if(w.startsWith('Not here')) return {t:'Home', c:'var(--muted)', where:'went home', away:true};
   if(w.startsWith('Lent')) return {t:'Lent', c:'var(--muted)', where: w.replace('Lent · ',''), away:true};
+  { const cp = openCrewPlanned(); if(cp && !MACHINES.includes(w) && !notAttending().some(x=>x.name===n && x.cp===cp.id && !x.end)) return {t: cp.reason, c:'var(--planned)', where: pausedSideOf(n) || placeLabel(w)}; }
   const bn = breakNow(), wt = bn && workingThrough().some(x=>x.name===n && x.brk===bn.id && !x.end);
   if(bn && !wt && (w || pausedSideOf(n))) return {t:'Break', c:'var(--brk)', where: pausedSideOf(n) || placeLabel(w)};
   if(MACHINES.includes(w)){ const li = lineNowInfo(w); return li.running ? {t:'On line', c:'var(--run)', where: shortM(w)} : {t: (li.word||'Stopped'), c: li.color||'var(--change)', where: shortM(w)}; }
@@ -4395,7 +4421,7 @@ async function endBreakAll(){
 let brkWtOpen = false;
 function breakNow(){ const b = openBreakAll(), cb = openCrewBreak(); if(!b && !cb) return null; return {id: cb ? cb.id : b.id, start: cb ? cb.start : b.start}; }
 function workingThrough(date){ const d = dayLogFor(date||todayStr()); return (d && d.workThrough) || []; }
-function pausedSideOf(n){ const b = breakNow(), d = dayLogFor(todayStr()); if(!b || !d) return ''; const x = (d.side||[]).find(y=>y.breakPaused && y.end===b.start && (y.names||[]).includes(n)); return x ? x.machine : ''; }
+function pausedSideOf(n){ const b = breakNow() || openCrewPlanned(), d = dayLogFor(todayStr()); if(!b || !d) return ''; const x = (d.side||[]).find(y=>y.breakPaused && y.end===b.start && (y.names||[]).includes(n)); return x ? x.machine : ''; }
 function placeLabel(w){ return !w || w==='__none' ? 'free' : MACHINES.includes(w) ? shortM(w) : SIDE_MACHINES.some(x=>x.name===w) ? w : (shortWhere(w) || w); }
 function breakPresentNames(){ return crewRoster().filter(n=>{ const w = whereOf(n); return crewRowOf(todayStr(), n).st==='here' && !String(w).startsWith('Not here') && !String(w).startsWith('Lent'); }); }
 async function toggleWorkThrough(n){
@@ -4453,15 +4479,11 @@ function renderAllLineSetupCard(){
   const reasons = [...PLANNED_REASONS,'Other'];
   return `<div class="card" style="border-color:var(--planned);">
     <h3>All-Line Planned Stop</h3>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">Pick the event, check the lines, then Start. Every checked line stops at the same minute.</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">Pick the event, then Start. <b style="color:var(--text);">Everyone who is here joins</b> — wherever they are. ${activeLinesNow().length ? `${activeLinesNow().map(shortM).join(', ')} stop` : 'No lines on yet'}; side machines pause; End puts everyone back.</div>
     <div class="statusgrid" style="margin-bottom:12px;">
       ${reasons.map(r=>`<div class="statusopt ${a.reason===r?'sel':''}" style="--sc:var(--planned);--scdim:var(--planned-dim)" onclick="allLineSetup.reason='${r.replace(/'/g,"\\'")}'; render()"><div class="dot" style="background:var(--planned)"></div>${r}</div>`).join('')}
     </div>
     ${a.reason==='Other' ? `<div class="field"><label>Specify</label><input type="text" value="${escapeHtml(a.other)}" oninput="allLineSetup.other=this.value" placeholder="Describe the planned stop"></div>` : ''}
-    <div class="field"><label>Lines</label>
-      <div class="machinechecks">${MACHINES.map(m=>{ const live=Store.liveRuns[m]; const tag = !live ? 'idle' : (live.status==='RUNNING' ? 'running' : 'stopped'); return `<div class="mchip ${a.machines.includes(m)?'sel':''}" onclick="toggleAllLineMachine('${m}')">${m}<div style="font-family:'Inter',sans-serif;font-size:10px;opacity:0.75;margin-top:2px;">${tag}</div></div>`; }).join('')}</div>
-    </div>
-    ${allLinePeopleHTML()}
     <div class="warnbanner" style="background:var(--planned-dim);border-color:var(--planned);color:var(--planned);">Recorded as a Planned Stop — not counted against Efficiency or in the bottleneck rankings.</div>
     <div class="btnrow">
       <button class="btn btn-ghost" onclick="allLineSetup=null; render()">Cancel</button>
@@ -4519,8 +4541,8 @@ function renderAllLineBanners(){
   return openAllLineStops().map(g=>`<div class="card" style="border-color:var(--planned);background:var(--planned-dim);">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
       <div><div style="font-family:'Oswald';font-size:16px;color:var(--planned);text-transform:uppercase;letter-spacing:0.04em;">⏸ ${escapeHtml(g.reason)}</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${g.machines.join(', ')} · started ${fmtTime12(g.start)} · ${fmtDur(elapsedMinutesSince(g.start))}</div></div>
-    </div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">${openCrewPlanned() ? 'Everyone · ' : ''}${g.machines.join(', ')} · started ${fmtTime12(g.start)} · ${fmtDur(elapsedMinutesSince(g.start))}</div></div>
+    </div>${openCrewPlanned() && openCrewPlanned().id===g.id ? notAttendHTML() : ''}
     <button class="btn btn-primary" style="margin-top:10px;background:var(--run);" onclick="resumeAllLineStop('${g.id}')">▶ Resume All (${g.machines.length})</button>
   </div>`).join('');
 }
@@ -4588,7 +4610,7 @@ function renderLive(){
   ${liveBreakSlimHTML()}
   ${renderScalesBar()}
   ${crewAlertStripHTML()}
-  ${renderAllLineBanners()}${plannedPeopleBannerHTML()}
+  ${renderAllLineBanners()}${crewPlannedBannerHTML()}${plannedPeopleBannerHTML()}
   ${cards}
   ${renderCrewBoard('machines')}
   ${allLineSetup ? (namesOn() ? renderTodaysCrewPanel(true) : '') + renderAllLineSetupCard() : `<button class="btn btn-secondary" style="margin-bottom:16px;border-color:var(--planned);color:var(--planned);" onclick="openAllLineSetup()">⏸ All-Line Planned Stop</button>`}`;
