@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.5 - 2026-11-10 (Clean a machine list removed from every picker and the crew sheet — use Closing tasks; Fajita keeps Dismantle / Clean, Slicer / Cutlet Dismantle; earlier days still show their cleaning labels)';
+const APP_VERSION = 'v205.6 - 2026-11-10 (side machines light up the next step: Set up → Start → Dismantle; set up again asks why; dismantled machines lock Start until ↩ Reopen)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1556,7 +1556,15 @@ function renderCrewBoard(mode){
     }
     const prepNow = peopleAtPlace('Set-up · '+sm.name), disNow = peopleAtPlace('Dismantle · '+sm.name);
     const lit = c=>`border-color:${c};color:${c};box-shadow:0 0 0 1px ${c}, 0 0 12px ${c};`; // v202: the button lights up while it's happening
-    return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${prepNow.length?lit('var(--amber)'):''}" onclick="openSidePrep('${sm.name}')">${prepNow.length?'● ':''}🔧 Set up</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${disNow.length?lit('#e8742a'):''}" onclick="openSidePrep('${sm.name}','Dismantle')">${disNow.length?'● ':''}🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
+    const stg = SIDE_PREP.includes(sm.name)&&namesOn() ? sideStage(sm.name) : {st:''};
+    if(stg.st==='closed' && !disNow.length && !prepNow.length) return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;opacity:.9;"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;"><span class="cb-btn" style="flex:0 0 auto;padding:9px 12px;opacity:.4;">🔒 Start</span><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;" onclick="sideReopen('${sm.name}')">↩ Reopen</button></span>
+      <div class="cb-mut" style="width:100%;color:var(--run);font-weight:600;">✓ ${sm.name==='Fajita'?'Dismantled / cleaned':'Dismantled'} ${fmtTime12(stg.at)} · closed for today</div></div>`;
+    const nx = c=>`border:2px solid ${c};color:${c};font-weight:800;`, dim = 'opacity:.45;'; // v205.6: the next step stands out
+    const suSty = prepNow.length ? lit('var(--amber)') : stg.st==='fresh' ? nx('var(--amber)') : (stg.st==='ready'||stg.st==='finished') ? dim : '';
+    const disSty = disNow.length ? lit('#e8742a') : stg.st==='finished' ? nx('#e8742a') : (stg.st==='fresh'||stg.st==='ready') ? dim : '';
+    const stSty = (prepNow.length || stg.st==='ready') ? nx('var(--run)') : '';
+    const suTxt = !prepNow.length && stg.set && stg.st!=='fresh' ? `✓ Set up ${fmtTime12(stg.set)}` : `${prepNow.length?'● ':''}🔧 Set up`;
+    return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${suSty}" onclick="openSidePrep('${sm.name}')">${suTxt}</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${disSty}" onclick="openSidePrep('${sm.name}','Dismantle')">${disNow.length?'● ':''}🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;${stSty}" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
       ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div><div style="display:flex;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Set-up',true)">＋ Add person</button></div>`:''}
       ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Dismantle',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','Runner / Floater')">✓ Done → 🏃 Runner</button></div>`:''}</div>`;
   }).join('');
@@ -2896,6 +2904,7 @@ async function sendNamesTo(sel, dest, opt){
   opt = opt || {}; const T = todayStr();
   if(dest==='Garbage run' && !garbageKindNext){ const k = opt.gk || await askGarbageKind(sel); if(!k) return false; garbageKindNext = k; try{ return await sendNamesTo(sel, dest, {...opt, gk:k}); } finally { garbageKindNext = null; } }
   if(SIDE_PREP.includes(dest) && !openSideRuns(T).some(s=>s.machine===dest)){
+    if(namesOn() && sideStage(dest).st==='closed'){ if(!confirm(`${dest} is closed for today (dismantled). Reopen it?`)) return false; await sideReopen(dest, false); }
     const k = opt.sideKind || await askSideKind(dest, sel); if(!k) return false;
     if(k==='setup') dest = 'Set-up · '+dest; else if(k==='dismantle') dest = 'Dismantle · '+dest;
   }
@@ -3150,6 +3159,23 @@ const SIDE_STOP_REASONS = {
 const SIDE_PREP = ['Fajita','Cutlet','Slicer']; // set up before, dismantle after
 /* v191: packaging crew dismantles AND cleans the Fajita — one combined label */
 function disLabel(m){ return m==='Fajita' ? 'Dismantle / Clean' : 'Dismantle'; }
+/* v205.6: where is a side machine in its day? fresh → (set up) ready → (job) finished → (dismantle) closed. ↩ Reopen starts it over. */
+function sideStage(m){
+  const d = dayLogFor(todayStr())||{}, ro = (d.sideReopen||{})[m]||''; let set = '', dis = '', jobEnd = '';
+  let disEnd = '';
+  Object.values(d.where||{}).forEach(arr=>(arr||[]).forEach((e,i)=>{ if(!e||!e.at) return;
+    if(e.w==='Set-up · '+m && e.at>=ro && e.at>set) set = e.at;
+    if(e.w==='Dismantle · '+m && (!ro || e.at>ro)){ if(e.at>dis) dis = e.at; const nx = arr[i+1]; if(nx && nx.at>disEnd) disEnd = nx.at; } }));
+  (d.side||[]).forEach(x=>{ if(x.machine===m && x.end && (x.start||'')>=ro && x.end>jobEnd) jobEnd = x.end; });
+  if(dis) return {st:'closed', at: disEnd||dis, set};
+  if(jobEnd && jobEnd>=set) return {st:'finished', set, jobEnd};
+  if(set) return {st:'ready', set};
+  return {st:'fresh'};
+}
+async function sideReopen(m, ask){
+  if(ask!==false && !confirm(`Reopen ${m}? It was ${disLabel(m).toLowerCase()} done today — use this for a rush order.`)) return false;
+  const d = ensureDayLog(todayStr()); d.sideReopen = {...(d.sideReopen||{}), [m]: nowHHMM()}; await saveDayLogNow(); render(); toast(`↩ ${m} reopened`); return true;
+}
 let sidePause = null; // {id, reason, otherText}
 function openSidePause(id){ sidePause = {id, reason:'', otherText:''}; render(); }
 async function confirmSidePause(){
@@ -3172,19 +3198,23 @@ function sidePauseHTML(run){
 }
 /* 🔧 set up (Fajita, Cutlet, Slicer) */
 let sidePrep = null; // {machine, kind:'Set-up', names:[], trn:[]}
-function openSidePrep(m, kind, keep){ const k = kind||'Set-up'; sidePrep = {machine:m, kind: k, names: keep ? peopleAtPlace((k==='Dismantle'?'Dismantle · ':'Set-up · ')+m) : [], trn:[]}; render(); }
+function openSidePrep(m, kind, keep){ const k = kind||'Set-up'; const sg = sideStage(m); sidePrep = {machine:m, kind: k, names: keep ? peopleAtPlace((k==='Dismantle'?'Dismantle · ':'Set-up · ')+m) : [], trn:[], again: (!keep && k==='Set-up' && sg.set && sg.st!=='fresh') ? sg.set : '', reason:'', otherText:''}; render(); }
 /* v190: dismantle at closing — the dismantle people move on with one tap */
 async function prepDone(m, w){ const ns = peopleAtPlace('Dismantle · '+m); const at = nowHHMM(); for(const n of ns){ placeSetup = {name:n, w, at}; await savePlace(); if(placeSetup){ placeSetup = null; return; } } render(); toast(`🔩 ${m} ${disLabel(m).toLowerCase()} done — ${ns.join(', ')}`); }
 function togglePrepTrn(i){ const p = sidePrep; if(!p) return; const n = p.names[i]; if(n==null) return; p.trn = p.trn.includes(n) ? p.trn.filter(x=>x!==n) : [...p.trn, n]; render(); }
 async function confirmSidePrep(){
   const p = sidePrep; if(!p) return; const dis = p.kind==='Dismantle'; if(!(p.names||[]).length){ toast(dis ? 'Tap who is dismantling it' : 'Tap who is setting it up'); return; }
+  let why = '';
+  if(p.again){ why = p.reason==='__other' ? (p.otherText||'').trim() : p.reason; if(!why){ toast('Why set up again? Pick a reason'); return; } }
   const at = nowHHMM();
+  if(why){ const d = ensureDayLog(todayStr()); d.prepAgain = [...(d.prepAgain||[]), {m:p.machine, at, reason:why}]; }
   for(const n of p.names){ placeSetup = {name:n, w:(dis?'Dismantle · ':'Set-up · ')+p.machine, at, trn: p.trn.includes(n)}; await savePlace(); if(placeSetup){ placeSetup = null; return; } }
-  sidePrep = null; render(); toast(`${dis?'🔩':'🔧'} ${p.machine} ${dis?disLabel(p.machine).toLowerCase():'set-up'} — ${p.names.join(', ')}`);
+  sidePrep = null; if(why) await saveDayLogNow(); render(); toast(`${dis?'🔩':'🔧'} ${p.machine} ${dis?disLabel(p.machine).toLowerCase():'set-up'} — ${p.names.join(', ')}`);
 }
 function sidePrepHTML(){
   const p = sidePrep, dis = p.kind==='Dismantle';
-  return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--brk);"><span class="cb-nm">${dis?'🔩 '+disLabel(p.machine):'🔧 Set up'} ${escapeHtml(p.machine)} — who?</span>${namePickHTML('prep')}
+  return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--brk);"><span class="cb-nm">${dis?'🔩 '+disLabel(p.machine):'🔧 Set up'} ${escapeHtml(p.machine)}${p.again?' again':''} — who?</span>
+    ${p.again?`<div class="cb-mut" style="width:100%;color:var(--amber);font-weight:600;">Already set up at ${fmtTime12(p.again)}. Why again?</div><div style="display:flex;gap:6px;width:100%;">${['After breakdown','__other'].map(r=>`<button type="button" class="cb-btn" style="flex:1;${p.reason===r?'border-color:var(--amber);color:var(--amber);background:var(--change-dim);':''}" onclick="sidePrep.reason='${r}';render()">${r==='__other'?'✏️ Other…':'🛠 After breakdown'}</button>`).join('')}</div>${p.reason==='__other'?otherInputHTML('sidePrep', p.otherText):''}`:''}${namePickHTML('prep')}
     ${p.names.length?`<span class="cb-mut" style="width:100%;">In training? Tap the trainee (optional)</span><div class="nm-grid">${p.names.map((n,i)=>`<button type="button" class="nm-chip trn${p.trn.includes(n)?' on':''}" onclick="togglePrepTrn(${i})">${p.trn.includes(n)?'🎓 ':''}${escapeHtml(n)}</button>`).join('')}</div>`:''}
     <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="sidePrep=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmSidePrep()">${dis?'🔩 Start '+disLabel(p.machine).toLowerCase():'🔧 Start set-up'}</button></div></div>`;
 }
@@ -3242,7 +3272,8 @@ function sideUpstreamRecords(start, end){
 function sidePrepText(date, m){
   const pd = personDay(date); if(!pd) return '';
   let su = 0, dc = 0; pd.people.forEach(p=>p.segs.forEach(sg=>{ if(sg.w==='Set-up · '+m) su += sg.b-sg.a; else if(sg.w==='Dismantle · '+m || sg.w==='Clean-up · '+m) dc += sg.b-sg.a; }));
-  return (su?` · set-up ${fmtDur(su)}`:'') + (dc?` · dismantle + clean ${fmtDur(dc)}`:'');
+  const ag = (((dayLogFor(date)||{}).prepAgain)||[]).filter(x=>x.m===m);
+  return (su?` · set-up ${fmtDur(su)}`:'') + (ag.length?` (set up again ×${ag.length}: ${ag.map(x=>x.reason.toLowerCase()).join(', ')})`:'') + (dc?` · dismantle + clean ${fmtDur(dc)}`:'');
 }
 /* ============ v169: END SHIFT — everyone still here goes home in the same tap ============ */
 let endHome = null; // {sel:[], at, date}
