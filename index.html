@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v203.6 - 2026-11-09 (Free / not on anything is now 🏃 Runner / Floater — a real job (support hours), so runners are not flagged as unplaced)';
+const APP_VERSION = 'v204 - 2026-11-09 (Compact move picker everywhere — Runner / Closing / Garbage quick tiles, Lines and Side machines 4 across with live status, Clean / Lent / Other folded away; one tap moves them, no Send button — ↩ Undo for 2 min)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2322,6 +2322,31 @@ function moveDests(m){
   out.push({key:'Runner / Floater', grp:'Other', label:'🏃 Runner / Floater', sub:''});
   return out;
 }
+/* ============ v204: COMPACT DESTINATION PICKER — one tap sends (↩ Undo covers a wrong tap) ============
+Lines and side machines up front (4 across), Runner / Closing / Garbage as quick tiles, the rest folded away. */
+let cdOpen = {};
+const _cd = {};
+function cdGroupOf(d){ if(d.grp==='Lines') return 'lines'; if(d.grp==='Side machines') return 'side';
+  if(d.key==='Runner / Floater' || d.key==='Closing · Closing tasks' || d.key==='Garbage run') return 'quick';
+  if(d.grp==='🧽 Clean a machine') return 'clean'; if(String(d.key).startsWith('Lent · ')) return 'lent'; return 'more'; }
+function cdToggle(ctx, g){ cdOpen[ctx] = cdOpen[ctx]===g ? '' : g; render(); }
+function cdPick(ctx, i){ const d = (_cd[ctx]||[])[i]; if(!d) return;
+  if(ctx==='move' && moveCrew){ moveCrew.dest = d.key; if(d.key==='__other'){ render(); return; } doMoveCrew(); }
+  else if(ctx==='after' && liveAfterFinish){ liveAfterFinish.dest = d.key; if(d.key==='__other'){ render(); return; } afterFinishSend(); }
+  else if(ctx==='free' && liveFree){ liveFree.dest = d.key; if(d.key==='__other'){ render(); return; } confirmLiveFree(); } }
+function compactDestHTML(ctx, dests, cur){
+  _cd[ctx] = dests;
+  const subCol = s=>/running|^on$/.test(s) ? 'var(--run)' : /stopped|wait/.test(s) ? 'var(--wait)' : 'var(--muted)';
+  const lab = d=>{ if(d.key==='Runner / Floater') return '🏃 Runner'; if(d.key==='Closing · Closing tasks') return '🌙 Closing'; if(d.key==='Garbage run') return '🗑 Garbage'; if(d.key==='Vacuum Sealer') return 'Vac Sealer'; return String(d.label).replace('🧽 Clean ','').replace('Lent: ',''); };
+  const tile = (d, i)=>{ const on = cur===d.key; return `<button type="button" onclick="cdPick('${ctx}',${i})" style="flex:1 1 0;min-width:0;padding:10px 3px;border-radius:10px;border:1.5px solid ${on?'var(--brk)':'var(--line)'};background:${on?'var(--brk-dim)':'var(--panel2)'};color:var(--text);font-size:13px;font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(lab(d))}${d.sub?`<div style="font-size:10.5px;font-weight:600;color:${subCol(d.sub)};margin-top:2px;">${escapeHtml(d.sub)}</div>`:''}</button>`; };
+  const row = g=>{ const it = dests.map((d,i)=>[d,i]).filter(([d])=>cdGroupOf(d)===g); return it.length ? `<div style="display:flex;gap:5px;margin-top:6px;">${it.map(([d,i])=>tile(d,i)).join('')}</div>` : ''; };
+  const fold = (g, title)=>{ const it = dests.map((d,i)=>[d,i]).filter(([d])=>cdGroupOf(d)===g); if(!it.length) return ''; const open = cdOpen[ctx]===g, hit = it.some(([d])=>d.key===cur);
+    return `<button type="button" onclick="cdToggle('${ctx}','${g}')" style="width:100%;margin-top:6px;display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;border:1.5px solid ${hit?'var(--brk)':'var(--line)'};background:var(--panel);color:var(--text);font-size:13px;font-weight:700;"><span>${title}</span><span class="cb-mut">${it.length} ${open?'▲':'▼'}</span></button>
+      ${open ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:5px;">${it.map(([d,i])=>tile(d,i)).join('')}</div>` : ''}`; };
+  return `<div class="cb-lbl" style="margin:8px 0 0;">TAP WHERE THEY GO</div>${row('quick')}<div class="cb-mut" style="margin-top:8px;font-size:11px;">LINES</div>${row('lines')}<div class="cb-mut" style="margin-top:8px;font-size:11px;">SIDE MACHINES</div>${row('side')}
+    ${fold('clean','🧽 Clean a machine')}${fold('lent','↪ Lent to another dept')}${fold('more','✏️ Other · own break · home')}
+    <div class="cb-mut" style="font-size:11px;margin-top:6px;">One tap moves them — ↩ Undo is there for 2 min if you tap the wrong one.</div>`;
+}
 function openMoveCrew(m){ moveCrew = {m, sel: [], dest: ''}; liveBringBack = null; render(); }
 function toggleMoveSel(i){ const mc = moveCrew; if(!mc) return; const n = liveNames(Store.liveRuns[mc.m])[i]; if(n==null) return;
   mc.sel = mc.sel.includes(n) ? mc.sel.filter(x=>x!==n) : [...mc.sel, n]; render(); }
@@ -2332,10 +2357,9 @@ function moveCrewHTML(m, live){
   return `<div style="margin-top:10px;padding:10px 12px;border:1.5px solid var(--brk);border-radius:10px;">
     <div style="font-size:12px;color:var(--brk);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">👥 MOVE CREW FROM ${escapeHtml(m.toUpperCase())} — WHO IS MOVING?</div>
     <div class="nm-grid">${names.map((n,i)=>`<button type="button" class="nm-chip${mc.sel.includes(n)?' on':''}" onclick="toggleMoveSel(${i})">${mc.sel.includes(n)?'✓ ':''}${escapeHtml(n)}</button>`).join('')}</div>
-    <div class="cb-mut" style="margin-top:8px;font-weight:700;color:var(--text);">Send them to:</div>
-    ${grp('🌙 Closing')}${grp('Lines')}${grp('Side machines')}${grp('🧽 Clean a machine')}${grp('Other')}
+    ${compactDestHTML('move', dests, mc.dest)}
     ${mc.dest==='__other' ? otherInputHTML('moveCrew', mc.otherText) : ''}
-    <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="moveCrew=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="doMoveCrew()">Move ${mc.sel.length||''} →</button></div></div>`;
+    <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="moveCrew=null;render()">Cancel</button>${mc.dest==='__other'?`<button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="doMoveCrew()">Move ${mc.sel.length||''} →</button>`:''}</div></div>`;
 }
 let moveBusy = false;
 async function doMoveCrew(){
@@ -2664,8 +2688,8 @@ function afterFinishHTML(m){
   return `<div class="${isSide?'cb-row':'live-card'}" style="border-color:var(--brk);margin-bottom:10px;${isSide?'flex-direction:column;align-items:stretch;':''}">
     <div style="font-size:12px;color:var(--brk);letter-spacing:.5px;font-weight:700;margin-bottom:6px;">✅ ${escapeHtml(m.toUpperCase())} ${isSide?'ENDED':'FINISHED'} — WHAT IS THE CREW DOING NOW?</div>
     <div class="nm-grid">${a.names.map((n,i)=>`<button type="button" class="nm-chip${a.sel.includes(n)?' on':''}" onclick="toggleAfterSel(${i})">${a.sel.includes(n)?'✓ ':''}${escapeHtml(n)}</button>`).join('')}</div>
-    ${a.mode==='move' ? `${grp('🌙 Closing')}${grp('Lines')}${grp('Side machines')}${grp('🧽 Clean a machine')}${grp('Other')}${a.dest==='__other'?otherInputHTML('liveAfterFinish', a.otherText):''}
-      <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="liveAfterFinish.mode='';render()">← Back</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="afterFinishSend()">Send ${a.sel.length||''} →</button></div>`
+    ${a.mode==='move' ? `${compactDestHTML('after', dests, a.dest)}${a.dest==='__other'?otherInputHTML('liveAfterFinish', a.otherText):''}
+      <div style="display:flex;gap:6px;margin-top:10px;"><button type="button" class="cb-btn" onclick="liveAfterFinish.mode='';render()">← Back</button>${a.dest==='__other'?`<button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="afterFinishSend()">Send ${a.sel.length||''} →</button>`:''}</div>`
     : a.mode==='other' ? `${otherInputHTML('liveAfterFinish', a.otherText)}<div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="liveAfterFinish.mode='';render()">← Back</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="liveAfterFinish.dest='__other';afterFinishSend()">Save</button></div>`
     : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
       ${typeof afterFinishSideBtns==='function' && isSide ? afterFinishSideBtns(m, btn) : btn(`🧽 Shutdown & clean ${shortM(m)}`, `afterFinishGo('${cleanW}')`, 'var(--brk)') + btn('🌙 Closing tasks', `afterFinishGo('Closing · Closing tasks')`)}
@@ -2792,10 +2816,10 @@ function liveFreeHTML(){
   const grp = g=>{ const items = ds.map((d,i)=>d.grp!==g?'':`<button type="button" class="cb-btn" style="flex:1 1 30%;font-size:12px;${f.dest===d.key?sel:''}" onclick="liveFree.dest=liveFreeDests()[${i}].key;render()">${escapeHtml(d.label)}${d.sub?`<div style="font-size:10px;opacity:.75;text-transform:none;">${d.sub}</div>`:''}</button>`).join(''); return items ? `<div class="cb-mut" style="margin:8px 0 4px;">${g}</div><div style="display:flex;gap:5px;flex-wrap:wrap;">${items}</div>` : ''; };
   return `<div class="card" style="border-color:var(--brk);margin-bottom:12px;">
     <div style="font-size:12px;color:var(--brk);letter-spacing:.5px;font-weight:700;">📍 WHERE IS ${escapeHtml(f.name.toUpperCase())} GOING?</div>
-    ${toMin(nowHHMM()) >= 15*60+30 ? grp('🌙 Closing')+grp('Lines')+grp('Side machines')+grp('🧽 Clean a machine')+grp('Other') : grp('Lines')+grp('Side machines')+grp('Other')+grp('🧽 Clean a machine')+grp('🌙 Closing')}${grp('Not here')}
-    ${f.dest==='__other' ? otherInputHTML('liveFree', f.otherText) : ''}
     <span style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span class="cb-mut" style="white-space:nowrap;">From</span><input type="time" value="${f.at}" onchange="liveFree.at=this.value||nowHHMM()" style="padding:8px;flex:1;min-width:0;"></span>
-    <div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="liveFree=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmLiveFree()">Save</button></div></div>`;
+    ${compactDestHTML('free', ds, f.dest)}
+    ${f.dest==='__other' ? otherInputHTML('liveFree', f.otherText) : ''}
+    <div style="display:flex;gap:6px;margin-top:8px;"><button type="button" class="cb-btn" onclick="liveFree=null;render()">Cancel</button>${f.dest==='__other'?`<button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmLiveFree()">Save</button>`:''}</div></div>`;
 }
 async function confirmLiveFree(){
   const f = liveFree; if(!f) return; if(!f.dest){ toast('Pick where they are going'); return; }
