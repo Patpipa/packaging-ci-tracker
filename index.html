@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.2 - 2026-11-10 (Crew bottom sheet: 🏃 Runner button at the top next to ✕ — one tap)';
+const APP_VERSION = 'v205.3 - 2026-11-10 (History: a side machine paused for a planned stop shows the stop name (e.g. ⏸ Crew Talk) instead of Break pause)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5670,7 +5670,8 @@ function sideHistoryItems(dates){
         out.push({syn:true, id:'shw-'+e.id+'-'+k, date, machine:e.machine, status:'WAITING', label:'Paused', reason: REASON_RENAMES[w.reason]||w.reason, start:w.start, end:b, min:mn, people:(e.names||[]).length || (e.pack||0), createdAt: order(job, w.start)}); });
       const nx = es.slice(i+1).find(x=>(x.jobId||x.id)===(e.jobId||e.id));
       if(e.breakPaused && e.end && nx && toMin(nx.start)>toMin(e.end)){ const job = jobFor(e.machine, e.end);
-        out.push({syn:true, id:'shb-'+e.id, date, machine:e.machine, status:'BREAK', label:'Break pause', reason:'Break', start:e.end, end:nx.start, min:toMin(nx.start)-toMin(e.end), people:0, createdAt: order(job, e.end)}); }
+        const cpx = (d.crewPlanned||[]).find(x=>x.start===e.end); // v205.3: paused for a planned stop, not a break
+        out.push({syn:true, id:'shb-'+e.id, date, machine:e.machine, status: cpx ? 'PLANNED' : 'BREAK', label: cpx ? `⏸ ${cpx.reason}` : 'Break pause', reason: cpx ? 'Planned stop — whole crew' : 'Break', start:e.end, end:nx.start, min:toMin(nx.start)-toMin(e.end), people:0, createdAt: order(job, e.end)}); }
     });
     let pd = null; try{ pd = personDay(date); }catch(err){ pd = null; }
     if(pd){
