@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.10 - 2026-11-10 (scale marked down by mistake: 🗑 Pressed by mistake — remove; no downtime counted)';
+const APP_VERSION = 'v205.11 - 2026-11-10 (3D floor v29: 📌 save the current view as this screen’s start view — TV, laptop and phone each keep their own)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3758,7 +3758,7 @@ function fullFloorLink(){
 }
 let fullFloorWin = null;
 /* v124: the 3D page is asked for with its version tag, so a new floor3d.html upload is picked up straight away instead of an older cached copy. Bump this when floor3d.html changes. */
-const FLOOR3D_REV = 'v28';
+const FLOOR3D_REV = 'v29';
 function openFullFloor(e){
   try{
     if(fullFloorWin && !fullFloorWin.closed){ fullFloorWin.focus(); return false; }

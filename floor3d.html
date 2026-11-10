@@ -17,7 +17,7 @@ window.backToTracker=function(){try{if(window.opener&&!window.opener.closed){win
 </script>
 </head>
 <body>
-<title>3D Floor · v28 · CI Tracker</title>
+<title>3D Floor · v29 · CI Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -475,6 +475,7 @@ html,body{height:100%;overflow:hidden}
       <button class="ibtn modebtn" id="modeBtn" aria-label="Switch between photo and 3D floor">3D</button>
       <button class="ibtn only3d" id="vvCam" title="Variovacs" aria-label="Zoom to the Variovacs"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg></button>
       <button class="ibtn only3d" id="resetCam" title="Whole floor" aria-label="Show the whole floor"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="ibtn only3d" id="pinCam" title="Save this view as the start view" aria-label="Save this view as the start view on this screen"><svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg></button>
       <button class="ibtn only3d" id="tvBtn" title="Display mode" aria-label="Display mode: camera tours the floor by itself" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4M10 8.5l4.5 2-4.5 2z"/></svg></button>
       <button class="ibtn" id="stationsBtn" title="Other stations" aria-label="People at other stations"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20v-1.5A5 5 0 0 1 8 13.5h2a5 5 0 0 1 5 5V20"/><circle cx="17" cy="9" r="2.6"/><path d="M17 14a4.5 4.5 0 0 1 4.5 4.5V20"/></svg><span class="badge" id="stationsCount">0</span></button>
     </div>
@@ -538,6 +539,10 @@ const VVIEW={pos:new THREE.Vector3(3,24,20),target:new THREE.Vector3(3,0,6.5)};
 camera.position.copy(VVIEW.pos);controls.target.copy(VVIEW.target);
 // laptop/desktop/TV: pull the start view in so the Variovac section fills the screen (phones and the dashboard copy keep VVIEW as is)
 const VDIR=[0,24,13.5];let camTouched=false;controls.addEventListener("start",()=>{camTouched=true});
+/* v29: 📌 each screen (TV, laptop, phone) can keep its own start view */
+const START_KEY="floor3d_startview_"+(EMBED?"dash":"full");let savedStart=null;
+try{const v=JSON.parse(localStorage.getItem(START_KEY)||"null");if(v&&v.p&&v.t){savedStart=v;VVIEW.pos.fromArray(v.p);VVIEW.target.fromArray(v.t);camera.position.copy(VVIEW.pos);controls.target.copy(VVIEW.target)}}catch(e){}
+function camToast(t){let el=document.getElementById("camToast");if(!el){el=document.createElement("div");el.id="camToast";el.style.cssText="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:rgba(20,24,30,.92);color:#fff;border:1px solid #F2C14E;border-radius:10px;padding:10px 14px;font:600 14px system-ui,sans-serif;z-index:9999;max-width:90vw;text-align:center;pointer-events:none;";document.body.appendChild(el)}el.textContent=t;el.style.opacity="1";clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity="0"},3200)}
 
 function sceneBg(){const c=getComputedStyle(document.documentElement).getPropertyValue("--scene").trim()||"#cfd8de";scene.background=new THREE.Color(c);scene.fog=new THREE.Fog(c,70,140)}
 sceneBg();
@@ -2283,6 +2288,11 @@ let fly=null;
 const FOCUS={v1:[0.0,18.6],v2:[0.0,7.95],v3:[5.25,-7.1],mp:[13.1,10.4],fajita:[-12.9,7.96],cutlet:[-8.2,7.95],slicer:[-17.25,-2.0],vacuum:[-17.45,-6.0],marel:[-5.5,-3.25]};
 function flyTo(key){highlight[key]=performance.now()/1000;const g=FOCUS[key];const tgt=new THREE.Vector3(g[0],0.8,g[1]);
   fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:new THREE.Vector3(g[0]+7,11,g[1]+13),toT:tgt,t:0}}
+(function(){const b=document.getElementById("pinCam");if(!b)return;let last=0;
+  b.onclick=()=>{const now=Date.now();
+    if(now-last<1500&&savedStart){savedStart=null;try{localStorage.removeItem(START_KEY)}catch(e){};VVIEW.pos.set(3,24,20);VVIEW.target.set(3,0,6.5);fitStartView();fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:VVIEW.pos.clone(),toT:VVIEW.target.clone(),t:0};camToast("Start view back to the original");last=0;return}
+    last=now;savedStart={p:camera.position.toArray(),t:controls.target.toArray()};try{localStorage.setItem(START_KEY,JSON.stringify(savedStart))}catch(e){}
+    VVIEW.pos.copy(camera.position);VVIEW.target.copy(controls.target);camToast("📌 Start view saved on this screen · double-tap 📌 to go back to the original")}})();
 document.getElementById("resetCam").onclick=()=>{fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:HOME.pos.clone(),toT:HOME.target.clone(),t:0}};
 document.getElementById("vvCam").onclick=()=>{fly={fromP:camera.position.clone(),fromT:controls.target.clone(),toP:VVIEW.pos.clone(),toT:VVIEW.target.clone(),t:0}};
 
@@ -2402,6 +2412,7 @@ function startPreview(){
 function resize(){const r=stage.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/Math.max(1,r.height);
   camera.fov=r.width<520?46:40;camera.updateProjectionMatrix()}
 function fitStartView(){try{
+  if(savedStart)return; // v29: this screen has its own saved start view
   const r=stage.getBoundingClientRect();if(EMBED||r.width<1000||r.height<300)return;
   const asp=r.width/r.height,k=asp>=1.35?0.85:(asp>=1.15?0.92:1); // wide screens (TV) start closer so the floor fills it
   VVIEW.target.set(3,0,6.5);VVIEW.pos.set(3,VDIR[1]*k,6.5+VDIR[2]*k);window.__fit={k,asp};
