@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v204.1 - 2026-11-09 (Crew tab: Other activities box removed — just Lead / Yield and the crew list)';
+const APP_VERSION = 'v204.2 - 2026-11-09 (Sick, absent, vacation and lent-all-day crew are hidden from every name picker, the crew list and By station — only in Crew → Setup, where you change their status)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2049,9 +2049,11 @@ async function moveFromOthers(names, here, at, exceptSideId){
 /* ---- the name picker (Start Run, Change Staff, side machines) ---- */
 let pickLists = {};
 function pickTarget(ctx){ return ctx==='line' ? liveSetup : ctx==='staff' ? liveStaffSetup : ctx==='dt' ? liveDowntimeSetup : ctx==='prep' ? sidePrep : sideSetup; }
+/* v204.2: sick / absent / vacation / lent all day — only shown in Crew → Setup, so they can't be tapped by mistake */
+function outToday(n){ return ['sick','absent','vacation','lent'].includes(crewRowOf(todayStr(), n).st); }
 function namePickHTML(ctx){
   const t = pickTarget(ctx); if(!t) return ''; const sel = t.names || (t.names = []);
-  const roster = crewRoster(), roles = ctx==='side' ? [] : OFFLINE_ROLES.filter(r=>roleIn(todayStr(), r));
+  const sel0 = (t.names||[]), roster = crewRoster().filter(n=>!outToday(n) || sel0.includes(n)), roles = ctx==='side' ? [] : OFFLINE_ROLES.filter(r=>roleIn(todayStr(), r));
   const list = [...roster, ...roles, ...sel.filter(n=>!roster.includes(n) && !roles.includes(n))];
   pickLists[ctx] = list;
   const here = t.machine, map = whereNowMap(), placed = (dayLogFor(todayStr())||{}).place || {};
@@ -3427,7 +3429,7 @@ function renderCrewList(){
 let crewView = 'list';
 function crewByStationHTML(){
   const T = todayStr(), g = {}, order = [], add = (k, n)=>{ if(!g[k]){ g[k] = []; order.push(k); } g[k].push(n); };
-  const people = [...crewRoster(), ...OFFLINE_ROLES];
+  const people = [...crewRoster().filter(n=>!outToday(n)), ...OFFLINE_ROLES];
   const stOf = n=>{ const r = crewRowOf(T, n), w = String(whereOf(n)||'');
     if(r.st!=='here') return r.st==='lent' ? 'Lent out' : 'Not here';
     if(w.startsWith('Not here')) return 'Not here'; if(w.startsWith('Lent')) return 'Lent out';
@@ -3535,7 +3537,7 @@ function crewQuickActions(){
     ${crewHomeOpen && homeQuick ? homeQuickHTML() : ''}`;
 }
 function crewRowsHTML(){
-  const ppl = [...crewRoster(), ...OFFLINE_ROLES], T = todayStr();
+  const T = todayStr(), off = crewRoster().filter(outToday), ppl = [...crewRoster().filter(n=>!outToday(n)), ...OFFLINE_ROLES];
   const ord = n=>{ const st = crewStatusOf(n); return st.unplaced ? 0 : st.away ? 3 : st.late ? 2 : 1; };
   const sorted = ppl.slice().sort((a,b)=>ord(a)-ord(b));
   return `<div class="card" style="padding:4px 12px;">${sorted.map(n=>{ const st = crewStatusOf(n), since = st.away ? '' : fmtShort(crewSinceMin(n));
@@ -3544,7 +3546,8 @@ function crewRowsHTML(){
       <span style="font-weight:700;flex:0 0 auto;min-width:84px;">${escapeHtml(n)}${helperDay(T,n)?' <span style="font-size:11px;">🤝</span>':''}</span>
       <span style="font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid ${st.c};color:${st.c};white-space:nowrap;">${escapeHtml(st.t)}</span>
       <span class="cb-mut" style="flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(st.where||'')}</span>
-      <span class="mono cb-mut" style="font-size:12px;white-space:nowrap;">${since}</span><span style="color:var(--muted);font-size:16px;">›</span></div>`; }).join('')}</div>`;
+      <span class="mono cb-mut" style="font-size:12px;white-space:nowrap;">${since}</span><span style="color:var(--muted);font-size:16px;">›</span></div>`; }).join('')}
+    ${off.length ? `<div class="cb-mut" style="font-size:12px;padding:10px 0;">Off today: ${escapeHtml(off.map(n=>`${n} (${crewStatusOf(n).t.toLowerCase()})`).join(', '))} — change in <span class="cb-link" onclick="crewSec='setup';render()">Setup</span></div>` : ''}</div>`;
 }
 /* bottom sheet: everything you can do with one person — each button uses the same move as Live */
 async function crewSheetGo(dest){ const sh = crewSheet; if(!sh) return; const n = sh.n;
