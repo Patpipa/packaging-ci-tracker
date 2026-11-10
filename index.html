@@ -2725,7 +2725,7 @@ function goHomeHTML(){
   const c = goHomeCandidates(); if(!c.length) return '';
   if(!goHome){ if(toMin(nowHHMM()) < 16*60) return ''; return `<button type="button" class="cb-btn" style="width:100%;flex:none;padding:12px;margin-bottom:8px;border-color:var(--brk);color:var(--brk);" onclick="openGoHome()">🏠 End of day — mark everyone still here as went home (${c.length})</button>`; }
   return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;border-color:var(--brk);"><span class="cb-nm">🏠 Who went home? <span class="cb-mut">(untick anyone staying)</span></span>
-    <div class="nm-grid">${c.map((n,i)=>{ const w = whereOf(n); return `<button type="button" class="nm-chip${goHome.sel.includes(n)?' on':''}" onclick="toggleGoHome(${i})">${goHome.sel.includes(n)?'✓ ':''}${escapeHtml(n)}<small>${escapeHtml(w?shortWhere(w):'free')}</small></button>`; }).join('')}</div>
+    <div class="nm-grid">${c.map((n,i)=>{ const w = whereOf(n); return `<button type="button" class="nm-chip${goHome.sel.includes(n)?' on':''}" onclick="toggleGoHome(${i})">${goHome.sel.includes(n)?'✓ ':''}${escapeHtml(n)}<small>${escapeHtml(w?shortWhere(w):(OFFLINE_ROLES.includes(n)?'on duty':'free'))}</small></button>`; }).join('')}</div>
     <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut" style="white-space:nowrap;">Went home at</span><input type="time" id="goHomeAt" value="${goHome.at}" style="padding:8px;flex:1;min-width:0;"></span>
     <div style="display:flex;gap:6px;width:100%;"><button type="button" class="cb-btn" onclick="goHome=null;render()">Cancel</button><button type="button" class="cb-btn" style="border-color:var(--brk);color:var(--brk);" onclick="confirmGoHome()">🏠 Went home (${goHome.sel.length})</button></div></div>`;
 }
@@ -3245,8 +3245,8 @@ function endShiftHomeHTML(){
   if(!endHome || endHome.date!==todayStr()) endHome = {sel: c.slice(), at: nowHHMM(), date: todayStr()};
   endHome.sel = endHome.sel.filter(n=>c.includes(n));
   return `<div class="card" style="border-color:var(--brk);"><h3>🏠 Who is going home now?</h3>
-    <div class="cb-mut" style="margin-bottom:8px;">Ticked people are marked <b>Went home</b> when the shift ends. Untick anyone still working (e.g. still cleaning) — mark them later in 👥 Crew → 🏠.</div>
-    <div class="nm-grid">${c.map((n,i)=>{ const on = endHome.sel.includes(n), w = whereOf(n); return `<button type="button" class="nm-chip${on?' on':''}" onclick="toggleEndHome(${i})">${on?'✓ ':''}${escapeHtml(n)}<small>${escapeHtml(w?shortWhere(w):'free')}</small></button>`; }).join('')}</div>
+    <div class="cb-mut" style="margin-bottom:8px;">Ticked people are marked <b>Went home</b> when the shift ends. Untick anyone still working (e.g. still cleaning) — mark them later in Crew → ⌂ Going home.</div>
+    <div class="nm-grid">${c.map((n,i)=>{ const on = endHome.sel.includes(n), w = whereOf(n); return `<button type="button" class="nm-chip${on?' on':''}" onclick="toggleEndHome(${i})">${on?'✓ ':''}${escapeHtml(n)}<small>${escapeHtml(w?shortWhere(w):(OFFLINE_ROLES.includes(n)?'on duty':'free'))}</small></button>`; }).join('')}</div>
     <span style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span class="cb-mut" style="white-space:nowrap;">Went home at</span><input type="time" value="${endHome.at}" onchange="endHome.at=this.value||nowHHMM()" style="padding:8px;flex:1;min-width:0;"></span></div>`;
 }
 function toggleEndHome(i){ const c = goHomeCandidates(), n = c[i]; if(!endHome || n==null) return; endHome.sel = endHome.sel.includes(n) ? endHome.sel.filter(x=>x!==n) : [...endHome.sel, n]; render(); }
