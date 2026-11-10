@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v204.6 - 2026-11-09 (End Shift: Lead Hand and Yield Operator are in the Who is going home list too, ticked — they go off line and home together with the crew)';
+const APP_VERSION = 'v204.7 - 2026-11-09 (↩ Undo now covers Start break, End break and planned stops — a wrong tap is wiped clean for 2 min, as if it never happened)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -6961,7 +6961,16 @@ function undoWrap(name){
 }
 ['roleOffAll','sendNamesTo','doMoveCrew','savePlace','doBringBack','confirmSide','confirmSidePrep','prepDone','confirmGoHome','tapHomeQuick','confirmStaffChange','confirmStartRun','afterFinishGo','backFromBreak'].forEach(undoWrap);
 /* anything else saved after the move (a stop, a finish …) closes the undo window, so Undo never rolls back other work */
-['saveLiveRuns','saveDayLog','saveRecords'].forEach(k=>{ const f = Store[k].bind(Store); Store[k] = async function(...a){ if(undoDepth===0 && !undoRestoring && undoSnap && Date.now()-undoSnap.at > 1500) undoSnap = null; return f(...a); }; });
+/* v204.7: break and planned stop taps can be undone too — Undo puts the day back exactly as before the tap */
+function undoWrapForce(name, label){ const f = window[name]; if(typeof f!=='function') return;
+  window[name] = async function(...args){ if(undoDepth>0 || undoRestoring) return f.apply(this, args);
+    const snap = undoTake(), before = JSON.stringify([breakNow(), openCrewPlanned(), openAllLineStops().map(g=>g.id)]); undoDepth++;
+    let res; try{ res = await f.apply(this, args); } finally { undoDepth--; }
+    if(JSON.stringify([breakNow(), openCrewPlanned(), openAllLineStops().map(g=>g.id)])!==before){ snap.at = Date.now(); snap.label = typeof label==='function' ? label() : label; undoSnap = snap; setTimeout(()=>{ if(undoSnap===snap) render(); }, UNDO_MS + 500); render(); }
+    return res; }; }
+undoWrapForce('startBreakAll', 'Break started'); undoWrapForce('endBreakAll', 'Break ended');
+undoWrapForce('startAllLineStop', ()=>`${(openCrewPlanned()||{}).reason||'Planned stop'} started`); undoWrapForce('resumeAllLineStop', 'Planned stop ended'); undoWrapForce('endCrewPlanned', 'Planned stop ended');
+['saveLiveRuns','saveDayLog','saveRecords'].forEach(k=>{ const f = Store[k].bind(Store); Store[k] = async function(...a){ if(undoDepth===0 && !undoRestoring && undoSnap && Date.now()-undoSnap.at > 4000) undoSnap = null; return f(...a); }; });
 async function undoLast(){
   const s0 = undoSnap; if(!s0 || Date.now()-s0.at > UNDO_MS){ undoSnap = null; render(); return; }
   if(!confirm(`Undo: ${s0.label}?`)) return;
