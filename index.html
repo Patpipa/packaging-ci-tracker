@@ -230,7 +230,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.9 - 2026-11-10 (Daily Report side machines: one fact per line — ran, labour, each pause reason, set-up, dismantle, output)';
+const APP_VERSION = 'v205.10 - 2026-11-10 (scale marked down by mistake: 🗑 Pressed by mistake — remove; no downtime counted)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3336,6 +3336,10 @@ async function scaleIT(){ const s = scaleSetup; if(!s) return; const e = scaleEv
 async function scaleBackUp(){ const s = scaleSetup; if(!s) return; const e = scaleEvents(todayStr()).find(x=>x.id===s.id); if(!e) return;
   const el = document.getElementById('scaleTicket'); if(el && el.value.trim()) e.ticket = el.value.trim().slice(0,30);
   e.end = nowHHMM(); scaleSetup = null; await Store.saveDayLog(); render(); toast(`✅ ${e.scale} back up — down ${fmtShort(scaleMin(e, todayStr()))}`); }
+/* v205.10: scale marked down by mistake — remove it, nothing is counted */
+async function scaleRemove(){ const s = scaleSetup; if(!s) return; const d = dayLogFor(todayStr()); if(!d) return; const e = (d.scales||[]).find(x=>x.id===s.id); if(!e) return;
+  if(!confirm(`Remove ${e.scale} down (${fmtTime12(e.start)})? Use this only if it was pressed by mistake — no downtime is counted.`)) return;
+  d.scales = d.scales.filter(x=>x.id!==e.id); scaleSetup = null; await Store.saveDayLog(); render(); toast(`🗑 ${e.scale} down removed`); }
 function renderScalesBar(){
   const T = todayStr(), up = SCALES.filter(sc=>!scaleOpen(T, sc)).length;
   const sq = sc=>{ const o = scaleOpen(T, sc), m = o ? scaleMin(o, T) : 0;
@@ -3349,7 +3353,8 @@ function renderScalesBar(){
     else { const e = scaleEvents(T).find(x=>x.id===s.id) || {};
       panel = `<div style="margin-top:8px;"><div class="cb-mut" style="font-weight:700;color:var(--text);">⛔ ${s.scale} down since ${fmtTime12(e.start)} · ${fmtShort(scaleMin(e, T))} — ${escapeHtml(e.reason||'')}</div>
         <div class="cb-mut" style="margin-top:3px;">${e.itAt?`📢 Reported at ${fmtTime12(e.itAt)} (${fmtShort(Math.max(0,toMin(e.itAt)-toMin(e.start)))} after it went down)`:'Not reported yet'}</div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Close</button>${e.itAt?'':`<button type="button" class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="scaleIT()">📢 Reported</button>`}<button type="button" class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="scaleBackUp()">✅ Back up</button></div></div>`; } }
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><button type="button" class="cb-btn" onclick="scaleSetup=null;render()">Close</button>${e.itAt?'':`<button type="button" class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="scaleIT()">📢 Reported</button>`}<button type="button" class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="scaleBackUp()">✅ Back up</button></div>
+        <div style="margin-top:6px;"><button type="button" class="cb-btn" style="font-size:12px;opacity:.85;" onclick="scaleRemove()">🗑 Pressed by mistake — remove</button></div></div>`; } }
   return `<div class="card" style="padding:10px 12px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--muted);">🖥 SCALES</span><span style="font-size:12px;font-weight:700;color:${up===SCALES.length?'var(--run)':up===0?'var(--wait)':'var(--change)'};">${up} of ${SCALES.length} working</span></div>
     <div style="display:flex;gap:6px;">${SCALES.map(sq).join('')}</div>${panel}</div>`;
 }
