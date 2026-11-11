@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.14 - 2026-11-11 (working through a break on a Variovac keeps that line running with just them — status On line; the rest stay on break; full crew returns at End break)';
+const APP_VERSION = 'v205.15 - 2026-11-11 (break during a planned stop: asks to end the stop first; Break now covers everyone in — Runner, free and not-placed included — and beats a planned stop)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1294,7 +1294,7 @@ function variovacBreakState(){
   return {any:true, all, start: all ? open.map(o=>o.start).sort().pop() : null};
 }
 function breakEndAfter(t){
-  const ends = []; const d0 = dayLogFor(todayStr()); [ ...((d0 && d0.crewBreaks)||[]), ...((d0 && d0.crewPlanned)||[]) ].forEach(x=>{ if(x.end && x.end>=t) ends.push(x.end); });
+  const ends = []; const d0 = dayLogFor(todayStr()); [ ...((d0 && d0.crewBreaks)||[]), ...((d0 && d0.crewPlanned)||[]) ].forEach(x=>{ if(x.end && (x.end>t || (x.end===t && x.start===t))) ends.push(x.end); }); // v205.15: a planned stop that ended as the break began isn't the break's end
   VARIOVACS.forEach(m=>{ const live = Store.liveRuns[m]; if(!live) return; (live.downtimeSegments||[]).forEach(o=>{ if(o.status==='BREAK' && o.end && o.end>=t) ends.push(o.end); }); });
   return ends.sort()[0] || nowHHMM();
 }
@@ -1414,7 +1414,7 @@ async function syncSideBreaks(){
   const b = variovacBreakState();
   let changed = false, msg = '';
   if(b.any && b.all && !d.breakPause){
-    const runs = (d.side||[]).filter(x=>!x.end && x.start < b.start);
+    const runs = (d.side||[]).filter(x=>!x.end && x.start <= b.start); // v205.15: a side job restarted the same minute the break starts pauses too
     const offl = (d.offline||[]).filter(x=>!x.end && x.start < b.start); // v138: Lead Hand / Yield go off the line with the break too
     if(runs.length || offl.length){
       runs.forEach(x=>{ x.end = b.start; x.breakPaused = true; closeSideWaits(x, b.start); });
@@ -2264,7 +2264,7 @@ function personDay(date){
       const i = t-DAY_FROM; let k, g;
       const wThru = wtl.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
       const onBrk = brk[i] && !(w.startsWith('Not here')) && !wThru; // v178: break time = break for everyone here, whatever they were on (a stopped line, a place, a paused side machine)
-      const inCP = cpr[i] && !w.startsWith('Not here') && !w.startsWith('Lent') && !nal.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
+      const inCP = cpr[i] && !(cbk[i] && !wThru) && !w.startsWith('Not here') && !w.startsWith('Lent') && !nal.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
       if(inCP && !MACHINES.includes(w)){ k = cpr[i]; g = 'Meetings & stretching'; } // v203.3: summoned to the planned stop
       else if(w==='Break · own'){ k='Break (own)'; g='Break'; } // v201
       else if(MACHINES.includes(w)){ const s = st[w][i]; if((s==='BREAK' && !wThru) || (onBrk && (s!=='RUNNING' || cbk[i]))){ k='Break'; g='Break'; } /* v205.14: a line kept running by someone working through — the rest are still on break */ else if(s==='BREAK'){ k='Worked through break'; g='Other duties'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
@@ -3542,9 +3542,9 @@ function crewStatusOf(n){
   if(w==='Not here · Late') return {t:'Late', c:'var(--change)', where:'not in yet', late:true};
   if(w.startsWith('Not here')) return {t:'Home', c:'var(--muted)', where:'went home', away:true};
   if(w.startsWith('Lent')) return {t:'Lent', c:'var(--muted)', where: w.replace('Lent · ',''), away:true};
-  { const cp = openCrewPlanned(); if(cp && !MACHINES.includes(w) && !notAttending().some(x=>x.name===n && x.cp===cp.id && !x.end)) return {t: cp.reason, c:'var(--planned)', where: pausedSideOf(n) || placeLabel(w)}; }
   const bn = breakNow(), wt = bn && workingThrough().some(x=>x.name===n && x.brk===bn.id && !x.end);
-  if(bn && !wt && (w || pausedSideOf(n))) return {t:'Break', c:'var(--brk)', where: pausedSideOf(n) || placeLabel(w)};
+  if(bn && !wt) return {t:'Break', c:'var(--brk)', where: pausedSideOf(n) || placeLabel(w)}; // v205.15: a break beats a planned stop
+  { const cp = openCrewPlanned(); if(cp && !MACHINES.includes(w) && !notAttending().some(x=>x.name===n && x.cp===cp.id && !x.end)) return {t: cp.reason, c:'var(--planned)', where: pausedSideOf(n) || placeLabel(w)}; }
   if(MACHINES.includes(w)){ const li = lineNowInfo(w); return li.running ? {t:'On line', c:'var(--run)', where: shortM(w)} : {t: (li.word||'Stopped'), c: li.color||'var(--change)', where: shortM(w)}; }
   if(SIDE_MACHINES.some(x=>x.name===w)){ const run = openSideRuns(T).find(x=>x.machine===w); const pz = run && sideOpenWait(run); return pz ? {t:'Paused', c:'var(--wait)', where:w} : {t:'Side', c:'var(--amber)', where:w}; }
   if(w.startsWith('Set-up · ')) return {t:'Set-up', c:'var(--amber)', where: w.slice(9)};
@@ -4494,6 +4494,10 @@ function openBreakAll(){
 }
 async function startBreakAll(){
   if(breakBusy) return;
+  { const cp = openCrewPlanned(); /* v205.15: break during a planned stop — end the stop first, or the break sits on top of it */
+    if(cp){ if(confirm(`${cp.reason} is still on.\n\nOK = end ${cp.reason} now and send everyone on break.\nCancel = break now, ${cp.reason} carries on after the break.`)){
+        for(const g of openAllLineStops()) await resumeAllLineStop(g.id);
+        if(openCrewPlanned()) await endCrewPlanned(); await syncSideBreaks(); } } }
   const ms = breakAllCandidates();
   if(!ms.length && !crewTotalFor(todayStr())){ toast('No crew in today'); return; }
   breakBusy = true;
