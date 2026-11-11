@@ -177,6 +177,10 @@ nav.tabbar .tab .ic{font-size:18px;}
 .nm-chip.on{border-color:var(--brk);background:var(--brk-dim);color:var(--brk);}
 .nm-chip.on small{color:var(--brk);}
 .nm-chip.role{border-style:dashed;}
+.nm-chip.busy-run{border:2px solid #e8742a;} .nm-chip.busy-run small{color:#e8742a;font-weight:700;}
+.nm-chip.busy-brk small{color:var(--brk);font-weight:700;}
+.nm-chip.on.busy-run{border-color:#e8742a;}
+.nm-sub{grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
 .nm-chip.trn.on{border-color:#F2C14E;background:rgba(242,193,78,0.15);color:#F2C14E;}
 .nm-chip.trm.on{border-color:var(--change);background:var(--change-dim);color:var(--change);}
 .cb-btn{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 8px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.03em;text-transform:uppercase;cursor:pointer;}
@@ -230,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.11 - 2026-11-10 (3D floor v29: 📌 save the current view as this screen’s start view — TV, laptop and phone each keep their own)';
+const APP_VERSION = 'v205.12 - 2026-11-11 (name picker: free crew first; people already working grouped below with colour — orange running, blue break/closing/garbage, grey stopped; warns who a line loses)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2068,15 +2072,29 @@ function outToday(n){ return ['sick','absent','vacation','lent'].includes(crewRo
 function namePickHTML(ctx){
   const t = pickTarget(ctx); if(!t) return ''; const sel = t.names || (t.names = []);
   const sel0 = (t.names||[]), roster = crewRoster().filter(n=>!outToday(n) || sel0.includes(n)), roles = ctx==='side' ? [] : OFFLINE_ROLES.filter(r=>roleIn(todayStr(), r));
-  const list = [...roster, ...roles, ...sel.filter(n=>!roster.includes(n) && !roles.includes(n))];
-  pickLists[ctx] = list;
   const here = t.machine, map = whereNowMap(), placed = (dayLogFor(todayStr())||{}).place || {};
-  const chips = list.map((n,i)=>{ const on = sel.includes(n), w = (map[n] && map[n]!==here) ? map[n] : (!map[n] && placed[n] ? placed[n].w : '');
-    return `<button type="button" class="nm-chip${on?' on':''}${roles.includes(n)?' role':''}" onclick="toggleName('${ctx}',${i})">${on?'✓ ':''}${escapeHtml(n)}${w?`<small>${escapeHtml(shortWhere(w))}</small>`:''}</button>`; }).join('');
-  const moving = sel.filter(n=>map[n] && map[n]!==here);
+  /* v205.12: free crew first; people already working get a colour so you can see who you'd be pulling off */
+  const busyOf = n=>{ const w = map[n] && map[n]!==here ? map[n] : (!map[n] && placed[n] && placed[n].w!==here ? placed[n].w : '');
+    if(!w || w==='Runner / Floater' || w==='__none') return null;
+    let st = {}; try{ st = crewStatusOf(n)||{}; }catch(e){}
+    const run = map[n]===w && (st.t==='On line' || st.t==='Side' || st.t==='Set-up' || st.c==='#e8742a');
+    const brk = !run && (st.c==='var(--brk)' || w==='Garbage run' || w.startsWith('Closing') || w.startsWith('Break'));
+    const lbl = shortWhere(w) + (run && (st.t==='On line'||st.t==='Side') ? ' · running' : '') + (!run && !brk && map[n]===w && (MACHINES.includes(w)||SIDE_MACHINES.some(x=>x.name===w)) ? ` · ${String(st.t||'stopped').toLowerCase()}` : '');
+    return {w, kind: run?'run':brk?'brk':'idle', lbl}; };
+  const all = [...roster, ...sel.filter(n=>!roster.includes(n) && !roles.includes(n))], B = {}; all.forEach(n=>{ B[n] = busyOf(n); });
+  const rank = {run:0, brk:1, idle:2}, free = all.filter(n=>!B[n]), busy = all.filter(n=>B[n]).sort((a,b)=>rank[B[a].kind]-rank[B[b].kind]);
+  const list = [...free, ...roles, ...busy];
+  pickLists[ctx] = list;
+  const chip = (n,i)=>{ const on = sel.includes(n), b = roles.includes(n) ? null : B[n];
+    return `<button type="button" class="nm-chip${on?' on':''}${roles.includes(n)?' role':''}${b?' busy-'+b.kind:''}" onclick="toggleName('${ctx}',${i})">${on?'✓ ':''}${escapeHtml(n)}${b?`<small>${b.kind==='run'?'● ':''}${escapeHtml(b.lbl)}</small>`:''}</button>`; };
+  const chips = list.map((n,i)=> (i===free.length+roles.length && busy.length ? `<div class="nm-sub">Already working</div>` : '') + chip(n,i)).join('');
+  const moving = sel.filter(n=>B[n] && !roles.includes(n) && map[n]===B[n].w);
+  const lines = [...new Set(moving.map(n=>map[n]))].map(w=>{ const who = moving.filter(n=>map[n]===w), left = Object.keys(map).filter(n=>map[n]===w && !who.includes(n)).length;
+    const isM = MACHINES.includes(w)||SIDE_MACHINES.some(x=>x.name===w), hot = moving.some(n=>map[n]===w && B[n].kind==='run');
+    return `<span style="${hot?'color:#e8742a;font-weight:700;':''}">${escapeHtml(who.join(', '))} ${who.length===1?'moves':'move'} from ${escapeHtml(placeLabel(w))}${isM?` · ${escapeHtml(placeLabel(w))} ${left?`drops to ${left} crew`:'is left with nobody'}`:''}</span>`; });
   return `<div class="nm-grid">${chips}</div>
     <div style="display:flex;gap:6px;margin-top:6px;width:100%;"><input type="text" id="nmAdd_${ctx}" maxlength="24" placeholder="Someone else? Type a name" style="padding:8px;flex:1;min-width:0;"><button type="button" class="cb-btn" style="flex:0 0 auto;" onclick="addPickName('${ctx}')">+ Add</button></div>
-    <div class="cb-mut" style="margin-top:4px;width:100%;">${sel.length ? `<b style="color:var(--text);">${sel.length} ${sel.length===1?'person':'people'}</b>${moving.length?` · ${escapeHtml(moving.join(', '))} will move over from ${escapeHtml([...new Set(moving.map(n=>shortM(map[n])))].join(', '))}`:''}` : 'Tap who is on it'}</div>`;
+    <div class="cb-mut" style="margin-top:4px;width:100%;">${sel.length ? `<b style="color:var(--text);">${sel.length} ${sel.length===1?'person':'people'}</b>${lines.length?'<br>'+lines.join('<br>'):''}` : 'Tap who is on it'}</div>`;
 }
 function syncPickCounts(ctx, t){
   if(ctx==='side'){ t.trainNames = (t.trainNames||[]).filter(n=>t.names.includes(n)); t.pack = t.names.length; t.train = t.trainNames.length; t.trim = (t.trimNames||[]).length; }
