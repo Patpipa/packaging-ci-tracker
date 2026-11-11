@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.12 - 2026-11-11 (name picker: free crew first; people already working grouped below with colour — orange running, blue break/closing/garbage, grey stopped; warns who a line loses)';
+const APP_VERSION = 'v205.13 - 2026-11-11 (Dashboard Variovac / Manual cards show the names of who is on each machine right now)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1825,7 +1825,12 @@ function dayLogLine(date){
   return bits.join(' · ');
 }
 /* v106: Dashboard shows crew per machine card + a slim alert line (only when something needs attention); the full Crew Board lives on the Live Floor. Same live entries, same rules. */
-function crewBadge(m){
+/* v205.13: who is on this machine right now — names under the crew badge on the Dashboard cards */
+function crewNamesOn(m){ const map = whereNowMap(); return Object.keys(map).filter(n=>map[n]===m && !OFFLINE_ROLES.includes(n)).concat(Object.keys(map).filter(n=>map[n]===m && OFFLINE_ROLES.includes(n))); }
+function crewNamesHTML(m){ const ns = crewNamesOn(m); if(!ns.length) return '';
+  return `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${ns.map(n=>`<span style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:7px;color:var(--text);border:1px ${OFFLINE_ROLES.includes(n)?"dashed":"solid"} var(--line);">${escapeHtml(n)}</span>`).join('')}</div>`; }
+function crewBadge(m){ return crewBadge0(m) + crewNamesHTML(m); }
+function crewBadge0(m){
   const l = lineStaffNow(m);
   if(!l.active) return '';
   const need = LINE_NEED[m]||0;
