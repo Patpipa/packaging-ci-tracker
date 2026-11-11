@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.15 - 2026-11-11 (break during a planned stop: asks to end the stop first; Break now covers everyone in — Runner, free and not-placed included — and beats a planned stop)';
+const APP_VERSION = 'v205.16 - 2026-11-11 (all-line planned stop: ▶ Resume all — everyone back on the Dashboard and Crew tab, not just Live)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3585,7 +3585,7 @@ function crewSideCard(){
   const rows = SIDE_MACHINES.map(sm=>{ const m = sm.name, run = openSideRuns(T).find(x=>x.machine===m), bp = !run && breakPausedRun(T, m), pr = peopleAtPlace('Set-up · '+m), di = peopleAtPlace('Dismantle · '+m);
     let t = 'Idle', c = 'var(--muted2)', names = [], since = 0;
     if(run){ const pz = sideOpenWait(run); t = pz ? 'Paused' : 'Running'; c = pz ? 'var(--wait)' : 'var(--run)'; names = run.names||[]; since = Math.max(0, toMin(nowHHMM()) - toMin(pz ? pz.start : run.start)); }
-    else if(bp){ t = 'Break'; c = 'var(--brk)'; names = bp.names||[]; }
+    else if(bp){ const cp0 = !breakNow() && openCrewPlanned(); t = cp0 ? cp0.reason : 'Break'; c = cp0 ? 'var(--planned)' : 'var(--brk)'; names = bp.names||[]; } // v205.16: paused for a planned stop says so
     else if(pr.length){ t = 'Set-up'; c = 'var(--amber)'; names = pr; }
     else if(di.length){ t = disLabel(m); c = '#e8742a'; names = di; }
     return `<div onclick="goToLiveMachine('${m}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);">
@@ -3617,7 +3617,7 @@ function crewQuickActions(){
   const onBrk = !!breakNow();
   const qa = (ic, lab, c, on)=>`<button type="button" onclick="${on}" style="flex:1;min-width:0;padding:10px 2px;border-radius:12px;border:none;background:${c};color:#fff;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;"><span style="font-size:18px;line-height:1;">${ic}</span>${lab}</button>`;
   return `<div style="display:flex;gap:6px;margin-bottom:10px;">${qa('▶','Start line','#2f8a4a',"Router.go('live')")}${qa('⇄', crewMoveOpen?'Close move':'Move crew','#c4782a',"crewMoveOpen=!crewMoveOpen;render()")}${qa('☕', onBrk?'End break':'Start break','#3a78c0', onBrk?'endBreakAll()':'startBreakAll()')}${qa('⌂','Going home','#6b4fb8',"crewHomeOpen=!crewHomeOpen;homeQuick=crewHomeOpen?{open:true,arm:null}:null;render()")}</div>
-    ${breakNow() ? `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);padding:10px 12px;margin-bottom:10px;"><div style="font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--brk);text-transform:uppercase;letter-spacing:.04em;">☕ On break since ${fmtTime12(breakNow().start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(breakNow().start)))}</div><div class="cb-mut" style="font-size:12px;">Everyone in today · side machines paused · End break puts everyone back</div>${workThroughHTML()}</div>` : ''}
+    ${plannedResumeBarHTML()}${breakNow() ? `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);padding:10px 12px;margin-bottom:10px;"><div style="font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--brk);text-transform:uppercase;letter-spacing:.04em;">☕ On break since ${fmtTime12(breakNow().start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(breakNow().start)))}</div><div class="cb-mut" style="font-size:12px;">Everyone in today · side machines paused · End break puts everyone back</div>${workThroughHTML()}</div>` : ''}
     ${crewHomeOpen && homeQuick ? homeQuickHTML() : ''}
     ${crewMoveOpen ? `<div class="cb-mut" style="margin:0 0 6px;">Tap a name to move them:</div>${crewByStationHTML()}` : ''}`;
 }
@@ -4592,8 +4592,17 @@ function liveBreakSlimHTML(){ const b = breakNow(); if(!b) return '';
   return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);display:flex;align-items:center;gap:10px;padding:10px 12px;">
     <span style="flex:1;min-width:0;font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--brk);text-transform:uppercase;letter-spacing:.04em;">☕ On break since ${fmtTime12(b.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(b.start)))}</span>
     <button type="button" class="cb-btn" style="flex:0 0 auto;padding:9px 14px;border-color:var(--run);color:var(--run);" onclick="endBreakAll()">▶ End break</button></div>`; }
+/* v205.16: one-tap resume for an all-line planned stop, on the Dashboard and the Crew tab too */
+async function resumePlannedAll(){ for(const g of openAllLineStops()) await resumeAllLineStop(g.id); if(openCrewPlanned()) await endCrewPlanned(); render(); }
+function plannedResumeBarHTML(){ if(breakNow()) return ''; const cp = openCrewPlanned(), gs = openAllLineStops(); if(!cp && !gs.length) return '';
+  const reason = cp ? cp.reason : gs[0].reason, start = cp ? cp.start : gs[0].start, ms = [...new Set(gs.flatMap(g=>g.machines))];
+  return `<div class="card" style="border-color:var(--planned);background:var(--planned-dim);padding:10px 12px;margin-bottom:10px;">
+    <div style="font-family:'Oswald',sans-serif;font-size:14.5px;color:var(--planned);text-transform:uppercase;letter-spacing:.04em;">⏸ ${escapeHtml(reason)} since ${fmtTime12(start)} · ${fmtDur(elapsedMinutesSince(start))}</div>
+    <div class="cb-mut" style="font-size:12px;">${cp?'Everyone':''}${cp&&ms.length?' · ':''}${ms.map(shortM).join(', ')} · side machines paused</div>
+    <button class="btn btn-primary" style="margin-top:8px;background:var(--run);" onclick="resumePlannedAll()">▶ Resume all — everyone back</button></div>`; }
 function renderBreakAllBar(){
   const b = openBreakAll(), cb = openCrewBreak();
+  { const pr = plannedResumeBarHTML(); if(pr && !b && !cb) return pr; }
   if(!b && cb) return `<div class="card" style="border-color:var(--brk);background:var(--brk-dim);">
     <div style="font-family:'Oswald';font-size:16px;color:var(--brk);text-transform:uppercase;letter-spacing:0.04em;">☕ On break since ${fmtTime12(cb.start)} · ${fmtDur(Math.max(0, toMin(nowHHMM())-toMin(cb.start)))}</div>
     <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Everyone in today · side machines paused</div>${workThroughHTML()}
