@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.13 - 2026-11-11 (Dashboard Variovac / Manual cards show the names of who is on each machine right now)';
+const APP_VERSION = 'v205.14 - 2026-11-11 (working through a break on a Variovac keeps that line running with just them — status On line; the rest stay on break; full crew returns at End break)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1995,7 +1995,7 @@ function shortWhere(w){ if(!w) return ''; if(w==='Garbage run') return 'garbage'
 /* where every packaging person is right now (today only), from the live entries */
 function whereNowMap(){
   const map = {}, T = todayStr();
-  MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || (!(l.segments||[]).length && !(l.pendingNames||[]).length)) return; liveNames(l).forEach(n=>{ map[n] = m; }); });
+  MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || isStaleLive(l) || (l.date && l.date!==T) || (!(l.segments||[]).length && !(l.pendingNames||[]).length)) return; if(l.wtBreak && l.wtBreak.names) l.wtBreak.names.forEach(n=>{ map[n] = m; }); /* v205.14: the rest of the crew is still on this line, on break */ liveNames(l).forEach(n=>{ map[n] = m; }); });
   openSideRuns(T).forEach(s=>(s.names||[]).forEach(n=>{ map[n] = s.machine; }));
   garbageEvents(T).forEach(e=>{ if(!e.end && e.who){ const l = Store.liveRuns[e.machine]; if(l && l.gOut===e.id) map[e.who] = 'Garbage run'; } });
   return map;
@@ -2267,7 +2267,7 @@ function personDay(date){
       const inCP = cpr[i] && !w.startsWith('Not here') && !w.startsWith('Lent') && !nal.some(x=>x.name===n && toMin(x.start)<=t && (!x.end || t<toMin(x.end)));
       if(inCP && !MACHINES.includes(w)){ k = cpr[i]; g = 'Meetings & stretching'; } // v203.3: summoned to the planned stop
       else if(w==='Break · own'){ k='Break (own)'; g='Break'; } // v201
-      else if(MACHINES.includes(w)){ const s = st[w][i]; if((s==='BREAK' && !wThru) || (onBrk && s!=='RUNNING')){ k='Break'; g='Break'; } else if(s==='BREAK'){ k='Worked through break'; g='Other duties'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
+      else if(MACHINES.includes(w)){ const s = st[w][i]; if((s==='BREAK' && !wThru) || (onBrk && (s!=='RUNNING' || cbk[i]))){ k='Break'; g='Break'; } /* v205.14: a line kept running by someone working through — the rest are still on break */ else if(s==='BREAK'){ k='Worked through break'; g='Other duties'; } else { k = `${shortM(w)} ${P_LINE_ST[s]||'no entry'}`; g = s==='RUNNING' ? 'Lines running' : 'Lines stopped'; } }
       else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         const wo = iv && (iv.waits||[]).find(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
@@ -4519,7 +4519,8 @@ async function endBreakAll(){
   try{
     const now = nowHHMM(); let run = 0, back = 0;
     { const bn = breakNow(), d0 = dayLogFor(todayStr()); if(bn && d0) (d0.workThrough||[]).forEach(x=>{ if(x.brk===bn.id && !x.end) x.end = now; }); brkWtOpen = false; }
-    if(cb){ cb.end = toMin(now) < toMin(cb.start) ? cb.start : now; if(!b){ await saveDayLogNow(); toast('▶ Break over — everyone back'); render(); return; } await Store.saveDayLog(); }
+    const wtCh = wtRestoreLines();
+    if(cb){ cb.end = toMin(now) < toMin(cb.start) ? cb.start : now; if(!b){ await saveDayLogNow(); if(wtCh) await Store.saveLiveRuns(); toast('▶ Break over — everyone back'); render(); return; } await Store.saveDayLog(); }
     b.lines.forEach(m=>{ const live = Store.liveRuns[m]; const o = live.downtimeSegments[live.downtimeSegments.length-1];
       o.end = toMin(now) < toMin(o.start) ? o.start : now;
       if(o.resumeTo){ live.downtimeSegments.push({start: o.end, end:null, ...o.resumeTo, notes:''}); back++; }
@@ -4538,11 +4539,35 @@ function workingThrough(date){ const d = dayLogFor(date||todayStr()); return (d 
 function pausedSideOf(n){ const b = breakNow() || openCrewPlanned(), d = dayLogFor(todayStr()); if(!b || !d) return ''; const x = (d.side||[]).find(y=>y.breakPaused && y.end===b.start && (y.names||[]).includes(n)); return x ? x.machine : ''; }
 function placeLabel(w){ return !w || w==='__none' ? 'free' : MACHINES.includes(w) ? shortM(w) : SIDE_MACHINES.some(x=>x.name===w) ? w : (shortWhere(w) || w); }
 function breakPresentNames(){ return crewRoster().filter(n=>{ const w = whereOf(n); return crewRowOf(todayStr(), n).st==='here' && !String(w).startsWith('Not here') && !String(w).startsWith('Lent'); }); }
+/* v205.14: someone working through on a Variovac keeps that line running (with just them) during the break */
+function wtSyncLine(m, b){
+  const live = Store.liveRuns[m]; if(!live || isStaleLive(live)) return false; const now = nowHHMM();
+  const who = workingThrough().filter(x=>x.brk===b.id && !x.end).map(x=>x.name).filter(n=>whereOf(n)===m);
+  if(who.length){
+    if(live.status!=='RUNNING'){ const o = (live.downtimeSegments||[]).slice(-1)[0]; if(!o || o.end || o.status!=='BREAK') return false;
+      const ls = (live.segments||[]).slice(-1)[0]||{}; o.end = now;
+      live.wtBreak = {gid:o.breakAll||null, resumeTo:o.resumeTo||null, emp: live.pendingEmployees!=null ? live.pendingEmployees : ls.employees, names: nextNamesOf(live).names||null};
+      live.segments.push({start: now, end:null, employees: who.length, names: who.slice(), wt:true}); live.status = 'RUNNING'; return true; }
+    const ls = live.segments[live.segments.length-1]; if(live.wtBreak && ls && !ls.end && ls.employees!==who.length){ ls.end = now; live.segments.push({start: now, end:null, employees: who.length, names: who.slice(), wt:true}); return true; }
+    return false;
+  }
+  if(live.wtBreak && live.status==='RUNNING'){ const ls = live.segments[live.segments.length-1]; if(ls && !ls.end) ls.end = now;
+    live.downtimeSegments.push({start: now, end:null, status:'BREAK', reasonCategory:'', reason:'Break', classification:'', notes:'', breakAll: live.wtBreak.gid, resumeTo: live.wtBreak.resumeTo});
+    live.status = 'DOWNTIME'; if(live.wtBreak.emp!=null) live.pendingEmployees = live.wtBreak.emp; if(live.wtBreak.names) live.pendingNames = live.wtBreak.names; delete live.wtBreak; return true; }
+  return false;
+}
+function wtRestoreLines(){ let ch = false; const now = nowHHMM();
+  MACHINES.forEach(m=>{ const live = Store.liveRuns[m]; if(!live || !live.wtBreak) return; const w = live.wtBreak; delete live.wtBreak; ch = true;
+    if(live.status!=='RUNNING') return; const ls = live.segments[live.segments.length-1]; if(ls && !ls.end) ls.end = now;
+    if(w.resumeTo){ live.downtimeSegments.push({start: now, end:null, ...w.resumeTo, notes:''}); live.status = w.resumeTo.status==='RUNNING' ? 'RUNNING' : 'DOWNTIME'; if(w.emp!=null) live.pendingEmployees = w.emp; if(w.names) live.pendingNames = w.names; return; }
+    live.segments.push({start: now, end:null, employees: w.emp!=null ? w.emp : (ls?ls.employees:1), ...(w.names?{names:w.names.slice()}:{})}); });
+  return ch; }
 async function toggleWorkThrough(n){
   const b = breakNow(); if(!b) return; const T = todayStr(), d = ensureDayLog(T);
   d.workThrough = d.workThrough || []; const i = d.workThrough.findIndex(x=>x.name===n && x.brk===b.id && !x.end);
-  if(i>-1){ d.workThrough.splice(i,1); await saveDayLogNow(); return; }
+  if(i>-1){ d.workThrough.splice(i,1); const m0 = whereOf(n); await saveDayLogNow(); if(MACHINES.includes(m0) && wtSyncLine(m0, b)){ await Store.saveLiveRuns(); toast(`${shortM(m0)} back on break`); render(); } return; }
   d.workThrough.push({name:n, brk:b.id, start:b.start, end:null});
+  { const m0 = whereOf(n); if(MACHINES.includes(m0) && wtSyncLine(m0, b)){ await Store.saveLiveRuns(); toast(`${shortM(m0)} keeps running — ${n} working through the break`); } }
   const x = (d.side||[]).filter(y=>y.breakPaused && y.end===b.start && (y.names||[]).includes(n)).pop();
   if(x && !(d.side||[]).some(y=>y.machine===x.machine && !y.end)){
     x.end = null; delete x.breakPaused; if(d.breakPause) d.breakPause.ids = (d.breakPause.ids||[]).filter(id=>id!==x.id);
