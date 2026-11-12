@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.18 - 2026-11-11 (Manual Pack person counts as the floater: no crew need, counts as spare, listed with free crew when picking)';
+const APP_VERSION = 'v205.19 - 2026-11-12 (side machine set-up: ✓ Set up done → Runner ends set-up time without starting the job; Start stays green for later)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1572,7 +1572,7 @@ function renderCrewBoard(mode){
     const stSty = (prepNow.length || stg.st==='ready') ? nx('var(--run)') : '';
     const suTxt = !prepNow.length && stg.set && stg.st!=='fresh' ? `✓ Set up ${fmtTime12(stg.set)}` : `${prepNow.length?'● ':''}🔧 Set up`;
     return `${afterHtml}<div class="cb-row" style="flex-wrap:wrap;gap:6px;${prepNow.length||disNow.length?'border-color:var(--brk);':''}"><span class="cb-nm">${sm.name} ${tag}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${SIDE_PREP.includes(sm.name)&&namesOn()?`<button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${suSty}" onclick="openSidePrep('${sm.name}')">${suTxt}</button><button class="cb-btn" style="flex:0 0 auto;padding:9px 12px;${disSty}" onclick="openSidePrep('${sm.name}','Dismantle')">${disNow.length?'● ':''}🔩 ${disLabel(sm.name)}</button>`:''}<button class="cb-btn" style="flex:0 0 auto;padding:9px 20px;${stSty}" onclick="openSideSetup('${sm.name}')">▶ Start</button></span>
-      ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div><div style="display:flex;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Set-up',true)">＋ Add person</button></div>`:''}
+      ${prepNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔧 Setting up: ${escapeHtml(prepNow.join(', '))} — tap ▶ Start when ready</div><div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Set-up',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Runner / Floater','Set-up')">✓ Set up done → 🏃 Runner</button></div><div class="cb-mut" style="width:100%;font-size:11.5px;">Starting later? Tap ✓ Set up done — Start stays green for when you're ready.</div>`:''}
       ${disNow.length?`<div class="cb-mut" style="width:100%;color:var(--brk);font-weight:600;">🔩 ${sm.name==='Fajita'?'Dismantling / cleaning':'Dismantling'}: ${escapeHtml(disNow.join(', '))}</div><div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="openSidePrep('${sm.name}','Dismantle',true)">＋ Add</button><button class="cb-btn" onclick="prepDone('${sm.name}','Closing · Closing tasks')">✓ Done → 🌙 Closing tasks</button><button class="cb-btn" onclick="prepDone('${sm.name}','Runner / Floater')">✓ Done → 🏃 Runner</button></div>`:''}</div>`;
   }).join('');
   const ctl = crewTimeline(todayStr());
@@ -3234,7 +3234,7 @@ function sidePauseHTML(run){
 let sidePrep = null; // {machine, kind:'Set-up', names:[], trn:[]}
 function openSidePrep(m, kind, keep){ const k = kind||'Set-up'; const sg = sideStage(m); sidePrep = {machine:m, kind: k, names: keep ? peopleAtPlace((k==='Dismantle'?'Dismantle · ':'Set-up · ')+m) : [], trn:[], again: (!keep && k==='Set-up' && sg.set && sg.st!=='fresh') ? sg.set : '', reason:'', otherText:''}; render(); }
 /* v190: dismantle at closing — the dismantle people move on with one tap */
-async function prepDone(m, w){ const ns = peopleAtPlace('Dismantle · '+m); const at = nowHHMM(); for(const n of ns){ placeSetup = {name:n, w, at}; await savePlace(); if(placeSetup){ placeSetup = null; return; } } render(); toast(`🔩 ${m} ${disLabel(m).toLowerCase()} done — ${ns.join(', ')}`); }
+async function prepDone(m, w, kind){ const su = kind==='Set-up'; const ns = peopleAtPlace((su?'Set-up · ':'Dismantle · ')+m); const at = nowHHMM(); for(const n of ns){ placeSetup = {name:n, w, at}; await savePlace(); if(placeSetup){ placeSetup = null; return; } } render(); toast(su ? `🔧 ${m} set up — ready to start later · ${ns.join(', ')} → ${placeLabel(w)}` : `🔩 ${m} ${disLabel(m).toLowerCase()} done — ${ns.join(', ')}`); }
 function togglePrepTrn(i){ const p = sidePrep; if(!p) return; const n = p.names[i]; if(n==null) return; p.trn = p.trn.includes(n) ? p.trn.filter(x=>x!==n) : [...p.trn, n]; render(); }
 async function confirmSidePrep(){
   const p = sidePrep; if(!p) return; const dis = p.kind==='Dismantle'; if(!(p.names||[]).length){ toast(dis ? 'Tap who is dismantling it' : 'Tap who is setting it up'); return; }
