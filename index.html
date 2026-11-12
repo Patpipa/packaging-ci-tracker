@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.17 - 2026-11-11 (debug sweep: side machines restart at the real end of a break when someone worked through; Dashboard names show ☕ for crew on break)';
+const APP_VERSION = 'v205.18 - 2026-11-11 (Manual Pack person counts as the floater: no crew need, counts as spare, listed with free crew when picking)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -801,7 +801,7 @@ Purpose: make packaging's real staffing visible. Everything shown is taken ONLY 
 Stored in Firestore doc tracker/dayLog as { 'YYYY-MM-DD': {crew, crewAt, marelStart, marelEnd, side:[{id, machine, start, end, pack, trim}]} }. */
 const SIDE_MACHINES = [ {name:'Fajita', max:2}, {name:'Slicer', max:1}, {name:'Cutlet', max:1}, {name:'Vacuum Sealer', max:2} ];
 const SIDE_PACK_MAX = 3, SIDE_TRIM_MAX = 2; // v141: any side machine takes up to 3 packaging (e.g. training) and up to 2 trimmers
-const LINE_NEED = {'Variovac 1':2, 'Variovac 2':2, 'Variovac 3':2, 'Manual Pack':2}; // v119: Manual Pack needs 2 — one can step to a side machine while one stays for reboxes
+const LINE_NEED = {'Variovac 1':2, 'Variovac 2':2, 'Variovac 3':2, 'Manual Pack':0}; // v205.18: whoever is on Manual Pack counts as the floater — no fixed need, counts as spare // v119: Manual Pack needs 2 — one can step to a side machine while one stays for reboxes
 const SHIFT_END_MIN = 16*60+30;
 let sideSetup = null;      // {machine, pack, trim, changeId, product, productNote, covering}
 /* v135: Vacuum Sealer product pick, Variovac-breakdown link, "waiting for trimmers" pause on side machines, and QTY / LBS output per machine per day.
@@ -1141,7 +1141,8 @@ function crewSnapshot(){
   // v116: lead hand / yield operator working a line are inside that line's headcount but not in the crew number, so add them back
   const offOnLines = Math.min(onLines, openOffline(date).filter(o=>!o.where || MACHINES.includes(o.where)).length); // v137: On line = on a packaging line (older entries kept their station)
   const gOut = MACHINES.filter(m=>{ const l = Store.liveRuns[m]; return l && !isStaleLive(l) && !!garbageOpenFor(m); }).length; // v155: out on a garbage run = busy, not spare
-  const spare = crew!=null ? crew - (onLines - offOnLines) - sidePack - gOut : null;
+  const flo = counted.filter(l=>l.m==='Manual Pack').reduce((a,l)=>a+l.staff,0); // v205.18: Manual Pack crew = floater, still free to pull
+  const spare = crew!=null ? crew - (onLines - offOnLines - flo) - sidePack - gOut : null;
   return {date, d, lines, side, sidePack, sideTrim, onLines, needed, short, shortLines, notEntered, crew, spare, idleLines, gOut};
 }
 async function saveDayLogNow(){ const ok = await Store.saveDayLog(); if(ok) render(); return ok; }
@@ -2083,17 +2084,18 @@ function namePickHTML(ctx){
   /* v205.12: free crew first; people already working get a colour so you can see who you'd be pulling off */
   const busyOf = n=>{ const w = map[n] && map[n]!==here ? map[n] : (!map[n] && placed[n] && placed[n].w!==here ? placed[n].w : '');
     if(!w || w==='Runner / Floater' || w==='__none') return null;
+    if(w==='Manual Pack') return {w, kind:'flo', lbl:'Manual · floater'};
     let st = {}; try{ st = crewStatusOf(n)||{}; }catch(e){}
     const run = map[n]===w && (st.t==='On line' || st.t==='Side' || st.t==='Set-up' || st.c==='#e8742a');
     const brk = !run && (st.c==='var(--brk)' || w==='Garbage run' || w.startsWith('Closing') || w.startsWith('Break'));
     const lbl = shortWhere(w) + (run && (st.t==='On line'||st.t==='Side') ? ' · running' : '') + (!run && !brk && map[n]===w && (MACHINES.includes(w)||SIDE_MACHINES.some(x=>x.name===w)) ? ` · ${String(st.t||'stopped').toLowerCase()}` : '');
     return {w, kind: run?'run':brk?'brk':'idle', lbl}; };
   const all = [...roster, ...sel.filter(n=>!roster.includes(n) && !roles.includes(n))], B = {}; all.forEach(n=>{ B[n] = busyOf(n); });
-  const rank = {run:0, brk:1, idle:2}, free = all.filter(n=>!B[n]), busy = all.filter(n=>B[n]).sort((a,b)=>rank[B[a].kind]-rank[B[b].kind]);
+  const rank = {run:0, brk:1, idle:2}, free = all.filter(n=>!B[n] || B[n].kind==='flo'), busy = all.filter(n=>B[n] && B[n].kind!=='flo').sort((a,b)=>rank[B[a].kind]-rank[B[b].kind]);
   const list = [...free, ...roles, ...busy];
   pickLists[ctx] = list;
   const chip = (n,i)=>{ const on = sel.includes(n), b = roles.includes(n) ? null : B[n];
-    return `<button type="button" class="nm-chip${on?' on':''}${roles.includes(n)?' role':''}${b?' busy-'+b.kind:''}" onclick="toggleName('${ctx}',${i})">${on?'✓ ':''}${escapeHtml(n)}${b?`<small>${b.kind==='run'?'● ':''}${escapeHtml(b.lbl)}</small>`:''}</button>`; };
+    return `<button type="button" class="nm-chip${on?' on':''}${roles.includes(n)?' role':''}${b && b.kind!=='flo'?' busy-'+b.kind:''}" onclick="toggleName('${ctx}',${i})">${on?'✓ ':''}${escapeHtml(n)}${b?`<small>${b.kind==='run'?'● ':''}${escapeHtml(b.lbl)}</small>`:''}</button>`; };
   const chips = list.map((n,i)=> (i===free.length+roles.length && busy.length ? `<div class="nm-sub">Already working</div>` : '') + chip(n,i)).join('');
   const moving = sel.filter(n=>B[n] && !roles.includes(n) && map[n]===B[n].w);
   const lines = [...new Set(moving.map(n=>map[n]))].map(w=>{ const who = moving.filter(n=>map[n]===w), left = Object.keys(map).filter(n=>map[n]===w && !who.includes(n)).length;
@@ -2771,7 +2773,7 @@ function goHomeHTML(){
 
 /* ============ v167 A: 👥 CREW TAB · PACKAGING LINES (real status) · LIVE ALERT STRIP ============
 Live keeps the machines (Variovacs, Manual Pack, MAREL, side machines). The Crew tab keeps the people. */
-const STAFF_RULES_NOTE = 'Variovac needs 2 · Manual Pack 1 · side machines 1 (2 if training or priority)';
+const STAFF_RULES_NOTE = 'Variovac needs 2 · Manual Pack = floater (no fixed need) · side machines 1 (2 if training or priority)';
 function stopWord(st, reason, cat){
   const r = (reason||'').toLowerCase(), c = (cat||'').toLowerCase();
   if(!st) return 'stopped';
@@ -2827,9 +2829,10 @@ function crewSummaryText(a){
 }
 function packagingLinesNowHTML(){
   const pp = n=>`${n} ${n===1?'person':'people'}`;
-  const rows = MACHINES.map(m=>{ const li = lineNowInfo(m), need = LINE_NEED[m]||2, n = li.names.length;
+  const rows = MACHINES.map(m=>{ const li = lineNowInfo(m), need = (LINE_NEED[m]??2), n = li.names.length;
     let right = '';
-    if(li.running){ const d = n - need; right = d<0 ? `<span style="color:var(--wait);font-weight:700;">need ${need} · short ${-d}</span>` : `<span style="color:var(--run);font-weight:600;">need ${need}${d>0?` · +${d}`:''}</span>`; }
+    if(li.running && !need) right = `<span class="cb-mut" style="font-weight:600;">floater</span>`;
+    else if(li.running){ const d = n - need; right = d<0 ? `<span style="color:var(--wait);font-weight:700;">need ${need} · short ${-d}</span>` : `<span style="color:var(--run);font-weight:600;">need ${need}${d>0?` · +${d}`:''}</span>`; }
     else if(li.active && li.mins!=null) right = `<span class="cb-mut">since ${fmtShort(li.mins)}</span>`;
     return `<div class="cb-row" style="flex-wrap:wrap;gap:4px 8px;${!li.active?'opacity:.55;':''}"><span class="cb-nm" style="min-width:52px;">${shortM(m)}</span><span style="flex:1;font-size:12.5px;font-weight:700;color:${li.color};">${escapeHtml(li.label)}</span><span style="font-size:12px;">${right}</span>
       ${li.active?`<div class="cb-mut" style="width:100%;">${n ? `<b style="color:var(--text);">${n}</b> · ${escapeHtml(li.names.join(', '))}` : 'nobody on it'}</div>`:''}</div>`; }).join('');
@@ -2838,12 +2841,12 @@ function packagingLinesNowHTML(){
 }
 function crewHeaderHTML(){
   const a = crewActivity(), lines = MACHINES.map(lineNowInfo);
-  const short = lines.filter(l=>l.running && l.names.length < (LINE_NEED[l.m]||2));
+  const short = lines.filter(l=>l.running && l.names.length < (LINE_NEED[l.m]??2));
   const freeMins = (a.groups['free']||[]).map(n=>{ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); return lg.length ? Math.max(0, toMin(nowHHMM())-toMin(lg[lg.length-1].at)) : 0; });
   const worstFree = Math.max(0, ...freeMins);
   const red = short.length || worstFree>=30, amber = !red && (worstFree>=15 || a.notPlaced.length);
   const col = red ? ['var(--wait)','var(--wait-dim)'] : amber ? ['var(--change)','var(--change-dim)'] : ['var(--run)','var(--run-dim)'];
-  const title = short.length ? short.map(l=>`${l.m} short ${(LINE_NEED[l.m]||2)-l.names.length}`).join(' · ') : crewSummaryText(a);
+  const title = short.length ? short.map(l=>`${l.m} short ${(LINE_NEED[l.m]??2)-l.names.length}`).join(' · ') : crewSummaryText(a);
   const sub = [`${a.here.length + a.notPlaced.length} here`, ...(a.away.length?[`${a.away.length} away (${a.away.map(x=>`${x.n} — ${placeWord(x.w)==='not here'?x.w.replace('Not here · ','').toLowerCase():x.w.replace('Lent · ','lent to ')}`).join(', ')})`]:[]), ...(a.notPlaced.length?[`not placed yet: ${a.notPlaced.join(', ')}`]:[])].join(' · ');
   return `<div class="cb-hd" style="background:${col[1]};border-color:${col[0]};"><div><div class="cb-big" style="color:${col[0]};">${escapeHtml(title)}</div>${short.length?`<div class="cb-sub" style="font-weight:600;color:var(--text);">${escapeHtml(crewSummaryText(a))}</div>`:''}<div class="cb-sub">${escapeHtml(sub)}</div></div></div>`;
 }
@@ -2887,7 +2890,7 @@ function crewAlertStripHTML(){
   return ownBreakStripHTML() + crewAlertStripInner();
 }
 function crewAlertStripInner(){
-  const a = crewActivity(), short = MACHINES.map(lineNowInfo).filter(l=>l.running && l.names.length < (LINE_NEED[l.m]||2));
+  const a = crewActivity(), short = MACHINES.map(lineNowInfo).filter(l=>l.running && l.names.length < (LINE_NEED[l.m]??2));
   const free = a.groups['free']||[], W = (((dayLogFor(todayStr())||{}).where)||{}), now = toMin(nowHHMM());
   // v201: minutes not recorded — amber from 5 min, red from 10 min. Never placed by itself.
   const esc = m=>m>=10?'var(--wait)':m>=5?'var(--change)':'var(--muted)';
@@ -2897,7 +2900,7 @@ function crewAlertStripInner(){
   const red = short.length || people.some(p=>p.col==='var(--wait)');
   const chip = p=>`<button type="button" class="cb-btn" style="flex:0 0 auto;text-transform:none;font-family:inherit;font-size:13px;padding:8px 10px;${liveFree&&liveFree.name===p.n?'border-color:var(--brk);color:var(--brk);':''}" onclick="event.stopPropagation();openLiveFree('${p.n.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"><b>${escapeHtml(p.n)}</b> <span style="color:${p.col};font-weight:700;">${p.txt}</span></button>`;
   return `<div style="margin-bottom:12px;padding:10px 12px;border-radius:12px;border:1.5px solid ${red?'var(--wait)':'var(--change)'};background:${red?'var(--wait-dim)':'var(--change-dim)'};">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span style="font-size:13px;font-weight:700;color:${red?'var(--wait)':'var(--change)'};">⚠ ${escapeHtml([...short.map(l=>`${shortM(l.m)} short ${(LINE_NEED[l.m]||2)-l.names.length}`), ...(people.length?[`${people.length} to place — tap a name`]:[])].join(' · '))}</span><span onclick="Router.go('crew')" style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;">Crew →</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span style="font-size:13px;font-weight:700;color:${red?'var(--wait)':'var(--change)'};">⚠ ${escapeHtml([...short.map(l=>`${shortM(l.m)} short ${(LINE_NEED[l.m]??2)-l.names.length}`), ...(people.length?[`${people.length} to place — tap a name`]:[])].join(' · '))}</span><span onclick="Router.go('crew')" style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;">Crew →</span></div>
     ${people.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${people.map(chip).join('')}</div>`:''}
   </div>${liveFreeHTML()}`;
 }
