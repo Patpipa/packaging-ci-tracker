@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.16 - 2026-11-11 (all-line planned stop: ▶ Resume all — everyone back on the Dashboard and Crew tab, not just Live)';
+const APP_VERSION = 'v205.17 - 2026-11-11 (debug sweep: side machines restart at the real end of a break when someone worked through; Dashboard names show ☕ for crew on break)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1295,6 +1295,7 @@ function variovacBreakState(){
 }
 function breakEndAfter(t){
   const ends = []; const d0 = dayLogFor(todayStr()); [ ...((d0 && d0.crewBreaks)||[]), ...((d0 && d0.crewPlanned)||[]) ].forEach(x=>{ if(x.end && (x.end>t || (x.end===t && x.start===t))) ends.push(x.end); }); // v205.15: a planned stop that ended as the break began isn't the break's end
+  if(ends.length) return ends.sort()[0]; // v205.17: the crew break's own end — a line restarted early by someone working through isn't it
   VARIOVACS.forEach(m=>{ const live = Store.liveRuns[m]; if(!live) return; (live.downtimeSegments||[]).forEach(o=>{ if(o.status==='BREAK' && o.end && o.end>=t) ends.push(o.end); }); });
   return ends.sort()[0] || nowHHMM();
 }
@@ -1828,7 +1829,8 @@ function dayLogLine(date){
 /* v205.13: who is on this machine right now — names under the crew badge on the Dashboard cards */
 function crewNamesOn(m){ const map = whereNowMap(); return Object.keys(map).filter(n=>map[n]===m && !OFFLINE_ROLES.includes(n)).concat(Object.keys(map).filter(n=>map[n]===m && OFFLINE_ROLES.includes(n))); }
 function crewNamesHTML(m){ const ns = crewNamesOn(m); if(!ns.length) return '';
-  return `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${ns.map(n=>`<span style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:7px;color:var(--text);border:1px ${OFFLINE_ROLES.includes(n)?"dashed":"solid"} var(--line);">${escapeHtml(n)}</span>`).join('')}</div>`; }
+  const bn = breakNow(), onB = n=>bn && !workingThrough().some(x=>x.name===n && x.brk===bn.id && !x.end); // v205.17: during a break, who is actually working shows plain; the rest get ☕
+  return `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${ns.map(n=>`<span style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:7px;color:var(--text);${onB(n)?'opacity:.55;':''}border:1px ${OFFLINE_ROLES.includes(n)?"dashed":"solid"} var(--line);">${onB(n)?'☕ ':''}${escapeHtml(n)}</span>`).join('')}</div>`; }
 function crewBadge(m){ return crewBadge0(m) + crewNamesHTML(m); }
 function crewBadge0(m){
   const l = lineStaffNow(m);
