@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.20 - 2026-11-12 (side machine on downtime: you can pull everyone off — it stays paused with nobody, no labour counted; Resume asks who runs it)';
+const APP_VERSION = 'v205.21 - 2026-11-12 (helpers: Send back to Burger Room no longer shows as Went home; 🤝 Join again / ↩ Undo / ✕ Cancel join; anyone marked gone by mistake → ↩ Bring back in Setup)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2285,7 +2285,7 @@ function personDay(date){
       else if(w.startsWith('Planned · ')){ k = w.slice(10); g = 'Meetings & stretching'; }
       else if(w.startsWith('Set-up · ')){ k = `${w.slice(9)} set-up`; g = 'Side machines'; }
       else if(w.startsWith('Dismantle · ')){ k = `${w.slice(12)} ${disLabel(w.slice(12)).toLowerCase()}`; g = 'Side machines'; }
-      else if(w){ const p = PLACES.find(x=>x.w===w); k = w.replace('Closing · ',''); g = p ? p.g : 'Other'; }
+      else if(w){ const p = PLACES.find(x=>x.w===w); k = w.replace('Closing · ',''); g = p ? p.g : (w.startsWith('Not here') ? 'Not here' : 'Other'); } // v205.21: helper back in their dept = not here
       else if(brk[i] && !wThru){ k='Break'; g='Break'; } else if(isRole){ k = `${n} duties`; g = 'Lead / Yield duties'; } else { k='Not recorded'; g='Not recorded'; }
       tot[k] = (tot[k]||0)+1; grp[g] = (grp[g]||0)+1;
       let det = '';
@@ -3003,13 +3003,13 @@ function effectiveLog(date, n){
   if(r.st!=='here') return [{at: r.start||'08:00', w: stPlace(r)}];
   let log = raw.slice();
   if(r.start && (!log.length || toMin(log[0].at) > toMin(r.start))) log.unshift({at: r.start, w: OFFLINE_ROLES.includes(n) ? '' : ''});
-  if(r.end){ log = log.filter(e=>toMin(e.at) < toMin(r.end)); log.push({at: r.end, w:'Not here · Went home'}); }
+  if(r.end){ log = log.filter(e=>toMin(e.at) < toMin(r.end)); log.push({at: r.end, w: goneLabel(r)}); }
   return log;
 }
 /* shift start comes from today's crew (or the usual start) */
 { const _so = shiftOf; shiftOf = function(date, n){ const cd = crewDayOf(date)[n]; if(cd && cd.start) return {start: cd.start, set: cd.start!=='08:00'}; const x = _so(date, n); if(!x.set && crewUsual()[n] && (cd || namesCrewActive(date))) return {start: crewUsual()[n], set:true}; return x; }; }
 /* where someone is right now, with today's crew status on top */
-{ const _wo = whereOf; whereOf = function(n){ const T = todayStr(), cd = crewDayOf(T)[n]; if(cd){ const r = crewRowOf(T, n); if(r.st!=='here') return stPlace(r); if(r.end && toMin(nowHHMM())>=toMin(r.end) && !whereNowMap()[n]) return 'Not here · Went home'; } return _wo(n); }; }
+{ const _wo = whereOf; whereOf = function(n){ const T = todayStr(), cd = crewDayOf(T)[n]; if(cd){ const r = crewRowOf(T, n); if(r.st!=='here') return stPlace(r); if(r.end && toMin(nowHHMM())>=toMin(r.end) && !whereNowMap()[n]) return goneLabel(r); } return _wo(n); }; }
 { const _np = notPlacedYet; notPlacedYet = function(){ const T = todayStr(); return _np().filter(n=>{ const cd = crewDayOf(T)[n]; return !cd || crewRowOf(T,n).st==='here'; }); }; }
 { const _ri = roleIn; roleIn = function(date, role){ const cd = crewDayOf(date)[role]; if(cd) return crewRowOf(date, role).st==='here'; return _ri(date, role); }; }
 { const _na = namesCrewActive; namesCrewActive = function(date){ return _na(date) || Object.keys(crewDayOf(date)).some(n=>!OFFLINE_ROLES.includes(n)); }; }
@@ -3046,7 +3046,24 @@ async function addCrewName(){ const el = document.getElementById('crewAddIn'), n
 async function helperJoin(n){ const el = document.getElementById('hjoin-'+n.replace(/[^a-z0-9]/gi,'_')); const at = (el && el.value) || nowHHMM(); const h = helperOf(n);
   const d = ensureDayLog(todayStr()); d.crewDay = d.crewDay || {}; d.crewDay[n] = {st:'here', start: at, end:'', helper:true, dept: (h && h.dept) || 'Other dept'};
   await Store.saveDayLog(); toast(`🤝 ${n} joined packaging at ${fmtTime12(at)}`); render(); }
-async function helperBack(n){ const at = nowHHMM(); placeSetup = {name:n, w:'Not here · Went home', at}; await savePlace(); if(placeSetup){ placeSetup = null; return; }
+/* v205.21: a helper going back to their department is NOT "went home" — and it can be undone or they can join again */
+function goneLabel(r){ return r && r.helper && r.backAt ? `Not here · Back to ${r.dept||'their dept'}` : 'Not here · Went home'; }
+async function helperReturn(n, undo){ const d = ensureDayLog(todayStr()), c = d.crewDay && d.crewDay[n]; if(!c || !c.backAt) return; const at = nowHHMM(), back = c.backAt;
+  if(undo && !confirm(`Undo — ${n} didn't go back to ${c.dept||'their dept'}?`)) return;
+  delete c.backAt; c.end = '';
+  d.where = d.where || {}; const log = d.where[n] || (d.where[n] = []);
+  d.place = d.place || {}; delete d.place[n];
+  if(undo){ const keep = log.filter(e=>!(String(e.w).startsWith('Not here') && toMin(e.at)>=toMin(back))); d.where[n] = keep;
+    const prev = keep.filter(e=>toMin(e.at)<=toMin(back)).slice(-1)[0];
+    if(prev && prev.w && !MACHINES.includes(prev.w) && !SIDE_MACHINES.some(x=>x.name===prev.w)) d.place[n] = {w: prev.w, at: prev.at}; }
+  else log.push({at, w:''});
+  await Store.saveDayLog(); render(); toast(undo ? `↩ ${n} is still with you` : `🤝 ${n} joined packaging again at ${fmtTime12(at)}`); }
+async function bringBack(n){ const T = todayStr(), r = crewRowOf(T, n); if(!confirm(`Bring ${n} back? (marked gone by mistake)`)) return;
+  const d = ensureDayLog(T); if(r.end){ d.crewDay = d.crewDay || {}; d.crewDay[n] = {...r, end:''}; }
+  d.where = d.where || {}; d.where[n] = d.where[n] || []; if(d.place) delete d.place[n];
+  if(String((d.where[n].slice(-1)[0]||{}).w||'').startsWith('Not here')) d.where[n].push({at: nowHHMM(), w:''});
+  await Store.saveDayLog(); render(); toast(`↩ ${n} is back`); }
+async function helperBack(n){ const at = nowHHMM(); const hd = helperDay(todayStr(), n)||{}; placeSetup = {name:n, w:`Not here · Back to ${hd.dept||(helperOf(n)||{}).dept||'their dept'}`, at}; await savePlace(); if(placeSetup){ placeSetup = null; return; }
   const d = ensureDayLog(todayStr()); if(d.crewDay && d.crewDay[n]){ d.crewDay[n].end = at; d.crewDay[n].backAt = at; } await Store.saveDayLog(); toast(`${n} went back to ${(helperOf(n)||{}).dept||'their department'}`); render(); }
 async function helperUndoJoin(n){ if(whereNowMap()[n]){ toast(`${n} is on ${whereNowMap()[n]} — take them off first`); return; } if(!confirm(`Remove ${n} from today's crew? (joined by mistake)`)) return; const d = ensureDayLog(todayStr()); if(d.crewDay) delete d.crewDay[n]; if(d.where) delete d.where[n]; if(d.place) delete d.place[n]; await Store.saveDayLog(); render(); }
 async function helperAdd(){ const el = document.getElementById('helperAddIn'), dl = document.getElementById('helperAddDept'); const n = el ? el.value.trim().replace(/\s+/g,' ').slice(0,24) : ''; if(!n) return;
@@ -3060,7 +3077,7 @@ function helpersCardHTML(){
   const js = n=>n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="helpersOpen=!helpersOpen;render()"><h3 style="margin:0;">🤝 Helpers from other depts <span class="cb-mut" style="font-family:Inter,sans-serif;text-transform:none;letter-spacing:0;">· ${joined.filter(h=>!helperDay(T,h.n).backAt).length} with us</span></h3><span class="cb-mut">${helpersOpen?'▲':'▼'}</span></div>
     ${joined.map(h=>{ const c = helperDay(T, h.n); return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm">${escapeHtml(h.n)} <span class="cb-mut">${escapeHtml(h.dept)}</span></span><span class="cb-mut" style="color:${c.backAt?'var(--muted)':'var(--run)'};">${c.backAt?`went back ${fmtTime12(c.backAt)}`:`with us from ${fmtTime12(c.start)}`}</span>
-      ${c.backAt?'':`<div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="helperBack('${js(h.n)}')">↩ Went back to ${escapeHtml(h.dept)}</button><button class="cb-btn" style="flex:0 0 auto;" onclick="helperUndoJoin('${js(h.n)}')">✕</button></div>`}</div>`; }).join('')}
+      ${c.backAt?`<div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="helperReturn('${js(h.n)}')">🤝 Join again</button><button class="cb-btn" style="flex:0 0 auto;" onclick="helperReturn('${js(h.n)}',true)">↩ Undo — still with us</button></div>`:`<div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="helperBack('${js(h.n)}')">↩ Send back to ${escapeHtml(h.dept)}</button><button class="cb-btn" style="flex:0 0 auto;" onclick="helperUndoJoin('${js(h.n)}')">✕ Cancel join</button></div>`}</div>`; }).join('')}
     ${helpersOpen ? `${rest.map(h=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm">${escapeHtml(h.n)} <span class="cb-mut">${escapeHtml(h.dept)}</span></span>
       <span style="display:flex;gap:6px;align-items:center;width:100%;"><span class="cb-mut">Joined at</span><input type="time" id="hjoin-${h.n.replace(/[^a-z0-9]/gi,'_')}" value="${now}" style="padding:7px;flex:1;min-width:0;"><button class="cb-btn" style="flex:0 0 auto;border-color:var(--run);color:var(--run);" onclick="helperJoin('${js(h.n)}')">🤝 Join</button></span>
       <span class="cb-link" style="font-size:11.5px;color:var(--wait);" onclick="helperRemove('${js(h.n)}')">✕ remove from helpers</span></div>`).join('')}
@@ -3486,7 +3503,7 @@ function renderCrewList(){
     const ch = here ? crewWhereChip(n) : {t: r.st==='lent' ? `lent → ${r.dept||'other dept'}` : ({sick:'sick',absent:'absent',vacation:'vacation'}[r.st]), c:'var(--muted)'};
     const times = here ? `${fmtTime12(r.start).replace(':00','')} – ${r.end ? fmtTime12(r.end).replace(':00','') : '…'}` : '';
     const on = role && here ? openOffline(T).find(o=>o.role===n) : null;
-    const goneHome = String(whereOf(n))==='Not here · Went home';
+    const goneHome = String(whereOf(n))==='Not here · Went home' || String(whereOf(n)).startsWith('Not here · Back to');
     let html = `<div class="cb-row" style="flex-wrap:wrap;gap:4px 8px;${here&&!goneHome?'':'opacity:.6;'}">
       <span class="cb-nm" style="min-width:86px;">${here&&!goneHome?'✓ ':''}${escapeHtml(n)}${helperDay(T,n)?` <span class="cb-mut" style="font-size:11px;">🤝 ${escapeHtml(helperDay(T,n).dept||'')}</span>`:''}</span>
       ${here?`<span class="cb-link" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="crewEditRow=crewEditRow==='${js}'?null:'${js}';render()">${times}${r.end?' <span style="color:var(--change);">½</span>':''}</span>`:''}
@@ -3494,7 +3511,7 @@ function renderCrewList(){
       <select onchange="setCrewDay('${js}',{st:this.value})" style="padding:5px 4px;font-size:12px;flex:0 0 auto;width:auto;">${CREW_ST.map(([k,l])=>`<option value="${k}" ${r.st===k?'selected':''}>${l}</option>`).join('')}</select>
       ${role || helperDay(T,n) ? '' : `<button type="button" class="cb-btn" style="flex:0 0 auto;padding:4px 10px;color:var(--wait);border-color:var(--wait);" onclick="removeCrewName('${js}')" aria-label="Remove ${escapeHtml(n)}">✕</button>`}
       <div style="width:100%;display:flex;align-items:center;gap:8px;">
-        ${here && !goneHome && !role ? `<span onclick="liveFree&&liveFree.name==='${js}'?(liveFree=null,render()):openLiveFree('${js}')" style="cursor:pointer;flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)} ›</span>` : `<span style="flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)}</span>`}
+        ${here && goneHome ? `<button class="cb-btn" style="flex:0 0 auto;padding:7px 12px;border-color:var(--run);color:var(--run);order:2;" onclick="${helperDay(T,n)&&helperDay(T,n).backAt?`helperReturn('${js}')`:`bringBack('${js}')`}">${helperDay(T,n)&&helperDay(T,n).backAt?'🤝 Join again':'↩ Bring back'}</button>` : ''}${here && !goneHome && !role ? `<span onclick="liveFree&&liveFree.name==='${js}'?(liveFree=null,render()):openLiveFree('${js}')" style="cursor:pointer;flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)} ›</span>` : `<span style="flex:1;font-size:13px;font-weight:600;color:${ch.c};">📍 ${escapeHtml(ch.t)}</span>`}
         ${role && here ? (on || (whereOf(n) && whereOf(n)!=='__none' && !String(whereOf(n)).startsWith('Not here')) ? `<button class="cb-btn" style="flex:0 0 auto;padding:7px 12px;border-color:var(--brk);color:var(--brk);" onclick="roleOffAll('${js}')">Off line</button>` : `<button class="cb-btn" style="flex:0 0 auto;padding:7px 14px;" onclick="startOffline('${js}')">On line</button>`) : ''}
         ${r.st==='lent'?`<select onchange="setCrewDay('${js}',{dept:this.value})" style="padding:5px;font-size:12px;flex:0 0 auto;width:auto;">${LENT_DEPTS.map(x=>`<option ${r.dept===x?'selected':''}>${x}</option>`).join('')}</select>`:''}
       </div>`;
@@ -3547,6 +3564,7 @@ function crewStatusOf(n){
   const T = todayStr(), r = crewRowOf(T, n), w = String(whereOf(n)||''), role = OFFLINE_ROLES.includes(n);
   if(r.st!=='here') return r.st==='lent' ? {t:'Lent', c:'var(--muted)', where: r.dept||'other dept', away:true} : {t:({sick:'Sick',absent:'Absent',vacation:'Vacation'}[r.st]||'Away'), c:'var(--muted)', where:'', away:true};
   if(w==='Not here · Late') return {t:'Late', c:'var(--change)', where:'not in yet', late:true};
+  if(w.startsWith('Not here · Back to ')){ const dp = w.replace('Not here · Back to ',''); return {t: dp, c:'var(--muted)', where:'back to '+dp, away:true}; } // v205.21
   if(w.startsWith('Not here')) return {t:'Home', c:'var(--muted)', where:'went home', away:true};
   if(w.startsWith('Lent')) return {t:'Lent', c:'var(--muted)', where: w.replace('Lent · ',''), away:true};
   const bn = breakNow(), wt = bn && workingThrough().some(x=>x.name===n && x.brk===bn.id && !x.end);
