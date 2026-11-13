@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.26 - 2026-11-12 (Labour breakdown: time at a side machine with no job running counts as Stopped / waiting, not Running)';
+const APP_VERSION = 'v205.27 - 2026-11-12 (Labour breakdown: tap ⓘ How these numbers add up — worked with the report’s own numbers)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2593,7 +2593,25 @@ function labourCat(sg){
   if(sg.g==='Not recorded') return 'nr';
   return 'sup';
 }
-function labourAdd(acc, p){ if(p.away) return; p.segs.forEach(sg=>{ const c = labourCat(sg); if(!c) return; const m = sg.b-sg.a; acc[c] = (acc[c]||0)+m; acc.floor = (acc.floor||0)+m; if(sg.ot) acc.ot = (acc.ot||0)+m; }); }
+function labourAdd(acc, p){ if(p.away) return; let any = false; p.segs.forEach(sg=>{ const c = labourCat(sg); if(!c) return; any = true; const m = sg.b-sg.a; acc[c] = (acc[c]||0)+m; acc.floor = (acc.floor||0)+m; if(sg.ot) acc.ot = (acc.ot||0)+m; if(sg.g==='Lead / Yield duties') acc.ly = (acc.ly||0)+m; }); if(any) acc.ps = (acc.ps||0)+1; }
+/* v205.27: tap-to-open explanation of how the labour numbers add up, using this report's own numbers */
+function labourHowHTML(acc){
+  const h = m=>chDur(m||0), F = acc.floor||0, D = (acc.run||0)+(acc.stop||0), sum = D+(acc.sup||0)+(acc.lent||0)+(acc.brk||0)+(acc.nr||0);
+  const pct = m=>F ? `${((m||0)/F*100).toFixed(1)}% → ${Math.round((m||0)/F*100)}%` : '—', ps = acc.ps||0, est = ps*510 + (acc.ot||0);
+  const li = t=>`<li style="margin:0 0 6px;">${t}</li>`;
+  return `<details style="margin-top:8px;font-size:11.5px;color:#555;line-height:1.5;border:1px solid #ddd;border-radius:8px;padding:6px 10px;background:#fafafa;"><summary style="cursor:pointer;font-weight:700;color:#1e3a5f;">ⓘ How these numbers add up</summary>
+    <ol style="margin:8px 0 2px;padding-left:18px;">
+      ${li(`<b>Direct labour</b> = Running + Stopped / waiting<br>${h(acc.run)} + ${h(acc.stop)} = <b>${h(D)}</b>`)}
+      ${li(`<b>Floor presence</b> = Direct + Support + Lent out + Break + Not recorded<br>${h(D)} + ${h(acc.sup)} + ${h(acc.lent)} + ${h(acc.brk)} + ${h(acc.nr)} = <b>${h(sum)}</b> ${sum===F?'✅ matches':'⚠ does not match '+h(F)}`)}
+      ${li(`<b>Each %</b> = that row ÷ Floor presence<br>e.g. Running ${h(acc.run)} ÷ ${h(F)} = ${pct(acc.run)}. Direct + Support + Lent + Break + Not recorded = 100%.`)}
+      ${li(`<b>Overtime</b> (${h(acc.ot)}) is time before 8:00 AM or after 4:30 PM. It is <i>already inside</i> the rows above — not added again. ${h(acc.ot)} ÷ ${h(F)} = ${pct(acc.ot)}. Floor-logged, not payroll.`)}
+      ${li(`<b>Quick sense check</b> (full shift) — ${ps} person-shift${ps===1?'':'s'} × 8h 30m (8:00–4:30) + overtime ≈ ${h(est)}. Floor presence is ${h(F)}; a small difference is normal (late starts, early leaves, half days). Mid-shift it will be lower — the day isn't over yet.`)}
+      ${li(`<b>Support</b> includes Lead Hand / Yield time (${h(acc.ly)}) plus set-up, dismantle / clean, closing, garbage, Runner and other duties.`)}
+      ${li(`<b>Break</b> — two 30-min crew breaks ≈ 1h per person (${ps} × 1h = ${h(ps*60)}). More than that usually means own breaks, a break that ran long, or extra people (helpers).`)}
+      ${li(`<b>Not recorded</b> — in today but not tapped onto anything. Keep it low so the numbers stay accurate.`)}
+      ${li(`<b>PLH</b> uses only the lines' labour (V1–V3, Manual). Gross = lbs ÷ all their hours on the run; Net = lbs ÷ running hours only.`)}
+    </ol></details>`;
+}
 function labourBreakdownHTML(acc, td){
   const h = m=>chDur(m||0), pc = m=>acc.floor ? Math.round((m||0)/acc.floor*100)+'%' : '';
   const row = (t, m, sub, st)=>`<tr><td style="${td}${st||''}">${t}${sub?`<div style="font-size:10.5px;color:#888;">${sub}</div>`:''}</td><td style="${td}text-align:right;white-space:nowrap;${st||''}">${h(m)}</td><td style="${td}text-align:right;color:#888;">${pc(m)}</td></tr>`;
@@ -2609,7 +2627,7 @@ function labourBreakdownHTML(acc, td){
     ${row('&nbsp;&nbsp;Not recorded', acc.nr, 'in, but not tapped onto anything', acc.nr?'color:#c0392b;':'')}
     ${row('Overtime (floor-logged)', acc.ot, 'before 8:00 AM / after 4:30 PM — already inside the rows above · not payroll', acc.ot?'color:#c0392b;':'')}
   </table>
-  <div style="font-size:10.5px;color:#666;margin-top:6px;line-height:1.5;">PLH (Lines only) divides lbs by the labour of people on V1–V3 and Manual: <b>gross</b> = all their time on the run (stops and paid break included), <b>net</b> = running time only. Side machine, support, lent and break hours are not in PLH.</div>`;
+  <div style="font-size:10.5px;color:#666;margin-top:6px;line-height:1.5;">PLH (Lines only) divides lbs by the labour of people on V1–V3 and Manual: <b>gross</b> = all their time on the run (stops and paid break included), <b>net</b> = running time only. Side machine, support, lent and break hours are not in PLH.</div>${labourHowHTML(acc)}`;
 }
 function crewReportHTML(start, end, forPdf){
   const single = start===end, H = [];
