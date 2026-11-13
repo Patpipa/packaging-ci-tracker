@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.25 - 2026-11-12 (Variovac Finish tick list also shows Fajita / Cutlet / Slicer jobs from the last 4 days that still have no QTY / LBS — packed the next day)';
+const APP_VERSION = 'v205.26 - 2026-11-12 (Labour breakdown: time at a side machine with no job running counts as Stopped / waiting, not Running)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2301,7 +2301,7 @@ function personDay(date){
       else if(SIDE_MACHINES.some(x=>x.name===w)){ const iv = side.find(x=>x.machine===w && x.a<=t && t<x.b && (x.names||[]).includes(n));
         const wt = iv && (iv.waits||[]).some(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         const wo = iv && (iv.waits||[]).find(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
-        if(onBrk && (!iv || wt)){ k='Break'; g='Break'; } else if(wt){ k=`${w} — ${(wo && wo.reason) || 'Waiting for trimmers'}`; g='Side machines'; } else { k = w; g='Side machines'; } }
+        if(onBrk && (!iv || wt)){ k='Break'; g='Break'; } else if(wt){ k=`${w} — ${(wo && wo.reason) || 'Waiting for trimmers'}`; g='Side machines'; } else if(!iv){ k=`${w} — not running`; g='Side machines'; } /* v205.26: at a side machine with no job running = stopped, not running */ else { k = w; g='Side machines'; } }
       else if(onBrk && (w || cbk[i])){ k='Break'; g='Break'; } // v200: crew break counts everyone here, placed or not
       else if(w==='Garbage run'){ k = gk0 ? `Garbage run (${gk0})` : 'Garbage run'; g = 'Garbage run'; }
       else if(w==='Runner / Floater'){ k = 'Runner / Floater'; g = 'Other duties'; }
