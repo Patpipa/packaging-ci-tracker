@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.22 - 2026-11-12 (✕ Cancel this run on a side machine: removes its time, labour and output; crew time → Runner / Floater; History 🗑 on a side job does the same)';
+const APP_VERSION = 'v205.23 - 2026-11-12 (Undo bar shows 6 s then shrinks to a small ↩ button in the corner; ✕ hides it sooner; page gets room so nothing is covered)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -7172,11 +7172,22 @@ async function undoLast(){
   } finally { undoRestoring = false; }
 }
 function undoBarSync(){
-  let el = document.getElementById('undoBar');
+  let el = document.getElementById('undoBar'); const main = document.getElementById('main');
   const s0 = undoSnap, left = s0 ? UNDO_MS - (Date.now()-s0.at) : 0;
-  if(!s0 || left<=0){ if(el) el.remove(); if(s0 && left<=0) undoSnap = null; return; }
-  if(!el){ el = document.createElement('div'); el.id = 'undoBar'; el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom));z-index:900;width:calc(100% - 24px);max-width:536px;'; document.body.appendChild(el); }
-  el.innerHTML = `<button type="button" onclick="undoLast()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:12px;border:1.5px solid var(--amber);background:var(--panel);color:var(--text);font-size:13.5px;box-shadow:0 6px 18px rgba(0,0,0,.45);"><span style="text-align:left;">↩ <b style="color:var(--amber);">UNDO</b> · ${escapeHtml(s0.label)}</span><span style="color:var(--muted);font-size:11.5px;white-space:nowrap;">${Math.ceil(left/60000)} min</span></button>`;
+  if(!s0 || left<=0){ if(el) el.remove(); if(main) main.style.paddingBottom = ''; if(s0 && left<=0) undoSnap = null; return; }
+  /* v205.23: the full bar shows for a few seconds, then shrinks to a small ↩ button in the corner so it doesn't cover the bottom of the screen */
+  const full = !s0.mini && (Date.now()-s0.at) < 6000;
+  if(!s0.timer){ s0.timer = setTimeout(()=>{ if(undoSnap===s0){ s0.mini = true; undoBarSync(); } }, Math.max(0, 6000-(Date.now()-s0.at))+50); }
+  if(!el){ el = document.createElement('div'); el.id = 'undoBar'; document.body.appendChild(el); }
+  if(full){
+    el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom));z-index:900;width:calc(100% - 24px);max-width:536px;';
+    el.innerHTML = `<div style="display:flex;gap:6px;"><button type="button" onclick="undoLast()" style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:12px;border:1.5px solid var(--amber);background:var(--panel);color:var(--text);font-size:13.5px;box-shadow:0 6px 18px rgba(0,0,0,.45);"><span style="text-align:left;">↩ <b style="color:var(--amber);">UNDO</b> · ${escapeHtml(s0.label)}</span><span style="color:var(--muted);font-size:11.5px;white-space:nowrap;">${Math.ceil(left/60000)} min</span></button><button type="button" aria-label="Hide undo" onclick="undoSnap&&(undoSnap.mini=true);undoBarSync()" style="flex:0 0 auto;width:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:16px;box-shadow:0 6px 18px rgba(0,0,0,.45);">✕</button></div>`;
+    if(main) main.style.paddingBottom = '170px';
+  } else {
+    el.style.cssText = 'position:fixed;right:12px;bottom:calc(80px + env(safe-area-inset-bottom));z-index:900;';
+    el.innerHTML = `<button type="button" onclick="undoLast()" aria-label="Undo ${escapeHtml(s0.label)}" title="Undo · ${escapeHtml(s0.label)}" style="width:46px;height:46px;border-radius:50%;border:1.5px solid var(--amber);background:var(--panel);color:var(--amber);font-size:20px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.45);opacity:.92;">↩</button>`;
+    if(main) main.style.paddingBottom = '140px';
+  }
 }
 function afterRender(){
   attachFloorVideo();
