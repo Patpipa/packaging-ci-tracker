@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.21 - 2026-11-12 (helpers: Send back to Burger Room no longer shows as Went home; 🤝 Join again / ↩ Undo / ✕ Cancel join; anyone marked gone by mistake → ↩ Bring back in Setup)';
+const APP_VERSION = 'v205.22 - 2026-11-12 (✕ Cancel this run on a side machine: removes its time, labour and output; crew time → Runner / Floater; History 🗑 on a side job does the same)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1254,6 +1254,22 @@ async function resetTodayCrewBoard(){
   await saveDayLogNow();
   toast("Today's Crew Board cleared");
 }
+/* v205.22: cancel a whole side-machine run — its running time, labour and output go; the crew's time moves to Runner / Floater */
+async function cancelSideJob(jobId, date){
+  const T = date || todayStr(), d = dayLogFor(T); if(!d) return false;
+  const es = (d.side||[]).filter(x=>(x.jobId||x.id)===jobId); const rec = Store.records.find(r=>r.id==='side-'+jobId);
+  if(!es.length && !rec) return false;
+  const m = (es[0]||rec).machine, start = es.length ? es.map(x=>x.start).sort()[0] : rec.startTime, open = es.some(x=>!x.end), end = open ? null : (es.length ? es.map(x=>x.end).sort().slice(-1)[0] : rec.endTime);
+  const names = [...new Set(es.flatMap(x=>[...(x.names||[]), ...(x.trimNames||[])]))];
+  if(!confirm(`Cancel ${m} run from ${fmtTime12(start)}${end?` – ${fmtTime12(end)}`:''}?\n\nIts running time, labour and output are removed from today.${names.length?`\n${names.join(', ')} → counted as 🏃 Runner / Floater for that time.`:''}`)) return false;
+  d.side = (d.side||[]).filter(x=>(x.jobId||x.id)!==jobId);
+  d.where = d.where || {};
+  names.forEach(n=>{ (d.where[n]||[]).forEach(e=>{ if(e.w===m && toMin(e.at)>=toMin(start) && (!end || toMin(e.at)<toMin(end))) e.w = 'Runner / Floater'; });
+    if(open){ d.place = d.place || {}; if(!d.place[n] || d.place[n].w===m) d.place[n] = {w:'Runner / Floater', at: start}; } });
+  await Store.saveDayLog();
+  if(rec){ await Store.refreshRecords(); Store.records = Store.records.filter(r=>r.id!=='side-'+jobId); await Store.saveRecords(); }
+  render(); toast(`✕ ${m} run cancelled`); return true;
+}
 async function deleteSide(id){ if(!confirm('Delete this side-machine entry?')) return; const d = ensureDayLog(todayStr()); d.side = d.side.filter(x=>x.id!==id); await saveDayLogNow(); }
 /* v105: footnote shown one point per line so it's easy to read. */
 const CREW_FOOTNOTE_LINES = [
@@ -1561,7 +1577,8 @@ function renderCrewBoard(mode){
         ${!(run.names||[]).length && !(run.trim||0) && namesOn() ? `<div class="cb-mut" style="width:100%;color:var(--wait);font-weight:600;">👥 Nobody on it — crew pulled during the stop · add crew to resume</div>` : ''}${(run.names||[]).length?`<div class="cb-mut" style="width:100%;">👥 ${escapeHtml(run.names.join(', '))}${(run.trimNames||[]).length?` + ${escapeHtml(run.trimNames.join(', '))} (trimmer)`:''}</div>`:''}
         <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">${vac?'👥 Add / change crew · product':'👥 Add / change crew'}</button>
         ${w?`<button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="sideWaitEnd('${run.id}')">▶ Resume</button>`:`<button class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="openSidePause('${run.id}')">⏸ Pause</button>`}
-        <button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="openSideEnd('${run.id}')">✅ Finished</button></div></div>`;
+        <button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="openSideEnd('${run.id}')">✅ Finished</button></div>
+        <div style="width:100%;text-align:right;"><span class="cb-link" style="font-size:11.5px;color:var(--wait);" onclick="cancelSideJob('${run.jobId||run.id}')">✕ Cancel this run (started by mistake)</span></div></div>`;
     }
     const prepNow = peopleAtPlace('Set-up · '+sm.name), disNow = peopleAtPlace('Dismantle · '+sm.name);
     const lit = c=>`border-color:${c};color:${c};box-shadow:0 0 0 1px ${c}, 0 0 12px ${c};`; // v202: the button lights up while it's happening
@@ -5987,6 +6004,7 @@ async function confirmAddPLHData(){
   Router.go('history');
 }
 async function deleteRecord(id){
+  { const r = Store.records.find(x=>x.id===id); if(r && r.side && String(id).startsWith('side-')){ await cancelSideJob(id.slice(5), r.date); return; } } // v205.22: a side job goes with its time and crew hours
   if(!confirm('Delete this record?')) return;
   await Store.refreshRecords();
   Store.records = Store.records.filter(r=>r.id!==id);
