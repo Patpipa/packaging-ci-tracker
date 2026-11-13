@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.24 - 2026-11-12 (Variovac Finish can tick a Fajita / Cutlet / Slicer job that is still running — output lands when it finishes; finished vs running shown; reminder when a side job has no QTY / LBS)';
+const APP_VERSION = 'v205.25 - 2026-11-12 (Variovac Finish tick list also shows Fajita / Cutlet / Slicer jobs from the last 4 days that still have no QTY / LBS — packed the next day)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -624,6 +624,7 @@ function hideStorageWarning(){
 
 function localDateStr(d){ d = d || new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
 function todayStr(){ return localDateStr(new Date()); }
+function shiftDate(iso, n){ const d = new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); } // v205.25
 function fmtDate(iso){ const d=new Date(iso+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
 function toMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
 /* v116: no wrapping past midnight — the shift never crosses midnight, so a finish earlier than the start is a mistake and counts as 0 (it used to count as ~24 h) */
@@ -847,8 +848,8 @@ function sideJobsOut(date, key){
 function effOut(date, key){ if(Store.records.some(r=>r.side && r.date===date)) return sideJobsOut(date, key); const o = ((dayLogFor(date)||{}).output||{})[key]; return (o && (o.qty || o.lbs)) ? o : null; }
 function sideJobsNeedWeightHTML(date){
   const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && r.plh.grossPLH==null && !SIDE_PREP.includes(r.machine)); // v198: Fajita / Slicer / Cutlet get QTY / LBS from the Variovac Finish tick
-  const prepMiss = Store.records.filter(r=>r.side && r.date===date && r.plh && SIDE_PREP.includes(r.machine) && !(r.plh.weightLbs>0 || r.plh.quantity>0)); // v205.24: Fajita / Cutlet / Slicer with no output linked yet
-  const pm = prepMiss.length ? `<div class="cb-row" style="border-color:var(--change);gap:8px;flex-wrap:wrap;"><span class="cb-nm" style="color:var(--change);">⚠ No QTY / LBS yet: ${escapeHtml(prepMiss.map(r=>`${r.machine} ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)}`).join(', '))}</span><span class="cb-mut" style="width:100%;font-size:11.5px;">Tick it on the Variovac ✅ Finish that packed it — or <span class="cb-link" onclick="openAddPLHData('${prepMiss[0].id}')">enter it by hand →</span></span></div>` : '';
+  const prepMiss = Store.records.filter(r=>r.side && r.date<=date && r.date>=shiftDate(date,-4) && r.plh && SIDE_PREP.includes(r.machine) && !(r.plh.weightLbs>0 || r.plh.quantity>0)).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime)); // v205.24: Fajita / Cutlet / Slicer with no output linked yet
+  const pm = prepMiss.length ? `<div class="cb-row" style="border-color:var(--change);gap:8px;flex-wrap:wrap;"><span class="cb-nm" style="color:var(--change);">⚠ No QTY / LBS yet: ${escapeHtml(prepMiss.map(r=>`${r.machine} ${r.date!==date?new Date(r.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' ':''}${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)}`).join(', '))}</span><span class="cb-mut" style="width:100%;font-size:11.5px;">Tick it on the Variovac ✅ Finish that packed it — or <span class="cb-link" onclick="openAddPLHData('${prepMiss[0].id}')">enter it by hand →</span></span></div>` : '';
   if(!miss.length) return pm;
   const go = miss.length===1 ? `openAddPLHData('${miss[0].id}')` : `plhKind='side';try{localStorage.setItem('pct_plh_kind','side')}catch(e){};plhLogDetailId=null;plhLogRange={preset:'today',...plhPresetRange('today')};Router.go('plhLog')`;
   return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>` + pm;
@@ -3316,13 +3317,16 @@ function sideJobsLinkable(){ const T = todayStr(), d = dayLogFor(T)||{};
   /* v205.24: side jobs still running (or paused) can be ticked too — the output waits and lands on the job when it finishes */
   const open = []; openSideRuns(T).filter(x=>SIDE_PREP.includes(x.machine)).forEach(x=>{ const j = x.jobId||x.id; if(open.some(o=>o.jobId===j)) return; const es = sideJobEntries(T, j);
     open.push({id:'open-'+j, jobId:j, open:true, side:true, machine:x.machine, product:x.product||'', startTime:(es.length?es:[x]).map(e=>e.start).sort()[0], pend: ((d.pendingOut||{})[j]||[])}); });
-  return [...open, ...Store.records.filter(r=>r.side && r.date===T && SIDE_PREP.includes(r.machine) && r.plh && (r.plh.endTime||r.endTime)).sort((a,b)=>toMin(b.endTime||'0:00')-toMin(a.endTime||'0:00'))]; }
+  const today = Store.records.filter(r=>r.side && r.date===T && SIDE_PREP.includes(r.machine) && r.plh && (r.plh.endTime||r.endTime)).sort((a,b)=>toMin(b.endTime||'0:00')-toMin(a.endTime||'0:00'));
+  /* v205.25: product from an earlier day (up to 4 days back, e.g. Friday → Monday) that still has no QTY / LBS */
+  const lo = shiftDate(T, -4), earlier = Store.records.filter(r=>r.side && r.date<T && r.date>=lo && SIDE_PREP.includes(r.machine) && r.plh && (r.plh.endTime||r.endTime) && !(r.plh.weightLbs>0 || r.plh.quantity>0)).sort((a,b)=>(b.date+b.endTime).localeCompare(a.date+a.endTime));
+  return [...open, ...today, ...earlier]; }
 function sideCodesOf(r){ const p = r.plh||{}; if(p.codes && p.codes.length) return p.codes.map(c=>({...c})); if(p.weightLbs>0 || p.quantity>0) return [{code: p.outputFrom ? `${r.product && r.product!==r.machine ? r.product+' · ' : ''}from ${shortM(p.outputFrom)}` : 'Code 1', qty: String(p.quantity||''), lbs: String(p.weightLbs||''), from: p.outputFrom||''}]; return []; }
 function finishLinkHTML(){
   const s = liveFinishSetup, js = sideJobsLinkable(); if(!s || !js.length) return '';
   s.linkSide = s.linkSide || [];
   return `<div class="field"><label>Packed product from a side machine?</label>${js.map(r=>{ const on = s.linkSide.includes(r.id);
-    return `<div class="cb-row" style="cursor:pointer;gap:8px;${on?'border-color:var(--run);':''}" onclick="liveFinishSetup.linkSide=liveFinishSetup.linkSide.includes('${r.id}')?liveFinishSetup.linkSide.filter(x=>x!=='${r.id}'):[...liveFinishSetup.linkSide,'${r.id}'];render()"><span style="font-size:18px;">${on?'☑':'☐'}</span><span style="flex:1;font-size:13px;">This run packed the <b>${escapeHtml(r.machine)}</b> product${r.product?` · ${escapeHtml(r.product)}`:''} ${r.open?`<span style="color:var(--run);font-weight:700;">(running now · since ${fmtTime12(r.startTime)})</span>${r.pend.length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${r.pend.length} code${r.pend.length===1?'':'s'} waiting — tick to add this run as another</span>`:''}`:`(finished · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)})`}${!r.open && sideCodesOf(r).length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${sideCodesOf(r).length} code${sideCodesOf(r).length===1?'':'s'} — tick to add this run as another</span>`:''}</span></div>`; }).join('')}
+    return `<div class="cb-row" style="cursor:pointer;gap:8px;${on?'border-color:var(--run);':''}" onclick="liveFinishSetup.linkSide=liveFinishSetup.linkSide.includes('${r.id}')?liveFinishSetup.linkSide.filter(x=>x!=='${r.id}'):[...liveFinishSetup.linkSide,'${r.id}'];render()"><span style="font-size:18px;">${on?'☑':'☐'}</span><span style="flex:1;font-size:13px;">This run packed the <b>${escapeHtml(r.machine)}</b> product${r.product?` · ${escapeHtml(r.product)}`:''} ${r.open?`<span style="color:var(--run);font-weight:700;">(running now · since ${fmtTime12(r.startTime)})</span>${r.pend.length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${r.pend.length} code${r.pend.length===1?'':'s'} waiting — tick to add this run as another</span>`:''}`:`(finished · ${r.date!==todayStr()?`<b style="color:var(--amber);">${escapeHtml(new Date(r.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))}</b> · `:''}${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)})`}${!r.open && sideCodesOf(r).length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${sideCodesOf(r).length} code${sideCodesOf(r).length===1?'':'s'} — tick to add this run as another</span>`:''}</span></div>`; }).join('')}
     <div class="cb-mut" style="font-size:11.5px;">The QTY + LBS above are copied to that side job. PLH stays on this Variovac run.</div></div>`;
 }
 { const _cf = confirmFinishProduct; confirmFinishProduct = async function(){
