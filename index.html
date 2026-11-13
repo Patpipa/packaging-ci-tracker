@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.19 - 2026-11-12 (side machine set-up: ✓ Set up done → Runner ends set-up time without starting the job; Start stays green for later)';
+const APP_VERSION = 'v205.20 - 2026-11-12 (side machine on downtime: you can pull everyone off — it stays paused with nobody, no labour counted; Resume asks who runs it)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -885,7 +885,9 @@ async function sideWait(id){
 }
 async function sideWaitEnd(id){
   const d = ensureDayLog(todayStr()), cur = (d.side||[]).find(x=>x.id===id); if(!cur) return;
-  const w = sideOpenWait(cur); if(!w) return; w.end = nowHHMM();
+  const w = sideOpenWait(cur); if(!w) return;
+  if(namesOn() && !(cur.names||[]).length && !(cur.trim||0)){ openSideSetup(cur.machine, cur.id); toast(`Nobody on ${cur.machine} — pick who runs it, then tap ▶ Resume`); return; } // v205.20
+  w.end = nowHHMM();
   if(toMin(w.end) < toMin(w.start)) w.end = w.start;
   await saveDayLogNow(); toast(`${cur.machine} — meat arrived, running again`);
 }
@@ -1556,7 +1558,7 @@ function renderCrewBoard(mode){
         <div style="display:flex;gap:6px;width:100%;"><span class="cb-btn" style="flex:0 0 auto;padding:7px 12px;opacity:.35;">🔧 Set up</span>${SIDE_PREP.includes(sm.name)?`<span class="cb-btn" style="flex:0 0 auto;padding:7px 12px;opacity:.35;">🔩 ${disLabel(sm.name)}</span>`:''}<span class="cb-btn" style="flex:1;padding:7px 12px;text-align:center;${lit0(lc)}">● ${w?'⏸ PAUSED':'▶ RUNNING'}</span></div>
         ${info?`<div class="cb-mut" style="width:100%;">${info}</div>`:''}
         ${w?`<div style="width:100%;font-size:12.5px;color:var(--change);font-weight:600;">⏸ ${escapeHtml(w.reason||'Waiting for trimmers')} since ${fmtTime12(w.start)} — not counted as running time</div>`:''}
-        ${(run.names||[]).length?`<div class="cb-mut" style="width:100%;">👥 ${escapeHtml(run.names.join(', '))}${(run.trimNames||[]).length?` + ${escapeHtml(run.trimNames.join(', '))} (trimmer)`:''}</div>`:''}
+        ${!(run.names||[]).length && !(run.trim||0) && namesOn() ? `<div class="cb-mut" style="width:100%;color:var(--wait);font-weight:600;">👥 Nobody on it — crew pulled during the stop · add crew to resume</div>` : ''}${(run.names||[]).length?`<div class="cb-mut" style="width:100%;">👥 ${escapeHtml(run.names.join(', '))}${(run.trimNames||[]).length?` + ${escapeHtml(run.trimNames.join(', '))} (trimmer)`:''}</div>`:''}
         <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;"><button class="cb-btn" onclick="openSideSetup('${sm.name}','${run.id}')">${vac?'👥 Add / change crew · product':'👥 Add / change crew'}</button>
         ${w?`<button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="sideWaitEnd('${run.id}')">▶ Resume</button>`:`<button class="cb-btn" style="border-color:var(--change);color:var(--change);" onclick="openSidePause('${run.id}')">⏸ Pause</button>`}
         <button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="openSideEnd('${run.id}')">✅ Finished</button></div></div>`;
@@ -2038,7 +2040,7 @@ async function moveFromOthers(names, here, at, exceptSideId){
     if(!left.length && l.status==='RUNNING'){ blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${m} while it's running — finish it, stop it, or change its crew first`); stopOffer.push({m, cur}); }
     else lines.push({m, l, left, gone: cur.filter(n=>!left.includes(n))}); });
   openSideRuns(T).forEach(x=>{ if(x.id===exceptSideId) return; const cur = x.names||[], left = cur.filter(n=>!names.includes(n)); if(left.length===cur.length) return;
-    if(!left.length && !(x.trim||0)) blocked.push(`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${x.machine} — End it or change its crew first`);
+    if(!left.length && !(x.trim||0) && !sideOpenWait(x)) blocked.push( /* v205.20: a paused (downtime) side machine can be left with nobody */`${cur.join(' & ')} ${cur.length===1?'is the only one':'are the only ones'} on ${x.machine} — End it or change its crew first`);
     else sides.push({x, left}); });
   if(blocked.length){
     // v194: only running lines in the way → offer to stop them (Employee Reassigned) and carry on with the move
