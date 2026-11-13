@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.23 - 2026-11-12 (Undo bar shows 6 s then shrinks to a small ↩ button in the corner; ✕ hides it sooner; page gets room so nothing is covered)';
+const APP_VERSION = 'v205.24 - 2026-11-12 (Variovac Finish can tick a Fajita / Cutlet / Slicer job that is still running — output lands when it finishes; finished vs running shown; reminder when a side job has no QTY / LBS)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -847,9 +847,11 @@ function sideJobsOut(date, key){
 function effOut(date, key){ if(Store.records.some(r=>r.side && r.date===date)) return sideJobsOut(date, key); const o = ((dayLogFor(date)||{}).output||{})[key]; return (o && (o.qty || o.lbs)) ? o : null; }
 function sideJobsNeedWeightHTML(date){
   const miss = Store.records.filter(r=>r.side && r.date===date && r.plh && r.plh.grossPLH==null && !SIDE_PREP.includes(r.machine)); // v198: Fajita / Slicer / Cutlet get QTY / LBS from the Variovac Finish tick
-  if(!miss.length) return '';
+  const prepMiss = Store.records.filter(r=>r.side && r.date===date && r.plh && SIDE_PREP.includes(r.machine) && !(r.plh.weightLbs>0 || r.plh.quantity>0)); // v205.24: Fajita / Cutlet / Slicer with no output linked yet
+  const pm = prepMiss.length ? `<div class="cb-row" style="border-color:var(--change);gap:8px;flex-wrap:wrap;"><span class="cb-nm" style="color:var(--change);">⚠ No QTY / LBS yet: ${escapeHtml(prepMiss.map(r=>`${r.machine} ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)}`).join(', '))}</span><span class="cb-mut" style="width:100%;font-size:11.5px;">Tick it on the Variovac ✅ Finish that packed it — or <span class="cb-link" onclick="openAddPLHData('${prepMiss[0].id}')">enter it by hand →</span></span></div>` : '';
+  if(!miss.length) return pm;
   const go = miss.length===1 ? `openAddPLHData('${miss[0].id}')` : `plhKind='side';try{localStorage.setItem('pct_plh_kind','side')}catch(e){};plhLogDetailId=null;plhLogRange={preset:'today',...plhPresetRange('today')};Router.go('plhLog')`;
-  return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>`;
+  return `<div class="cb-row" style="border-color:var(--change);cursor:pointer;gap:8px;" onclick="${go}"><span class="cb-nm" style="color:var(--change);">⚠ ${miss.length} side job${miss.length===1?'':'s'} need${miss.length===1?'s':''} QTY / LBS</span><span class="cb-mut" style="color:var(--brk);font-weight:600;">${miss.length===1?escapeHtml(miss[0].machine+' · '+(miss[0].product||'')):'Add'} →</span></div>` + pm;
 }
 function outLine(o){ const t = outText(o); return t==='output not entered' ? 'Output not entered' : 'Output: '+t; }
 function outText(o){
@@ -937,7 +939,11 @@ function buildSideJobRecord(date, jobId, opt){
 async function saveSideJob(date, jobId, opt){
   const old = Store.records.find(r=>r.id==='side-'+jobId);
   if(old && old.plh && !(opt && (opt.weight||opt.qty))) opt = {qty: old.plh.quantity||'', weight: old.plh.weightLbs||'', ...(opt||{})}; // keep a weight already entered
+  const pend = (((dayLogFor(date)||{}).pendingOut)||{})[jobId];
+  if(pend && pend.length){ const prev = old ? sideCodesOf(old) : [], all = prev.concat(pend), tq = all.reduce((t,c)=>t+(parseInt(c.qty,10)||0),0), tw = all.reduce((t,c)=>t+(parseFloat(c.lbs)||0),0); // v205.24: output ticked while the job was still running
+    opt = {...(opt||{}), qty: tq?String(tq):'', weight: tw?String(tw):'', codes: all.length>1 ? all : null}; }
   const rec = buildSideJobRecord(date, jobId, opt||{}); if(!rec) return null;
+  if(pend && pend.length){ rec.plh.outputFrom = (old && old.plh && old.plh.outputFrom) || pend[0].from; const d0 = ensureDayLog(date); delete d0.pendingOut[jobId]; await Store.saveDayLog(); }
   { const cs = (opt && opt.codes!==undefined) ? opt.codes : (old && old.plh && old.plh.codes); if(cs && cs.length) rec.plh.codes = cs; else delete rec.plh.codes; }
   await Store.refreshRecords();
   const i = Store.records.findIndex(r=>r.id===rec.id); if(i>-1){ rec.createdAt = Store.records[i].createdAt||rec.createdAt; Store.records[i] = rec; } else Store.records.push(rec);
@@ -3306,13 +3312,17 @@ function sideFinishSimpleHTML(run){
 /* Variovac Finish: link the output to side jobs finished today */
 function sideJobsAwaitingOutput(){ const T = todayStr(); return Store.records.filter(r=>r.side && r.date===T && SIDE_PREP.includes(r.machine) && r.plh && !(r.plh.weightLbs>0) && !r.plh.outputFrom); }
 /* v205: a side job can take output from more than one Variovac run — each tick adds a code */
-function sideJobsLinkable(){ const T = todayStr(); return Store.records.filter(r=>r.side && r.date===T && SIDE_PREP.includes(r.machine) && r.plh && (r.plh.endTime||r.endTime)); }
+function sideJobsLinkable(){ const T = todayStr(), d = dayLogFor(T)||{};
+  /* v205.24: side jobs still running (or paused) can be ticked too — the output waits and lands on the job when it finishes */
+  const open = []; openSideRuns(T).filter(x=>SIDE_PREP.includes(x.machine)).forEach(x=>{ const j = x.jobId||x.id; if(open.some(o=>o.jobId===j)) return; const es = sideJobEntries(T, j);
+    open.push({id:'open-'+j, jobId:j, open:true, side:true, machine:x.machine, product:x.product||'', startTime:(es.length?es:[x]).map(e=>e.start).sort()[0], pend: ((d.pendingOut||{})[j]||[])}); });
+  return [...open, ...Store.records.filter(r=>r.side && r.date===T && SIDE_PREP.includes(r.machine) && r.plh && (r.plh.endTime||r.endTime)).sort((a,b)=>toMin(b.endTime||'0:00')-toMin(a.endTime||'0:00'))]; }
 function sideCodesOf(r){ const p = r.plh||{}; if(p.codes && p.codes.length) return p.codes.map(c=>({...c})); if(p.weightLbs>0 || p.quantity>0) return [{code: p.outputFrom ? `${r.product && r.product!==r.machine ? r.product+' · ' : ''}from ${shortM(p.outputFrom)}` : 'Code 1', qty: String(p.quantity||''), lbs: String(p.weightLbs||''), from: p.outputFrom||''}]; return []; }
 function finishLinkHTML(){
   const s = liveFinishSetup, js = sideJobsLinkable(); if(!s || !js.length) return '';
   s.linkSide = s.linkSide || [];
   return `<div class="field"><label>Packed product from a side machine?</label>${js.map(r=>{ const on = s.linkSide.includes(r.id);
-    return `<div class="cb-row" style="cursor:pointer;gap:8px;${on?'border-color:var(--run);':''}" onclick="liveFinishSetup.linkSide=liveFinishSetup.linkSide.includes('${r.id}')?liveFinishSetup.linkSide.filter(x=>x!=='${r.id}'):[...liveFinishSetup.linkSide,'${r.id}'];render()"><span style="font-size:18px;">${on?'☑':'☐'}</span><span style="flex:1;font-size:13px;">This run packed the <b>${escapeHtml(r.machine)}</b> product${r.product?` · ${escapeHtml(r.product)}`:''} (${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)})${sideCodesOf(r).length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${sideCodesOf(r).length} code${sideCodesOf(r).length===1?'':'s'} — tick to add this run as another</span>`:''}</span></div>`; }).join('')}
+    return `<div class="cb-row" style="cursor:pointer;gap:8px;${on?'border-color:var(--run);':''}" onclick="liveFinishSetup.linkSide=liveFinishSetup.linkSide.includes('${r.id}')?liveFinishSetup.linkSide.filter(x=>x!=='${r.id}'):[...liveFinishSetup.linkSide,'${r.id}'];render()"><span style="font-size:18px;">${on?'☑':'☐'}</span><span style="flex:1;font-size:13px;">This run packed the <b>${escapeHtml(r.machine)}</b> product${r.product?` · ${escapeHtml(r.product)}`:''} ${r.open?`<span style="color:var(--run);font-weight:700;">(running now · since ${fmtTime12(r.startTime)})</span>${r.pend.length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${r.pend.length} code${r.pend.length===1?'':'s'} waiting — tick to add this run as another</span>`:''}`:`(finished · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)})`}${!r.open && sideCodesOf(r).length?`<span class="cb-mut" style="display:block;font-size:11.5px;">already has ${sideCodesOf(r).length} code${sideCodesOf(r).length===1?'':'s'} — tick to add this run as another</span>`:''}</span></div>`; }).join('')}
     <div class="cb-mut" style="font-size:11.5px;">The QTY + LBS above are copied to that side job. PLH stays on this Variovac run.</div></div>`;
 }
 { const _cf = confirmFinishProduct; confirmFinishProduct = async function(){
@@ -3320,7 +3330,9 @@ function finishLinkHTML(){
     await _cf();
     if(!link || !link.length || (m && Store.liveRuns[m])) return;
     const runRec = Store.records.filter(x=>x.machine===m && x.date===todayStr() && x.status==='RUNNING' && !x.side).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
-    for(const id of link){ const r = Store.records.find(x=>x.id===id); if(!r) continue;
+    for(const id of link){
+      if(String(id).startsWith('open-')){ const j = id.slice(5), d = ensureDayLog(todayStr()); d.pendingOut = d.pendingOut || {}; (d.pendingOut[j] = d.pendingOut[j] || []).push({code: `${runRec && runRec.product ? runRec.product+' · ' : ''}from ${shortM(m)}`, qty: String(q||''), lbs: String(w||''), from: m}); await Store.saveDayLog(); continue; }
+      const r = Store.records.find(x=>x.id===id); if(!r) continue;
       const prev = sideCodesOf(r), had = prev.length;
       const codes = prev.concat([{code: `${runRec && runRec.product ? runRec.product+' · ' : ''}from ${shortM(m)}`, qty: String(q||''), lbs: String(w||''), from: m}]);
       const tq = codes.reduce((t,c)=>t+(parseInt(c.qty,10)||0),0), tw = codes.reduce((t,c)=>t+(parseFloat(c.lbs)||0),0);
