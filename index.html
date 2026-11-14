@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.30 - 2026-11-14 (Crew Hours: Lent to other departments moved up to section 7, before Each person / Each position)';
+const APP_VERSION = 'v205.31 - 2026-11-14 (Daily Report side machines: Labour shows (2 people) when more than one person ran it)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1758,7 +1758,8 @@ function dayLogSections(date, opts){
     const act = mine.reduce((a,s)=>a+s.act,0), wait = mine.reduce((a,s)=>a+s.waitMin,0);
     const trainMin = mine.reduce((a,s)=>a+s.act*Math.min(s.train||0,s.pack||0),0), names = []; // v167: no names in reports
     /* v205.9: one fact per line — easier to read */
-    const L = [`Ran ${fmtDur(act)}`, `Labour ${fmtDur(pm.packMin)}${trainMin?` (incl. ${fmtDur(trainMin)} training)`:''}${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}`];
+    const pc = mine.map(x=>(x.names||[]).length || x.pack || 1), pMin = Math.min(...pc), pMax = Math.max(...pc), ppl = pMax>1 ? ` (${pMin===pMax?pMax:pMin+'–'+pMax} people)` : ''; // v205.31: show crew size when more than 1 person
+    const L = [`Ran ${fmtDur(act)}`, `Labour ${fmtDur(pm.packMin)}${ppl}${trainMin?` (incl. ${fmtDur(trainMin)} training)`:''}${pm.trimMin?` + ${fmtDur(pm.trimMin)} trimmer help`:''}`];
     if(wait){ const byR = {}; mine.forEach(s=>(s.waits||[]).forEach(w=>{ const r = w.reason||'Waiting for trimmers'; const mm = Math.max(0, toMin(w.end||nowHHMM())-toMin(w.start)); byR[r] = (byR[r]||0)+mm; }));
       const rs = Object.keys(byR); if(rs.length<=1) L.push(`Paused ${fmtDur(wait)}${rs.length?` — ${rs[0].toLowerCase()}`:''}`); else rs.forEach(r=>L.push(`Paused ${fmtDur(byR[r])} — ${r.toLowerCase()}`)); }
     L.push(...sidePrepLines(date, m.name));
