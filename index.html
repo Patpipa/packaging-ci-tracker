@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.32 - 2026-11-14 (Packaging crew count no longer includes cross-dept help; Daily Report shows them on their own line: how many, from where, hours)';
+const APP_VERSION = 'v205.33 - 2026-11-14 (Daily Report: Lent to other depts line — per department, how many and how long)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1748,6 +1748,11 @@ function dayLogSections(date, opts){
   { const cd = crewDayOf(date), hs = Object.keys(cd).filter(n=>cd[n] && cd[n].helper); // v205.32: cross-dept help shown on its own line — count, dept and hours only (no names in the Daily Report)
     if(hs.length){ const pd = personDay(date), mins = hs.reduce((t,n)=>{ const p = pd && pd.people.find(x=>x.name===n); return t + (p ? chWorked(p) : 0); },0), depts = [...new Set(hs.map(n=>cd[n].dept||(helperOf(n)||{}).dept||'other dept'))];
       crew.push({k:'Cross-dept help', v:`${hs.length} ${hs.length===1?'person':'people'} from ${depts.join(', ')} · ${fmtDur(mins)}`}); } }
+  { const pd = personDay(date); if(pd){ const L = {}; // v205.33: crew lent to other departments — per dept: how many and for how long (no names)
+      pd.people.forEach(p=>{ if(p.awaySt==='lent'){ const dp = String(p.away||'').replace(/^Lent to /,'') || 'other dept'; const o = L[dp] || (L[dp] = {ppl:new Set(), mins:0, allDay:0}); o.ppl.add(p.name); o.allDay++; return; }
+        p.segs.forEach(sg=>{ if(sg.g!=='Lent to other dept') return; const dp = String(sg.k||'').replace(/^Lent · /,'') || 'other dept'; const o = L[dp] || (L[dp] = {ppl:new Set(), mins:0, allDay:0}); o.ppl.add(p.name); o.mins += sg.b-sg.a; }); });
+      const ks = Object.keys(L);
+      crew.push({k:'Lent to other depts', v: ks.length ? ks.map(dp=>{ const o = L[dp], n = o.ppl.size; return `${dp} — ${n} ${n===1?'person':'people'}${o.mins?` · ${fmtDur(o.mins)}`:''}${o.allDay?`${o.mins?' + ':' · '}${o.allDay} all day`:''}`; }).join('\n') : 'none'}); } }
   OFFLINE_ROLES.forEach(r=>{
     if(!roleIn(date,r)) crew.push({k:r, v:'off today'});
     else { const m = om[r]; crew.push({k:r, v: (opts && opts.short) ? (m.min>0 ? `on the line ${fmtDur(m.min)}` : 'stayed off the line') : (m.min>0 ? `in today · on the line ${fmtDur(m.min)}` : 'in today · stayed off the line')}); }
