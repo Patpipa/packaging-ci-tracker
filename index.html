@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.28 - 2026-11-14 (Crew Hours PDF: timeline legend no longer runs together; chart drawn at a fixed size for the PDF; tap-to-open note left out of the PDF)';
+const APP_VERSION = 'v205.29 - 2026-11-14 (Crew Hours: Labour breakdown removed; new Time away from the packaging lines, Lead Hand & Yield, Cross-dept help; side machine crew-time totals)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2188,7 +2188,8 @@ function openPlace(i){ const n = crewRoster()[i]; if(n==null) return; placeSetup
     let gk = ps.gk || garbageKindNext; if(!gk){ gk = await askGarbageKind([ps.name]); if(!gk){ placeSetup = null; render(); return; } }
     const n = ps.name; const r = await _sp.apply(this, arguments); if(placeSetup) return r;
     const d = ensureDayLog(todayStr()); if(d.place && d.place[n] && d.place[n].w==='Garbage run') d.place[n].gk = gk;
-    const lg = (d.where||{})[n]; if(lg && lg.length && lg[lg.length-1].w==='Garbage run') lg[lg.length-1].gk = gk;
+    const lg = (d.where||{})[n]; if(lg && lg.length && lg[lg.length-1].w==='Garbage run'){ const L = lg[lg.length-1], at0 = ps.at || nowHHMM();
+      if(L.gk && L.gk!==gk && toMin(at0) > toMin(L.at)) lg.push({at: at0, w:'Garbage run', gk}); else L.gk = gk; } // v205.29: a second garbage run for another area starts a new entry
     await Store.saveDayLog(); return r; }; }
 async function savePlace(){
   const p = placeSetup; if(!p) return;
@@ -2629,6 +2630,47 @@ function labourBreakdownHTML(acc, td, forPdf){
   </table>
   <div style="font-size:10.5px;color:#666;margin-top:6px;line-height:1.5;">PLH (Lines only) divides lbs by the labour of people on V1–V3 and Manual: <b>gross</b> = all their time on the run (stops and paid break included), <b>net</b> = running time only. Side machine, support, lent and break hours are not in PLH.</div>${forPdf?'':labourHowHTML(acc)}`;
 }
+/* v205.29: Crew Hours — time away from the lines, Lead Hand & Yield, cross-dept help (one day or a range) */
+function awayAdd(st, date, pd){
+  st.side = st.side||{}; st.garb = st.garb||{}; st.lent = st.lent||0; st.roles = st.roles||{}; st.help = st.help||{};
+  pd.people.forEach(p=>{ if(p.away) return;
+    const role = OFFLINE_ROLES.includes(p.name), hd0 = helperDay(date, p.name);
+    p.segs.forEach(sg=>{ const m = sg.b-sg.a, w = String(sg.w||''), g = sg.g;
+      const base = w.replace(/^(Set-up|Dismantle|Clean-up) · /,'');
+      if(SIDE_MACHINES.some(x=>x.name===base) && (g==='Side machines' || w.startsWith('Clean-up · '))){ const o = st.side[base] || (st.side[base] = {run:0, setup:0, clean:0});
+        if(w.startsWith('Set-up · ')) o.setup += m; else if(w.startsWith('Dismantle · ') || w.startsWith('Clean-up · ')) o.clean += m; else o.run += m; }
+      else if(g==='Garbage run'){ const a = (String(sg.k).match(/\((.+)\)/)||[])[1] || 'Area not picked'; st.garb[a] = (st.garb[a]||0)+m; }
+      else if(g==='Lent to other dept') st.lent += m;
+      if(role){ const r = st.roles[p.name] || (st.roles[p.name] = {line:0, off:0}); if(g==='Lines running'||g==='Lines stopped'||g==='Side machines') r.line += m; else if(!['Break','Not here','Not recorded'].includes(g)) r.off += m; } });
+    if(hd0){ const h = st.help[p.name] || (st.help[p.name] = {dept: hd0.dept||(helperOf(p.name)||{}).dept||'', mins:0, days:0, spans:[]}); h.mins += chWorked(p); h.days++; h.spans.push(`${chFmt(p.a)} – ${chFmt(p.b)}`); }
+  });
+}
+function awaySectionsHTML(st, td, hd, n0, multi){
+  const H = [], red = 'color:#c0392b;font-weight:700;', sub = 'color:#666;font-size:11.5px;';
+  const sideT = Object.values(st.side||{}).reduce((t,o)=>t+o.run+o.setup+o.clean,0), garbT = Object.values(st.garb||{}).reduce((t,m)=>t+m,0), tot = sideT + garbT + (st.lent||0);
+  const row = (a, b, c, s0)=>`<tr><td style="${td}${s0||''}">${a}</td><td style="${td}text-align:right;white-space:nowrap;${s0||''}">${b}</td><td style="${td}text-align:right;white-space:nowrap;width:90px;${s0||''}">${c||''}</td></tr>`;
+  H.push(hd(`${n0} · Time away from the packaging lines${multi?'':''}`));
+  let t = `<table style="width:100%;border-collapse:collapse;">`;
+  t += row('<b>Side machines</b>', '', `<b>${chDur(sideT)}</b>`);
+  SIDE_MACHINES.map(x=>x.name).filter(m=>st.side[m]).forEach(m=>{ const o = st.side[m], all = o.run+o.setup+o.clean, ex = [o.setup?`set-up ${chDur(o.setup)}`:'', o.clean?`${m==='Fajita'?'dismantle / clean':'dismantle'} ${chDur(o.clean)}`:''].filter(Boolean).join(', ');
+    t += row(`&nbsp;&nbsp;&nbsp;${escapeHtml(m)}${ex?` <span style="${sub}">(incl. ${ex})</span>`:''}`, chDur(all), ''); });
+  if(!sideT) t += row(`&nbsp;&nbsp;&nbsp;<span style="${sub}">no side machine time</span>`, '', '');
+  t += row('<b>Garbage run</b>', '', `<b>${chDur(garbT)}</b>`);
+  ['Packaging','Trimming','Burger Room','Burger','Area not picked'].concat(Object.keys(st.garb||{})).filter((a,i,arr)=>arr.indexOf(a)===i && st.garb[a]).forEach(a=>{ t += row(`&nbsp;&nbsp;&nbsp;${escapeHtml(a)}`, chDur(st.garb[a]), ''); });
+  if(!garbT) t += row(`&nbsp;&nbsp;&nbsp;<span style="${sub}">no garbage runs</span>`, '', '');
+  t += row('<b>Lent out to other depts</b>', '', `<b>${chDur(st.lent||0)}</b>`);
+  t += row('<b>Total away from lines</b>', '', `<b>${chDur(tot)}</b>`, 'border-top:2px solid #1e3a5f;');
+  H.push(t + `</table><div style="${sub}margin-top:4px;">Crew time spent off V1–V3 / Manual Pack. Side machines include their set-up and dismantle / clean.</div>`);
+  // Lead Hand & Yield
+  H.push(hd(`${n0+1} · Lead Hand & Yield`));
+  const R = Object.keys(st.roles||{});
+  H.push(R.length ? `<table style="width:100%;border-collapse:collapse;">${R.map(n=>{ const r = st.roles[n]; return `<tr><td style="${td}font-weight:700;">${escapeHtml(n)}</td><td style="${td}">on the line <b style="${r.line?red:''}">${chDur(r.line)}</b></td><td style="${td}">off-line duties <b>${chDur(r.off)}</b></td></tr>`; }).join('')}</table><div style="${sub}margin-top:4px;">On the line = ticked onto a Variovac, Manual Pack or side machine. Off-line = Lead / Yield duties and other work off the lines.</div>` : `<div style="font-size:12.5px;color:#777;">Lead Hand / Yield not recorded.</div>`);
+  // Cross-dept help
+  H.push(hd(`${n0+2} · Cross-dept help`));
+  const X = Object.keys(st.help||{});
+  H.push(X.length ? `<table style="width:100%;border-collapse:collapse;">${X.map(n=>{ const h = st.help[n]; return `<tr><td style="${td}"><b>${escapeHtml(n)}</b> · ${escapeHtml(h.dept||'other dept')}</td><td style="${td}color:#555;">${multi?`${h.days} day${h.days===1?'':'s'}`:escapeHtml(h.spans.join(', '))}</td><td style="${td}text-align:right;font-weight:700;">${chDur(h.mins)}</td></tr>`; }).join('')}<tr><td style="${td}font-weight:700;">Total</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(X.reduce((t,n)=>t+st.help[n].mins,0))}</td></tr></table><div style="${sub}margin-top:4px;">Crew from other departments who joined packaging — counted from when they joined until they went back (breaks not included).</div>` : `<div style="font-size:12.5px;color:#777;">No cross-dept help.</div>`);
+  return H.join('');
+}
 function crewReportHTML(start, end, forPdf){
   const single = start===end, H = [];
   const card = `background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};`;
@@ -2651,7 +2693,6 @@ function crewReportHTML(start, end, forPdf){
       ${P.map(p=>{ if(p.away) return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td colspan="6" style="${td}color:#777;">${escapeHtml(p.away)} — all day (hours not tracked)</td></tr>`; const nr = p.tot['Not recorded']||0, nh = p.grp['Not here']||0;
         return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td style="${td}${p.a<REG_A?red:''}">${chFmt(p.a)}</td><td style="${td}${p.b>REG_B?red:''}">${chFmt(p.b)}${pd.isToday && p.b>=toMin(nowHHMM())?' (so far)':''}</td><td style="${td}">${chDur(chWorked(p))}${nh?`<div style="font-size:10.5px;color:#888;">not here ${chDur(nh)}</div>`:''}</td><td style="${td}">${chDur(p.grp['Break']||0)}</td><td style="${td}${p.ot?red:'color:#aaa;'}">${p.ot?chDur(p.ot):'—'}</td><td style="${td}${nr?red:'color:#aaa;'}">${nr?chDur(nr):'—'}</td></tr>`; }).join('')}
       <tr><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">Total · ${P.filter(p=>!p.away).length} working</td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(chWorked))}</td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(p=>p.grp['Break']||0))}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.ot)?red:''}">${sum(p=>p.ot)?chDur(sum(p=>p.ot)):'—'}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.tot['Not recorded']||0)?red:''}">${sum(p=>p.tot['Not recorded']||0)?chDur(sum(p=>p.tot['Not recorded']||0)):'—'}</td></tr></table>`));
-    { const acc = {}; P.forEach(p=>labourAdd(acc, p)); H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(acc, td, forPdf)); }
     // 2. timeline chart
     const PW = P.filter(p=>!p.away), a0 = Math.floor(Math.min(REG_A, ...PW.map(p=>p.a))/60)*60, b0 = Math.ceil(Math.max(REG_B, ...PW.map(p=>p.b))/60)*60;
     const W = 740, L = 92, R = 8, rowH = 24, top = 22, Wd = W-L-R, x = m=>L + (m-a0)/(b0-a0)*Wd, Hh = top + P.length*rowH + 6;
@@ -2675,8 +2716,9 @@ function crewReportHTML(start, end, forPdf){
     H.push(hd(`3 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<div style="display:flex;height:22px;border-radius:5px;overflow:hidden;">${order.filter(g=>G[g]).map(g=>`<div style="width:${G[g]/tot*100}%;background:${gc[g]};"></div>`).join('')}</div>
       <table style="width:100%;border-collapse:collapse;margin-top:8px;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}"><span style="display:inline-block;width:10px;height:10px;background:${gc[g]};border-radius:2px;margin-right:6px;"></span>${g==='Lines stopped'?'Lines stopped (waiting / changeover / planned / no work)':g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
-    // 4. each person, line by line
-    H.push(hd('4 · Each person — where they were'));
+    { const st = {}; awayAdd(st, start, pd); H.push(awaySectionsHTML(st, td, hd, 4, false)); }
+    // 7. each person, line by line
+    H.push(hd('7 · Each person — where they were'));
     P.forEach(p=>{
       if(p.away){ H.push(`<div style="margin-bottom:10px;"><div style="background:#f2f5f9;border-left:4px solid #c9ced6;padding:6px 10px;font-size:13px;"><b>${escapeHtml(p.name.toUpperCase())}</b> · ${escapeHtml(p.away)} — all day (hours not tracked)</div></div>`); return; }
       const pos = {}; p.segs.forEach(sg=>{ if(sg.g==='Break'||sg.g==='Not recorded'||sg.g==='Not here') return; const key = MACHINES.includes(sg.w) ? sg.w : (sg.g==='Side machines' ? sg.w : sg.k); pos[key] = (pos[key]||0) + (sg.b-sg.a); });
@@ -2687,23 +2729,23 @@ function crewReportHTML(start, end, forPdf){
     });
     // 5. each position
     const PP = positionDay(start, pd);
-    H.push(hd('5 · Each position — who was on it'));
+    H.push(hd('8 · Each position — who was on it'));
     if(!PP.length) H.push(`<div style="font-size:12.5px;color:#777;">No machine had names on it.</div>`);
     PP.forEach(x=>{ const need = LINE_NEED[x.P]||0, isLine = MACHINES.includes(x.P), a = x.segs[0].a, b = x.segs[x.segs.length-1].b;
-      H.push(`<div style="page-break-inside:avoid;margin-bottom:12px;"><div style="background:#f2f5f9;border-left:4px solid ${isLine?'#2e9d5b':'#d6a21e'};padding:6px 10px;font-size:13px;"><b>${escapeHtml(x.P.toUpperCase())}</b> · ${chFmt(a)} – ${chFmt(b)}</div>
+      H.push(`<div style="page-break-inside:avoid;margin-bottom:12px;"><div style="background:#f2f5f9;border-left:4px solid ${isLine?'#2e9d5b':'#d6a21e'};padding:6px 10px;font-size:13px;"><b>${escapeHtml(x.P.toUpperCase())}</b> · ${chFmt(a)} – ${chFmt(b)}${isLine?'':` · <b>${chDur(x.segs.reduce((t,sg)=>t+(sg.b-sg.a)*Math.max(1,sg.names.length),0))} crew time</b>`}</div>
         <table style="width:100%;border-collapse:collapse;">${x.segs.map(sg=>{ const n = sg.names.length, short = isLine && sg.st==='RUNNING' && n<need;
           const stl = isLine ? ({RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work', BREAK:'break'}[sg.st]||'no entry') : '';
           return `<tr><td style="${td}width:150px;white-space:nowrap;${sg.ot?red:''}">${m2t(sg.a)} – ${m2t(sg.b)}</td><td style="${td}"><b>${escapeHtml(sg.names.join(', ')||'—')}</b>${sg.trim.length?` <span style="color:#777;">+ ${escapeHtml(sg.trim.join(', '))} (trimmer)</span>`:''}</td><td style="${td}white-space:nowrap;${short?red:'color:#555;'}">${isLine?`${n} of ${need}${short?` · short ${need-n}`:''}`:`${n} packaging`}</td><td style="${td}color:#555;">${stl}${sg.reason&&sg.st!=='RUNNING'?` — ${escapeHtml(sg.reason)}`:''}${sg.ot?` <span style="${red}">OT</span>`:''}</td></tr>`; }).join('')}</table></div>`); });
     // 6. lent out
     const lent = []; P.forEach(p=>p.segs.forEach(sg=>{ if(sg.g==='Lent to other dept') lent.push({n:p.name, dep: sg.k.replace('Lent · ',''), a:sg.a, b:sg.b}); }));
     const lentAll = P.filter(p=>p.awaySt==='lent');
-    H.push(hd('6 · Lent to other departments'));
+    H.push(hd('9 · Lent to other departments'));
     H.push(lentAll.length ? `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">${lentAll.map(p=>`<tr><td style="${td}width:150px;">All day</td><td style="${td}"><b>${escapeHtml(p.name)}</b> → ${escapeHtml(p.away.replace('Lent to ',''))}</td><td style="${td}text-align:right;color:#777;">not tracked</td></tr>`).join('')}</table>` : '');
     H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total (part of the day)</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : (lentAll.length ? '' : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`));
   } else {
     const days = []; for(let d = new Date(start+'T00:00:00'); localDateStr(d) <= end; d.setDate(d.getDate()+1)) days.push(localDateStr(d));
-    const acc = {}, otByDay = [], lab = {};
-    days.forEach(dt=>{ const pd = personDay(dt); if(!pd) return; let dayOt = 0; pd.people.forEach(p=>labourAdd(lab, p));
+    const acc = {}, otByDay = [], lab = {}, st = {};
+    days.forEach(dt=>{ const pd = personDay(dt); if(!pd) return; let dayOt = 0; pd.people.forEach(p=>labourAdd(lab, p)); awayAdd(st, dt, pd);
       pd.people.forEach(p=>{ const a = acc[p.name] || (acc[p.name] = {days:0, worked:0, brk:0, ot:0, nr:0, nh:0, grp:{}, away:{}}); if(p.away){ a.away[p.away] = (a.away[p.away]||0)+1; return; } a.days++; a.worked += chWorked(p); a.brk += p.grp['Break']||0; a.ot += p.ot; a.nr += p.tot['Not recorded']||0; a.nh += p.grp['Not here']||0; dayOt += p.ot; Object.keys(p.grp).forEach(g=>a.grp[g]=(a.grp[g]||0)+p.grp[g]); });
       otByDay.push({dt, ot: dayOt, n: pd.people.filter(p=>p.ot).length}); });
     const names = Object.keys(acc);
@@ -2716,8 +2758,8 @@ function crewReportHTML(start, end, forPdf){
     const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Meetings & stretching','Lead / Yield duties','Other duties','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
     H.push(hd(`2 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<table style="width:100%;border-collapse:collapse;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}">${g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
-    H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(lab, td, forPdf));
-    H.push(hd('3 · Overtime by day'));
+    H.push(awaySectionsHTML(st, td, hd, 3, true));
+    H.push(hd('6 · Overtime by day'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${otByDay.map(o=>`<tr><td style="${td}">${fmtDate(o.dt)}</td><td style="${td}${o.ot?red:'color:#aaa;'}">${o.ot?`${chDur(o.ot)} · ${o.n} ${o.n===1?'person':'people'}`:'—'}</td><td style="${td}text-align:right;"><span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openCrewHours('${o.dt}')">day →</span></td></tr>`).join('')}</table>`);
   }
   H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">From the names picked on the Live Floor (Start Run, Change Staff, side machines, Move crew, Garbage) and Where Everyone Is. Break, Waiting and Changeover come from each line's own entries. Overtime = time before 8:00 AM or after 4:30 PM. A finish after 4:30 PM comes from the person still being on a machine or place, until it finished or they were marked Not here · Went home. Not recorded = time in the shift with no position entered.</div></div>`);
@@ -3117,7 +3159,7 @@ function helpersCardHTML(){
   const T = todayStr(), hs = helperList(), now = nowHHMM();
   const joined = hs.filter(h=>helperDay(T, h.n)), rest = hs.filter(h=>!helperDay(T, h.n));
   const js = n=>n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-  return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="helpersOpen=!helpersOpen;render()"><h3 style="margin:0;">🤝 Helpers from other depts <span class="cb-mut" style="font-family:Inter,sans-serif;text-transform:none;letter-spacing:0;">· ${joined.filter(h=>!helperDay(T,h.n).backAt).length} with us</span></h3><span class="cb-mut">${helpersOpen?'▲':'▼'}</span></div>
+  return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="helpersOpen=!helpersOpen;render()"><h3 style="margin:0;">🤝 Cross-dept help <span class="cb-mut" style="font-family:Inter,sans-serif;text-transform:none;letter-spacing:0;">· ${joined.filter(h=>!helperDay(T,h.n).backAt).length} with us</span></h3><span class="cb-mut">${helpersOpen?'▲':'▼'}</span></div>
     ${joined.map(h=>{ const c = helperDay(T, h.n); return `<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm">${escapeHtml(h.n)} <span class="cb-mut">${escapeHtml(h.dept)}</span></span><span class="cb-mut" style="color:${c.backAt?'var(--muted)':'var(--run)'};">${c.backAt?`went back ${fmtTime12(c.backAt)}`:`with us from ${fmtTime12(c.start)}`}</span>
       ${c.backAt?`<div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" style="border-color:var(--run);color:var(--run);" onclick="helperReturn('${js(h.n)}')">🤝 Join again</button><button class="cb-btn" style="flex:0 0 auto;" onclick="helperReturn('${js(h.n)}',true)">↩ Undo — still with us</button></div>`:`<div style="display:flex;gap:6px;width:100%;"><button class="cb-btn" onclick="helperBack('${js(h.n)}')">↩ Send back to ${escapeHtml(h.dept)}</button><button class="cb-btn" style="flex:0 0 auto;" onclick="helperUndoJoin('${js(h.n)}')">✕ Cancel join</button></div>`}</div>`; }).join('')}
     ${helpersOpen ? `${rest.map(h=>`<div class="cb-row" style="flex-wrap:wrap;gap:6px;"><span class="cb-nm">${escapeHtml(h.n)} <span class="cb-mut">${escapeHtml(h.dept)}</span></span>
