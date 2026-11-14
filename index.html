@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.29 - 2026-11-14 (Crew Hours: Labour breakdown removed; new Time away from the packaging lines, Lead Hand & Yield, Cross-dept help; side machine crew-time totals)';
+const APP_VERSION = 'v205.30 - 2026-11-14 (Crew Hours: Lent to other departments moved up to section 7, before Each person / Each position)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2717,8 +2717,14 @@ function crewReportHTML(start, end, forPdf){
     H.push(`<div style="display:flex;height:22px;border-radius:5px;overflow:hidden;">${order.filter(g=>G[g]).map(g=>`<div style="width:${G[g]/tot*100}%;background:${gc[g]};"></div>`).join('')}</div>
       <table style="width:100%;border-collapse:collapse;margin-top:8px;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}"><span style="display:inline-block;width:10px;height:10px;background:${gc[g]};border-radius:2px;margin-right:6px;"></span>${g==='Lines stopped'?'Lines stopped (waiting / changeover / planned / no work)':g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
     { const st = {}; awayAdd(st, start, pd); H.push(awaySectionsHTML(st, td, hd, 4, false)); }
-    // 7. each person, line by line
-    H.push(hd('7 · Each person — where they were'));
+    // 7. lent out
+    const lent = []; P.forEach(p=>p.segs.forEach(sg=>{ if(sg.g==='Lent to other dept') lent.push({n:p.name, dep: sg.k.replace('Lent · ',''), a:sg.a, b:sg.b}); }));
+    const lentAll = P.filter(p=>p.awaySt==='lent');
+    H.push(hd('7 · Lent to other departments'));
+    H.push(lentAll.length ? `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">${lentAll.map(p=>`<tr><td style="${td}width:150px;">All day</td><td style="${td}"><b>${escapeHtml(p.name)}</b> → ${escapeHtml(p.away.replace('Lent to ',''))}</td><td style="${td}text-align:right;color:#777;">not tracked</td></tr>`).join('')}</table>` : '');
+    H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total (part of the day)</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : (lentAll.length ? '' : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`));
+    // 8. each person, line by line
+    H.push(hd('8 · Each person — where they were'));
     P.forEach(p=>{
       if(p.away){ H.push(`<div style="margin-bottom:10px;"><div style="background:#f2f5f9;border-left:4px solid #c9ced6;padding:6px 10px;font-size:13px;"><b>${escapeHtml(p.name.toUpperCase())}</b> · ${escapeHtml(p.away)} — all day (hours not tracked)</div></div>`); return; }
       const pos = {}; p.segs.forEach(sg=>{ if(sg.g==='Break'||sg.g==='Not recorded'||sg.g==='Not here') return; const key = MACHINES.includes(sg.w) ? sg.w : (sg.g==='Side machines' ? sg.w : sg.k); pos[key] = (pos[key]||0) + (sg.b-sg.a); });
@@ -2729,19 +2735,13 @@ function crewReportHTML(start, end, forPdf){
     });
     // 5. each position
     const PP = positionDay(start, pd);
-    H.push(hd('8 · Each position — who was on it'));
+    H.push(hd('9 · Each position — who was on it'));
     if(!PP.length) H.push(`<div style="font-size:12.5px;color:#777;">No machine had names on it.</div>`);
     PP.forEach(x=>{ const need = LINE_NEED[x.P]||0, isLine = MACHINES.includes(x.P), a = x.segs[0].a, b = x.segs[x.segs.length-1].b;
       H.push(`<div style="page-break-inside:avoid;margin-bottom:12px;"><div style="background:#f2f5f9;border-left:4px solid ${isLine?'#2e9d5b':'#d6a21e'};padding:6px 10px;font-size:13px;"><b>${escapeHtml(x.P.toUpperCase())}</b> · ${chFmt(a)} – ${chFmt(b)}${isLine?'':` · <b>${chDur(x.segs.reduce((t,sg)=>t+(sg.b-sg.a)*Math.max(1,sg.names.length),0))} crew time</b>`}</div>
         <table style="width:100%;border-collapse:collapse;">${x.segs.map(sg=>{ const n = sg.names.length, short = isLine && sg.st==='RUNNING' && n<need;
           const stl = isLine ? ({RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work', BREAK:'break'}[sg.st]||'no entry') : '';
           return `<tr><td style="${td}width:150px;white-space:nowrap;${sg.ot?red:''}">${m2t(sg.a)} – ${m2t(sg.b)}</td><td style="${td}"><b>${escapeHtml(sg.names.join(', ')||'—')}</b>${sg.trim.length?` <span style="color:#777;">+ ${escapeHtml(sg.trim.join(', '))} (trimmer)</span>`:''}</td><td style="${td}white-space:nowrap;${short?red:'color:#555;'}">${isLine?`${n} of ${need}${short?` · short ${need-n}`:''}`:`${n} packaging`}</td><td style="${td}color:#555;">${stl}${sg.reason&&sg.st!=='RUNNING'?` — ${escapeHtml(sg.reason)}`:''}${sg.ot?` <span style="${red}">OT</span>`:''}</td></tr>`; }).join('')}</table></div>`); });
-    // 6. lent out
-    const lent = []; P.forEach(p=>p.segs.forEach(sg=>{ if(sg.g==='Lent to other dept') lent.push({n:p.name, dep: sg.k.replace('Lent · ',''), a:sg.a, b:sg.b}); }));
-    const lentAll = P.filter(p=>p.awaySt==='lent');
-    H.push(hd('9 · Lent to other departments'));
-    H.push(lentAll.length ? `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">${lentAll.map(p=>`<tr><td style="${td}width:150px;">All day</td><td style="${td}"><b>${escapeHtml(p.name)}</b> → ${escapeHtml(p.away.replace('Lent to ',''))}</td><td style="${td}text-align:right;color:#777;">not tracked</td></tr>`).join('')}</table>` : '');
-    H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total (part of the day)</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : (lentAll.length ? '' : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`));
   } else {
     const days = []; for(let d = new Date(start+'T00:00:00'); localDateStr(d) <= end; d.setDate(d.getDate()+1)) days.push(localDateStr(d));
     const acc = {}, otByDay = [], lab = {}, st = {};
