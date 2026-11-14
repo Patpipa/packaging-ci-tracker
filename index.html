@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.27 - 2026-11-12 (Labour breakdown: tap ⓘ How these numbers add up — worked with the report’s own numbers)';
+const APP_VERSION = 'v205.28 - 2026-11-14 (Crew Hours PDF: timeline legend no longer runs together; chart drawn at a fixed size for the PDF; tap-to-open note left out of the PDF)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2612,7 +2612,7 @@ function labourHowHTML(acc){
       ${li(`<b>PLH</b> uses only the lines' labour (V1–V3, Manual). Gross = lbs ÷ all their hours on the run; Net = lbs ÷ running hours only.`)}
     </ol></details>`;
 }
-function labourBreakdownHTML(acc, td){
+function labourBreakdownHTML(acc, td, forPdf){
   const h = m=>chDur(m||0), pc = m=>acc.floor ? Math.round((m||0)/acc.floor*100)+'%' : '';
   const row = (t, m, sub, st)=>`<tr><td style="${td}${st||''}">${t}${sub?`<div style="font-size:10.5px;color:#888;">${sub}</div>`:''}</td><td style="${td}text-align:right;white-space:nowrap;${st||''}">${h(m)}</td><td style="${td}text-align:right;color:#888;">${pc(m)}</td></tr>`;
   const direct = (acc.run||0)+(acc.stop||0);
@@ -2627,7 +2627,7 @@ function labourBreakdownHTML(acc, td){
     ${row('&nbsp;&nbsp;Not recorded', acc.nr, 'in, but not tapped onto anything', acc.nr?'color:#c0392b;':'')}
     ${row('Overtime (floor-logged)', acc.ot, 'before 8:00 AM / after 4:30 PM — already inside the rows above · not payroll', acc.ot?'color:#c0392b;':'')}
   </table>
-  <div style="font-size:10.5px;color:#666;margin-top:6px;line-height:1.5;">PLH (Lines only) divides lbs by the labour of people on V1–V3 and Manual: <b>gross</b> = all their time on the run (stops and paid break included), <b>net</b> = running time only. Side machine, support, lent and break hours are not in PLH.</div>${labourHowHTML(acc)}`;
+  <div style="font-size:10.5px;color:#666;margin-top:6px;line-height:1.5;">PLH (Lines only) divides lbs by the labour of people on V1–V3 and Manual: <b>gross</b> = all their time on the run (stops and paid break included), <b>net</b> = running time only. Side machine, support, lent and break hours are not in PLH.</div>${forPdf?'':labourHowHTML(acc)}`;
 }
 function crewReportHTML(start, end, forPdf){
   const single = start===end, H = [];
@@ -2651,11 +2651,11 @@ function crewReportHTML(start, end, forPdf){
       ${P.map(p=>{ if(p.away) return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td colspan="6" style="${td}color:#777;">${escapeHtml(p.away)} — all day (hours not tracked)</td></tr>`; const nr = p.tot['Not recorded']||0, nh = p.grp['Not here']||0;
         return `<tr><td style="${td}font-weight:700;">${escapeHtml(p.name)}</td><td style="${td}${p.a<REG_A?red:''}">${chFmt(p.a)}</td><td style="${td}${p.b>REG_B?red:''}">${chFmt(p.b)}${pd.isToday && p.b>=toMin(nowHHMM())?' (so far)':''}</td><td style="${td}">${chDur(chWorked(p))}${nh?`<div style="font-size:10.5px;color:#888;">not here ${chDur(nh)}</div>`:''}</td><td style="${td}">${chDur(p.grp['Break']||0)}</td><td style="${td}${p.ot?red:'color:#aaa;'}">${p.ot?chDur(p.ot):'—'}</td><td style="${td}${nr?red:'color:#aaa;'}">${nr?chDur(nr):'—'}</td></tr>`; }).join('')}
       <tr><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">Total · ${P.filter(p=>!p.away).length} working</td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}border-top:2px solid #1e3a5f;"></td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(chWorked))}</td><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">${chDur(sum(p=>p.grp['Break']||0))}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.ot)?red:''}">${sum(p=>p.ot)?chDur(sum(p=>p.ot)):'—'}</td><td style="${td}border-top:2px solid #1e3a5f;${sum(p=>p.tot['Not recorded']||0)?red:''}">${sum(p=>p.tot['Not recorded']||0)?chDur(sum(p=>p.tot['Not recorded']||0)):'—'}</td></tr></table>`));
-    { const acc = {}; P.forEach(p=>labourAdd(acc, p)); H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(acc, td)); }
+    { const acc = {}; P.forEach(p=>labourAdd(acc, p)); H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(acc, td, forPdf)); }
     // 2. timeline chart
     const PW = P.filter(p=>!p.away), a0 = Math.floor(Math.min(REG_A, ...PW.map(p=>p.a))/60)*60, b0 = Math.ceil(Math.max(REG_B, ...PW.map(p=>p.b))/60)*60;
     const W = 740, L = 92, R = 8, rowH = 24, top = 22, Wd = W-L-R, x = m=>L + (m-a0)/(b0-a0)*Wd, Hh = top + P.length*rowH + 6;
-    let svg = `<svg width="100%" viewBox="0 0 ${W} ${Hh}" style="display:block;font-family:Arial;"><defs><pattern id="nrh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fde2df"/><line x1="0" y1="0" x2="0" y2="6" stroke="#e74c3c" stroke-width="2.5"/></pattern></defs>`;
+    let svg = `<svg ${forPdf?`width="${W}" height="${Hh}"`:'width="100%"'} viewBox="0 0 ${W} ${Hh}" style="display:block;font-family:Arial;${forPdf?'max-width:100%;':''}"><defs><pattern id="nrh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fde2df"/><line x1="0" y1="0" x2="0" y2="6" stroke="#e74c3c" stroke-width="2.5"/></pattern></defs>`;
     if(a0<REG_A) svg += `<rect x="${x(a0)}" y="${top-4}" width="${x(REG_A)-x(a0)}" height="${Hh-top+4}" fill="#fdecea"/>`;
     if(b0>REG_B) svg += `<rect x="${x(REG_B)}" y="${top-4}" width="${x(b0)-x(REG_B)}" height="${Hh-top+4}" fill="#fdecea"/><text x="${(x(REG_B)+x(b0))/2}" y="${Hh-2}" font-size="9" fill="#c0392b" text-anchor="middle">OT</text>`;
     for(let h=a0; h<=b0; h+=60){ svg += `<line x1="${x(h)}" y1="${top-4}" x2="${x(h)}" y2="${Hh}" stroke="#e3e3e3"/><text x="${x(h)}" y="${top-9}" font-size="10" fill="#777" text-anchor="middle">${(h/60)%12||12}${h<720?'a':'p'}</text>`; }
@@ -2666,7 +2666,7 @@ function crewReportHTML(start, end, forPdf){
     svg += `<line x1="${x(REG_A)}" y1="${top-4}" x2="${x(REG_A)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/><line x1="${x(REG_B)}" y1="${top-4}" x2="${x(REG_B)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/></svg>`;
     const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Clean-up / closing',CH_COL.cleanup],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
     H.push(hd('2 · Crew timeline'));
-    H.push(scroll(svg) + (forPdf?'':`<div style="font-size:10.5px;color:#888;margin-top:2px;">← swipe the chart sideways →</div>`) + `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:10.5px;color:#555;">${lg.map(([t,c])=>`<span><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;vertical-align:-1px;margin-right:4px;"></span>${t}</span>`).join('')}<span><span style="display:inline-block;width:10px;height:10px;background:repeating-linear-gradient(45deg,#e74c3c 0 2px,#fde2df 2px 5px);vertical-align:-1px;margin-right:4px;"></span>Not recorded</span><span style="color:#c0392b;">Red shading = overtime (before 8:00 AM / after 4:30 PM)</span></div>`);
+    H.push(scroll(svg) + (forPdf?'':`<div style="font-size:10.5px;color:#888;margin-top:2px;">← swipe the chart sideways →</div>`) + `<div style="margin-top:6px;font-size:10.5px;color:#555;line-height:1.9;">${lg.map(([t,c])=>`<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;vertical-align:-1px;margin-right:4px;"></span>${t}</span>`).join('')}<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;vertical-align:-1px;margin-right:4px;"></span>Not recorded</span><span style="display:inline-block;color:#c0392b;">Red shading = overtime (before 8:00 AM / after 4:30 PM)</span></div>`);
     // 3. where the crew's hours went
     const G = {}; P.forEach(p=>Object.keys(p.grp).forEach(g=>G[g]=(G[g]||0)+p.grp[g]));
     const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Meetings & stretching','Lead / Yield duties','Other duties','Other','Not recorded'];
@@ -2716,7 +2716,7 @@ function crewReportHTML(start, end, forPdf){
     const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Meetings & stretching','Lead / Yield duties','Other duties','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
     H.push(hd(`2 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<table style="width:100%;border-collapse:collapse;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}">${g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
-    H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(lab, td));
+    H.push(hd('Labour breakdown')); H.push(labourBreakdownHTML(lab, td, forPdf));
     H.push(hd('3 · Overtime by day'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${otByDay.map(o=>`<tr><td style="${td}">${fmtDate(o.dt)}</td><td style="${td}${o.ot?red:'color:#aaa;'}">${o.ot?`${chDur(o.ot)} · ${o.n} ${o.n===1?'person':'people'}`:'—'}</td><td style="${td}text-align:right;"><span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openCrewHours('${o.dt}')">day →</span></td></tr>`).join('')}</table>`);
   }
