@@ -234,7 +234,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.31 - 2026-11-14 (Daily Report side machines: Labour shows (2 people) when more than one person ran it)';
+const APP_VERSION = 'v205.32 - 2026-11-14 (Packaging crew count no longer includes cross-dept help; Daily Report shows them on their own line: how many, from where, hours)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1745,6 +1745,9 @@ function dayLogSections(date, opts){
   const x = computeSideLabour(date, date), om = offlineMinutes(date), out = [];
   const crew = [];
   crew.push({k:'Packaging crew', v: String(crewTotalFor(date) ?? '—'), big:true, red:true}); // v167: just the total · v177: big, bold, red
+  { const cd = crewDayOf(date), hs = Object.keys(cd).filter(n=>cd[n] && cd[n].helper); // v205.32: cross-dept help shown on its own line — count, dept and hours only (no names in the Daily Report)
+    if(hs.length){ const pd = personDay(date), mins = hs.reduce((t,n)=>{ const p = pd && pd.people.find(x=>x.name===n); return t + (p ? chWorked(p) : 0); },0), depts = [...new Set(hs.map(n=>cd[n].dept||(helperOf(n)||{}).dept||'other dept'))];
+      crew.push({k:'Cross-dept help', v:`${hs.length} ${hs.length===1?'person':'people'} from ${depts.join(', ')} · ${fmtDur(mins)}`}); } }
   OFFLINE_ROLES.forEach(r=>{
     if(!roleIn(date,r)) crew.push({k:r, v:'off today'});
     else { const m = om[r]; crew.push({k:r, v: (opts && opts.short) ? (m.min>0 ? `on the line ${fmtDur(m.min)}` : 'stayed off the line') : (m.min>0 ? `in today · on the line ${fmtDur(m.min)}` : 'in today · stayed off the line')}); }
@@ -3102,7 +3105,7 @@ function crewTotalFor(date){
   const cdNames = Object.keys(crewDayOf(date)).filter(n=>!OFFLINE_ROLES.includes(n));
   const W = (((dayLogFor(date)||{}).where)||{});
   if(cdNames.length || Object.keys(W).some(n=>!OFFLINE_ROLES.includes(n))){
-    const all = uniq([...crewRoster(), ...cdNames, ...Object.keys(W)]).filter(n=>!OFFLINE_ROLES.includes(n));
+    const all = uniq([...crewRoster(), ...cdNames, ...Object.keys(W)]).filter(n=>!OFFLINE_ROLES.includes(n) && !helperDay(date, n)); // v205.32: cross-dept help is not packaging crew
     return all.filter(n=>{ const lg = effectiveLog(date, n); return lg.some(e=>!e.w || !(e.w.startsWith('Not here') || e.w.startsWith('Lent'))) && lg.length; }).length;
   }
   const ct = crewTimeline(date); return ct.length ? Math.max(...ct.map(e=>e.n)) : null;
