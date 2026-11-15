@@ -39,6 +39,13 @@ h1,h2,h3{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spaci
 .topbar .brand{display:flex;flex-direction:column;line-height:1;}
 .topbar .brand .eyebrow{font-size:10px;letter-spacing:0.18em;color:var(--amber);font-weight:600;text-transform:uppercase;}
 .topbar h1{font-size:19px;color:var(--text);margin-top:2px;}
+.syncpill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font:700 12px/1.2 system-ui,-apple-system,sans-serif;white-space:nowrap;border:1px solid var(--line);background:var(--panel);color:var(--muted);max-width:52vw;overflow:hidden;text-overflow:ellipsis;}
+.syncpill .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:currentColor;}
+.syncpill.ok{border-color:#2f8a4a;background:rgba(47,138,74,.15);color:#7fd69a;}
+.syncpill.busy{border-color:#c9a227;background:rgba(201,162,39,.14);color:#f2c14e;}
+.syncpill.off{border-color:#d9822b;background:rgba(217,130,43,.16);color:#f0a35e;}
+.syncpill.bad{border-color:#c0392b;background:rgba(192,57,43,.2);color:#ff8a7a;}
+#syncBanner{display:none;margin:0 16px 8px;padding:10px 12px;border-radius:10px;font:700 13px/1.35 system-ui,sans-serif;}
 .iconbtn{width:40px;height:40px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text);}
 main{flex:1;padding:0 16px 100px;}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
@@ -219,8 +226,9 @@ nav.tabbar .tab .ic{font-size:18px;}
       <span class="eyebrow" id="shiftClock">--:--</span>
       <h1 id="pageTitle">Dashboard</h1>
     </div>
-    <button class="iconbtn" onclick="Router.go('settings')">⚙</button>
+    <div style="display:flex;align-items:center;gap:8px;"><button type="button" class="syncpill" id="syncPill" onclick="openSyncPanel()" aria-label="Data connection status"><span class="dot"></span><span id="syncPillTxt">Connecting…</span></button><button class="iconbtn" onclick="Router.go('settings')">⚙</button></div>
   </div>
+  <div id="syncBanner" onclick="openSyncPanel()"></div>
   <main id="main"></main>
   <div class="toast" id="toast"></div>
   <nav class="tabbar">
@@ -234,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.34 - 2026-11-14 (Daily Report: Packaging crew · Crew lent to other depts · Cross-dept help — all three always shown)';
+const APP_VERSION = 'v205.35 - 2026-11-14 (data-saving visibility: status pill next to ⚙ — Saved / Saving / Offline / Not saved; warning bar when offline or failing; tap for connection panel + Save now; local safety copy of the day log)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -577,7 +585,8 @@ const Store = {
   },
   async saveDayLog(){
     try{
-      await this.db.collection('tracker').doc('dayLog').set({data: JSON.stringify(this.dayLog||{}), updatedAt: Date.now()});
+      const json = JSON.stringify(this.dayLog||{}); safeLocalSet('pct_daylog_backup', json); // v205.35: local safety copy
+      await this.db.collection('tracker').doc('dayLog').set({data: json, updatedAt: Date.now()});
       return true;
     }catch(e){ console.error('save dayLog failed', e); toast('Save failed — check connection'); return false; }
   },
@@ -605,6 +614,55 @@ const Store = {
 };
 function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
 function safeLocalSet(key, val){ try{ localStorage.setItem(key, val); return true; }catch(e){ return false; } }
+/* ===== v205.35: data-saving visibility — status pill (top bar), warning bar, and a tap-open connection panel ===== */
+const SaveState = {pending:0, pendSince:null, lastOk:null, lastLocal:null, failed:null, online:(typeof navigator==='undefined'||navigator.onLine!==false), offSince:null};
+(function wrapSaves(){
+  ['saveRecords','saveProductLibrary','saveDayLog','saveSettings','saveDailyReports','saveLiveRuns'].forEach(k=>{
+    const orig = Store[k]; if(typeof orig!=='function') return;
+    Store[k] = async function(...a){
+      SaveState.pending++; if(!SaveState.pendSince) SaveState.pendSince = Date.now(); SaveState.lastLocal = Date.now(); syncUI();
+      let ok = true; try{ const r = await orig.apply(Store, a); if(r===false) ok = false; return r; }
+      catch(e){ ok = false; throw e; }
+      finally{ SaveState.pending = Math.max(0, SaveState.pending-1); if(!SaveState.pending) SaveState.pendSince = null;
+        if(ok){ SaveState.lastOk = Date.now(); SaveState.failed = null; } else SaveState.failed = Date.now(); syncUI(); }
+    };
+  });
+  try{ window.addEventListener('online', ()=>{ SaveState.online = true; SaveState.offSince = null; syncUI(); });
+       window.addEventListener('offline', ()=>{ SaveState.online = false; SaveState.offSince = Date.now(); syncUI(); });
+       if(!SaveState.online) SaveState.offSince = Date.now(); setInterval(syncUI, 15000); }catch(e){}
+})();
+function syncClock(t){ if(!t) return '—'; const d = new Date(t); return fmtTime12(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')); }
+function syncStateNow(){ const S = SaveState, now = Date.now();
+  if(S.failed) return {cls:'bad', txt:'Not saved · tap', banner:'🔴 Last change was NOT saved to the cloud. Tap to retry — keep the app open.'};
+  if(!S.online) return {cls:'off', txt:'Offline · on phone', banner: (S.offSince && now-S.offSince>120000) ? `🟠 Offline since ${syncClock(S.offSince)} — changes are kept on this phone and will sync when the signal is back. Don't clear the browser.` : ''};
+  if(S.pending){ const long = S.pendSince && now-S.pendSince>5000; return {cls: long?'off':'busy', txt: long?'Waiting for connection…':'Saving…', banner: (S.pendSince && now-S.pendSince>120000) ? `🟠 Changes since ${syncClock(S.pendSince)} are waiting to reach the cloud — kept on this phone meanwhile.` : ''}; }
+  if(S.lastOk) return {cls:'ok', txt:`Saved · ${syncClock(S.lastOk)}`, banner:''};
+  return {cls:'ok', txt:'Connected', banner:''};
+}
+function syncUI(){ try{
+  const st = syncStateNow(), p = document.getElementById('syncPill'), t = document.getElementById('syncPillTxt'), bn = document.getElementById('syncBanner');
+  if(p){ p.className = 'syncpill '+st.cls; } if(t) t.textContent = st.txt;
+  if(bn){ if(st.banner){ bn.style.display = 'block'; bn.style.background = st.cls==='bad' ? 'rgba(192,57,43,.25)' : 'rgba(217,130,43,.2)'; bn.style.border = '1px solid '+(st.cls==='bad'?'#c0392b':'#d9822b'); bn.style.color = st.cls==='bad'?'#ffb3a8':'#f7c38f'; bn.textContent = st.banner; } else bn.style.display = 'none'; }
+  const pn = document.getElementById('syncPanel'); if(pn) pn.querySelector('.sp-body').innerHTML = syncPanelBody();
+}catch(e){} }
+function syncPanelBody(){ const S = SaveState, st = syncStateNow(), row = (c,k,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);"><span style="white-space:nowrap;"><span style="color:${c};">●</span> ${k}</span><b style="text-align:right;">${v}</b></div>`;
+  const g = '#3cc06b', y = '#f2c14e', o = '#f0a35e', r = '#ff8a7a';
+  return row(S.online?g:o, 'Connection', S.online?'Online':'Offline')
+    + row(S.failed?r:(S.lastOk?g:y), 'Last successful save', S.lastOk ? `${syncClock(S.lastOk)} (cloud)` : 'none yet this session')
+    + row(S.lastLocal?g:y, 'Local safety backup', S.lastLocal ? `On this phone · ${syncClock(S.lastLocal)}` : 'On this phone (offline cache)')
+    + row(S.failed?r:(S.pending?o:g), 'Cloud sync', S.failed ? `Failed at ${syncClock(S.failed)} — tap Save now` : S.pending ? `${S.pending} change${S.pending===1?'':'s'} waiting` : 'Active · nothing waiting')
+    + `<div class="cb-mut" style="margin-top:10px;font-size:12px;line-height:1.45;">Green = everything reached the cloud. Orange = kept on this phone and will sync by itself when the signal is back — keep the app open, don't clear the browser. Red = a save failed; tap Save now.</div>`; }
+function openSyncPanel(){ let pn = document.getElementById('syncPanel'); if(pn){ pn.remove(); return; }
+  pn = document.createElement('div'); pn.id = 'syncPanel';
+  pn.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:70px 14px 14px;';
+  pn.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;width:100%;max-width:420px;color:var(--text);font-size:14px;" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><b style="font-family:'Oswald',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Data connection</b><button type="button" class="cb-btn" style="flex:0 0 auto;padding:4px 10px;" onclick="document.getElementById('syncPanel').remove()">✕</button></div>
+    <div class="sp-body">${syncPanelBody()}</div>
+    <button type="button" class="btn btn-primary" style="margin-top:12px;width:100%;" onclick="syncSaveNow()">↻ Save now</button></div>`;
+  pn.onclick = ()=>pn.remove(); document.body.appendChild(pn); }
+async function syncSaveNow(){ SaveState.failed = null; syncUI();
+  const r = await Promise.all([Store.saveDayLog(), Store.saveLiveRuns(), Store.saveSettings()].map(p=>Promise.resolve(p).catch(()=>false)));
+  toast(r.every(x=>x!==false) ? '✓ Saved to the cloud' : 'Still not saving — check the signal'); }
 function showStorageWarning(){
   const isTerminated = String(window._lastStorageError||'').toLowerCase().includes('terminated');
   const banner = isTerminated
