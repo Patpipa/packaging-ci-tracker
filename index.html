@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.38 - 2026-11-15 (STAFFING: crew needed from work done vs available, lines below 2-person staffing, Lead/Yield on the line, all machines at once, overtime, cross-dept help, Employee shortage stops)';
+const APP_VERSION = 'v205.39 - 2026-11-15 (Staffing: standard line-up = 2 per running Variovac + 1 floater; Runner / Floater time counts as packaging labour; floater work beyond one person raises crew needed)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2326,7 +2326,7 @@ function staffingFor(date){
   const pd = personDay(date); if(!pd) return null;
   const d = dayLogFor(date)||{}, isToday = date===todayStr(), endMin = isToday ? Math.min(DAY_TO, toMin(nowHHMM())) : DAY_TO, N = DAY_TO-DAY_FROM;
   const cnt = {}; VARIOVACS.forEach(m=>{ cnt[m] = new Array(N).fill(0); });
-  let side = 0, manual = 0, support = 0, leadLine = 0, help = 0, ot = 0;
+  let side = 0, manual = 0, support = 0, runner = 0, leadLine = 0, help = 0, ot = 0;
   pd.people.forEach(p=>{ if(p.away) return; const role = OFFLINE_ROLES.includes(p.name), hlp = !!helperDay(date, p.name);
     if(hlp) help += chWorked(p);
     p.segs.forEach(sg=>{ const w = String(sg.w||''), g = sg.g, m0 = sg.b-sg.a;
@@ -2334,6 +2334,7 @@ function staffingFor(date){
       if(w==='Manual Pack' && (g==='Lines running'||g==='Lines stopped')) manual += m0;
       if(g==='Side machines') side += m0;
       if(g==='Garbage run' || g==='Shutdown / Clean-up') support += m0;
+      if(w==='Runner / Floater' && g==='Other duties' && !role) runner += m0; // v205.39: the floater's time is packaging labour
       if(role && (g==='Lines running'||g==='Lines stopped'||g==='Side machines')) leadLine += m0;
       if(sg.ot && !role && !hlp && !['Break','Not here','Not recorded'].includes(g)) ot += m0; }); });
   let lineNeed = 0, shortMin = 0, shortCrew = 0, noCrew = 0, anyLine = false; const allRun = new Array(N).fill(true);
@@ -2346,28 +2347,31 @@ function staffingFor(date){
   (d.side||[]).forEach(x=>{ const a = toMin(x.start), b = x.end ? toMin(x.end) : endMin; for(let t=a;t<b;t++){ const i = t-DAY_FROM; if(i>=0 && i<N) sideOn[i] = true; }
     (x.waits||[]).forEach(w=>{ const a2 = toMin(w.start), b2 = w.end ? toMin(w.end) : endMin; for(let t=a2;t<b2;t++){ const i = t-DAY_FROM; if(i>=0 && i<N) sideOn[i] = false; } if(/employee shortage/i.test(w.reason||'')) noCrew += Math.max(0, b2-a2); }); });
   let allAtOnce = 0; for(let i=0;i<N;i++) if(anyLine && allRun[i] && sideOn[i]) allAtOnce++;
-  const work = lineNeed + side + manual + support;
+  /* v205.39: standard line-up = 2 per running Variovac + 1 floater (Manual / Runner) for the shift.
+     The floater slot covers up to 1 person of flexible work (Manual, Runner, side machines, garbage, cleaning); anything beyond that adds to the crew needed. */
   const frac = isToday ? Math.max(0.05, Math.min(1, (Math.min(endMin, REG_B) - REG_A) / (REG_B-REG_A))) : 1;
+  const flex = manual + runner + side + support, floaterSlot = anyLine ? Math.round(PROD_MIN * frac) : 0, flexCounted = Math.max(flex, floaterSlot);
+  const work = lineNeed + flexCounted;
   const needed = work / (PROD_MIN * frac), avail = crewTotalFor(date);
-  return {date, today:isToday, work, lineNeed, side, manual, support, needed, avail, short: avail!=null ? needed-avail : null, shortMin, shortCrew, leadLine, allAtOnce, ot, help, noCrew};
+  return {date, today:isToday, work, lineNeed, side, manual, runner, support, flex, floaterSlot, flexCounted, needed, avail, short: avail!=null ? needed-avail : null, shortMin, shortCrew, leadLine, allAtOnce, ot, help, noCrew};
 }
 function staffingRows(x, multi){ if(!x) return [];
   const pp = v=>v.toFixed(1), red = x.short!=null && x.short>0.2;
   return [
     {k: multi ? 'Crew needed vs available (avg per day)' : `Crew needed vs available${x.today?' (so far)':''}`, v: `${pp(x.needed)} needed · ${x.avail==null?'—':(multi?pp(x.avail):x.avail)} available${x.short!=null ? (x.short>0.05 ? ` → short ${pp(x.short)}` : ' → enough') : ''}`, big:true, red},
-    {k:'Work done (crew hours)', v:`Variovacs ${fmtDur(x.lineNeed)} (2 per line while on)\nSide machines ${fmtDur(x.side)}\nManual Pack ${fmtDur(x.manual)}\nGarbage / cleaning / closing ${fmtDur(x.support)}\n= ${fmtDur(x.work)}`},
+    {k:'Work done (crew hours)', v:`Variovacs ${fmtDur(x.lineNeed)} (2 per line while on)\nFloater work ${fmtDur(x.flex)}: Manual ${fmtDur(x.manual)} · Runner ${fmtDur(x.runner||0)} · side machines ${fmtDur(x.side)} · garbage / cleaning ${fmtDur(x.support)}${x.flexCounted>x.flex?`\n(counted as 1 floater = ${fmtDur(x.flexCounted)})`:x.flex>x.floaterSlot&&x.floaterSlot?`\n(${fmtDur(x.flex-x.floaterSlot)} more than 1 floater can cover)`:''}\n= ${fmtDur(x.work)}`},
     {k:'Lines run below 2-person staffing', v: x.shortMin ? `${fmtDur(x.shortMin)}${x.shortCrew!==x.shortMin?` (${fmtDur(x.shortCrew)} crew time missing)`:''}` : 'none', red: x.shortMin>0},
     {k:'Lead Hand / Yield on the line', v: x.leadLine ? fmtDur(x.leadLine) : 'none', red: x.leadLine>0},
     {k:'All Variovacs + side machines at once', v: x.allAtOnce ? fmtDur(x.allAtOnce) : 'none'},
     {k:'Overtime (floor-logged)', v: x.ot ? fmtDur(x.ot) : 'none', red: x.ot>0},
     {k:'Cross-dept help used', v: x.help ? fmtDur(x.help) : 'none'},
     {k:'Stopped for Employee shortage', v: x.noCrew ? fmtDur(x.noCrew) : 'none', red: x.noCrew>0},
-    {k:'', v:`Crew needed = work done ÷ ${PROD_MIN/60}h productive per person (8:00–4:30 less 1h breaks). Each running Variovac counts as needing 2 people; side machines, Manual Pack and support count the real time spent.`, sub:true}
+    {k:'', v:`Standard line-up: 2 per running Variovac + 1 floater (Manual / Runner) = 7 with all three lines on. Side machines, garbage and cleaning are floater work — when they take more than one person can cover, the crew needed goes above 7. Crew needed = work ÷ ${PROD_MIN/60}h productive per person (8:00–4:30 less 1h breaks).`, sub:true}
   ]; }
 function staffingSum(date0, date1){ const days = []; for(let dt=date0; dt<=date1; dt=shiftDate(dt,1)) days.push(dt);
   const xs = days.map(staffingFor).filter(x=>x && x.work>0); if(!xs.length) return null;
   const S = k=>xs.reduce((t,x)=>t+(x[k]||0),0), av = xs.filter(x=>x.avail!=null);
-  const o = {multi:true, days:xs.length, work:S('work'), lineNeed:S('lineNeed'), side:S('side'), manual:S('manual'), support:S('support'), shortMin:S('shortMin'), shortCrew:S('shortCrew'), leadLine:S('leadLine'), allAtOnce:S('allAtOnce'), ot:S('ot'), help:S('help'), noCrew:S('noCrew')};
+  const o = {multi:true, days:xs.length, work:S('work'), lineNeed:S('lineNeed'), side:S('side'), manual:S('manual'), runner:S('runner'), support:S('support'), flex:S('flex'), floaterSlot:S('floaterSlot'), flexCounted:S('flexCounted'), shortMin:S('shortMin'), shortCrew:S('shortCrew'), leadLine:S('leadLine'), allAtOnce:S('allAtOnce'), ot:S('ot'), help:S('help'), noCrew:S('noCrew')};
   o.needed = xs.reduce((t,x)=>t+x.needed,0)/xs.length; o.avail = av.length ? av.reduce((t,x)=>t+x.avail,0)/av.length : null; o.short = o.avail!=null ? o.needed-o.avail : null; o.perDay = xs; return o; }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
 /* v162: each person's day. Regular shift 8:00 AM–4:30 PM; anything outside it is overtime (OT), shown in red.
