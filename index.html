@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.35 - 2026-11-14 (data-saving visibility: status pill next to ⚙ — Saved / Saving / Offline / Not saved; warning bar when offline or failing; tap for connection panel + Save now; local safety copy of the day log)';
+const APP_VERSION = 'v205.36 - 2026-11-15 (PLH disclaimer: figures cover monitored jobs only — on the PLH report & PDF, PLH cards and the weekly report)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4170,6 +4170,7 @@ function computePLHSummary(recs){
   const avgTarget = withTarget.length ? withTarget.reduce((a,r)=>a+r.plh.targetPLH,0)/withTarget.length : null;
   return {totalWeight, totalQty, totalGrossHours, totalNetHours, grossPLH, netPLH, best, worst, avgTarget, runCount:jobs.length, rawRunCount:recs.length}; // runCount = jobs (same product combined)
 }
+const PLH_DISCLAIMER = 'PLH figures are based only on jobs that were directly monitored and recorded during this period. They show measured production activity, not a complete productivity assessment of all machines or job orders.'; // v205.36
 function renderPLHCard(summary, title){
   if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">No finished runs with weight recorded yet.</div></div>`;
   const varianceLine = summary.avgTarget!=null ? (()=>{
@@ -4194,6 +4195,7 @@ function renderPLHCard(summary, title){
     <div class="statrow"><span class="lbl">Jobs</span><span class="val">${summary.runCount}${summary.rawRunCount>summary.runCount?` <span style="color:var(--muted);font-size:11px;">(${summary.rawRunCount} runs)</span>`:''}</span></div>
     ${summary.best ? `<div class="statrow"><span class="lbl">Best Product</span><span class="val" style="color:var(--run);font-size:12px;">${escapeHtml(summary.best.plh.product||summary.best.product||'')} — ${summary.best.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
     ${summary.worst && summary.worst!==summary.best ? `<div class="statrow"><span class="lbl">Lowest Product</span><span class="val" style="color:var(--wait);font-size:12px;">${escapeHtml(summary.worst.plh.product||summary.worst.product||'')} — ${summary.worst.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
+    <div class="cb-mut" style="font-size:10.5px;line-height:1.4;margin-top:8px;font-style:italic;">ⓘ ${PLH_DISCLAIMER}</div>
   </div>`;
 }
 function dailyPLHSeries(startDate, endDate){
@@ -4463,6 +4465,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
         </div>
         <div style="font-size:10px;color:#888;line-height:1.5;">The Staffing Timeline and Downtime sections under each job show the exact segments used to calculate these hours.</div>
       </div>
+      <div style="margin-top:12px;padding:10px 12px;border:1px solid #ddd;border-left:3px solid #1e3a5f;border-radius:6px;background:#f7f9fc;font-size:10.5px;color:#444;line-height:1.5;font-style:italic;"><b style="font-style:normal;">Note:</b> ${PLH_DISCLAIMER}</div>
       <div style="border-top:1px solid #ddd;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;font-size:10.5px;color:#999;">
         <span>Daily PLH Report — ${dateLabel} | Prepared by Walter</span>
         <span>Packaging CI Tracker ${APP_VERSION.split(' ')[0]}</span>
@@ -6466,7 +6469,8 @@ function weeklySummaryText(){
 PLH This Period:
 Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
 Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
-${plh.best ? 'Best: '+(plh.best.plh.product||'')+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}` : '';
+${plh.best ? 'Best: '+(plh.best.plh.product||'')+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}
+Note: ${PLH_DISCLAIMER}` : '';
   return `PACKAGING CI WEEKLY SUMMARY
 ${fmtDate(rep.startDate)} – ${fmtDate(rep.endDate)}
 
@@ -6604,6 +6608,7 @@ function exportWeeklyPDF(){
       if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
       if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
       if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
+      { ensure(40); doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(90); const nl = doc.splitTextToSize('Note: '+PLH_DISCLAIMER, 500); y+=4; doc.text(nl, 46, y); y += nl.length*11+4; doc.setFont('helvetica','normal'); doc.setTextColor(0); doc.setFontSize(10.5); } // v205.36
     }
   }
 
