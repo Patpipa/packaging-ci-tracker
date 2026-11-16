@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.36 - 2026-11-15 (PLH disclaimer: figures cover monitored jobs only — on the PLH report & PDF, PLH cards and the weekly report)';
+const APP_VERSION = 'v205.37 - 2026-11-15 (report footers: Prepared by Walter using the Packaging CI Tracker (built with an AI assistant) · from recorded floor data — PLH, Crew Hours, Upstream, Daily & Weekly PDFs)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2830,6 +2830,7 @@ function crewReportHTML(start, end, forPdf){
     H.push(`<table style="width:100%;border-collapse:collapse;">${otByDay.map(o=>`<tr><td style="${td}">${fmtDate(o.dt)}</td><td style="${td}${o.ot?red:'color:#aaa;'}">${o.ot?`${chDur(o.ot)} · ${o.n} ${o.n===1?'person':'people'}`:'—'}</td><td style="${td}text-align:right;"><span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openCrewHours('${o.dt}')">day →</span></td></tr>`).join('')}</table>`);
   }
   H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">From the names picked on the Live Floor (Start Run, Change Staff, side machines, Move crew, Garbage) and Where Everyone Is. Break, Waiting and Changeover come from each line's own entries. Overtime = time before 8:00 AM or after 4:30 PM. A finish after 4:30 PM comes from the person still being on a machine or place, until it finished or they were marked Not here · Went home. Not recorded = time in the shift with no position entered.</div></div>`);
+  H.push(`<div style="border-top:1px solid #ddd;margin-top:12px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Crew Hours — ${escapeHtml(start===end?fmtDate(start):fmtDate(start)+' – '+fmtDate(end))} · ${PREPARED_BY}</span><span>${APP_VERSION.split(' ')[0]}</span></div>`); // v205.37
   return H.join('');
 }
 function renderCrewHoursView(){
@@ -4170,6 +4171,9 @@ function computePLHSummary(recs){
   const avgTarget = withTarget.length ? withTarget.reduce((a,r)=>a+r.plh.targetPLH,0)/withTarget.length : null;
   return {totalWeight, totalQty, totalGrossHours, totalNetHours, grossPLH, netPLH, best, worst, avgTarget, runCount:jobs.length, rawRunCount:recs.length}; // runCount = jobs (same product combined)
 }
+const PREPARED_BY = 'Prepared by Walter using the Packaging CI Tracker (built with an AI assistant) · from recorded floor data'; // v205.37
+function pdfFooter(doc){ try{ const n = doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140); doc.text(`${PREPARED_BY}  ·  ${APP_VERSION.split(' ')[0]}  ·  page ${i} of ${n}`, 46, 772); } doc.setTextColor(0); }catch(e){} }
+setTimeout(()=>{ try{ const w0 = weeklySummaryText, s0 = summaryText; weeklySummaryText = (...a)=>w0(...a)+'\n\n— '+PREPARED_BY; summaryText = (...a)=>s0(...a)+'\n\n— '+PREPARED_BY; }catch(e){} }, 0); // v205.37: copy / share text ends with the prepared-by line
 const PLH_DISCLAIMER = 'PLH figures are based only on jobs that were directly monitored and recorded during this period. They show measured production activity, not a complete productivity assessment of all machines or job orders.'; // v205.36
 function renderPLHCard(summary, title){
   if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">No finished runs with weight recorded yet.</div></div>`;
@@ -4467,7 +4471,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
       </div>
       <div style="margin-top:12px;padding:10px 12px;border:1px solid #ddd;border-left:3px solid #1e3a5f;border-radius:6px;background:#f7f9fc;font-size:10.5px;color:#444;line-height:1.5;font-style:italic;"><b style="font-style:normal;">Note:</b> ${PLH_DISCLAIMER}</div>
       <div style="border-top:1px solid #ddd;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;font-size:10.5px;color:#999;">
-        <span>Daily PLH Report — ${dateLabel} | Prepared by Walter</span>
+        <span>Daily PLH Report — ${dateLabel} · ${PREPARED_BY}</span>
         <span>Packaging CI Tracker ${APP_VERSION.split(' ')[0]}</span>
       </div>
     </div>
@@ -6619,6 +6623,7 @@ function exportWeeklyPDF(){
     doc.text(lines, 46, y); y += lines.length*14+6;
   });
 
+  pdfFooter(doc);
   try{
     doc.save(`Packaging_CI_Weekly_${rep.startDate}_to_${rep.endDate}.pdf`);
     toast('PDF exported');
@@ -7014,6 +7019,7 @@ function exportReportPDF(date){
   const actLines = doc.splitTextToSize(rep.ciAction || '(none entered)', 520);
   doc.text(actLines, 46, y); y += actLines.length*14+10;
 
+  pdfFooter(doc);
   try{
     doc.save(`Packaging_CI_Report_${rep.date}.pdf`);
     toast('PDF exported');
@@ -7630,7 +7636,7 @@ function renderUpstreamReportHTML(start, end){
       ${detailBlocks.slice(1).join('')}
       <div style="border-top:1px solid #ddd;margin-top:18px;padding-top:10px;font-size:10px;color:#888;line-height:1.5;">Times are recorded live on the packaging floor, by machine and reason, as each stop happens. This summary measures how long packaging waited; it does not assess causes inside other departments. Reasons without an assigned department are grouped under "Others".</div>
       <div style="border-top:1px solid #ddd;margin-top:10px;padding-top:10px;display:flex;justify-content:space-between;font-size:10.5px;color:#999;">
-        <span>Upstream Impact Summary — ${dateLabel}</span>
+        <span>Upstream Impact Summary — ${dateLabel} · ${PREPARED_BY}</span>
         <span>Packaging CI Tracker ${APP_VERSION.split(' ')[0]}</span>
       </div>
     </div>
