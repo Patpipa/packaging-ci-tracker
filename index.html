@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.42 - 2026-11-15 (Staffing timeline says where the missing person went — garbage run (area), side machine, break…; packaging labour on garbage runs by area)';
+const APP_VERSION = 'v205.43 - 2026-11-15 (Staffing timeline: fully staffed lines add up the crew — 3 Variovacs × 2 = 6 + 1 Floater / Runner = 7 crew)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2437,10 +2437,12 @@ function shortStaffFor(date){
 function staffTimeline(x){ if(!x || !x._m) return [];
   const {keysAt, st, cnt, sideRun, pd, N} = x._m, d = dayLogFor(x.date)||{};
   const L = keysAt.length, manual = new Array(N).fill(0), sideP = {}, crewIn = new Array(N).fill(0), helpIn = new Array(N).fill(0), onBreak = new Array(N).fill(0);
+  const C = {}; ['V','M','S','G','R','O'].forEach(k=>{ C[k] = new Array(N).fill(0); }); // v205.43: where your own crew are, minute by minute
   pd.people.forEach(p=>{ if(p.away) return; const role = OFFLINE_ROLES.includes(p.name), hlp = !!helperDay(x.date, p.name);
     p.segs.forEach(sg=>{ const w = String(sg.w||''), g = sg.g; for(let t=sg.a;t<sg.b;t++){ const i = t-DAY_FROM; if(i<0||i>=N) continue;
       if(g==='Not here'||g==='Not recorded') continue;
-      if(!role){ if(hlp) helpIn[i]++; else crewIn[i]++; }
+      if(!role){ if(hlp) helpIn[i]++; else { crewIn[i]++; const onM = g==='Lines running'||g==='Lines stopped';
+        if(g==='Break'){} else if(onM && VARIOVACS.includes(w)) C.V[i]++; else if(onM && w==='Manual Pack') C.M[i]++; else if(g==='Side machines') C.S[i]++; else if(g==='Garbage run') C.G[i]++; else if(w==='Runner / Floater') C.R[i]++; else C.O[i]++; } }
       if(g==='Break' && !role) onBreak[i]++;
       if(w==='Manual Pack' && (g==='Lines running'||g==='Lines stopped')) manual[i]++;
       if(g==='Side machines'){ const m = w.replace(/^(Set-up|Dismantle) · /,''); (sideP[m] = sideP[m] || new Array(N).fill(0))[i]++; } } }); });
@@ -2478,7 +2480,8 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     const lines = full ? 'All 3 Variovacs (2 each)' : Object.keys(byC).sort((a,b)=>b-a).map(c=>{ const ms = byC[c]; return `${ms.join(' & ')} ${c==1?'1 person':c+(ms.length>1?' each':' people')}`; }).join(', ');
     const what = [lines, manual[i]?`Manual Pack ${manual[i]}`:'', sides.length?sides.map(s0=>s0.replace(/ \((\d+)\)$/,' ($1 people)'))+' running':''].filter(Boolean).join(', ');
     if(probs.length) return {ic: bad?'🔴':'⚠', t:`Short — ${probs.join(' · ')}${what?` (${what})`:''}`, sev: bad?'bad':'warn'};
-    return {ic:'✅', t:`Fully staffed — ${what||'lines on'} · ${people}`, sev:'ok'};
+    const parts = [C.V[i] ? (full && C.V[i]===6 ? '3 Variovacs × 2 = 6' : `${C.V[i]} on Variovacs`) : '', C.M[i]?`${C.M[i]} on Manual Pack`:'', C.S[i]?`${C.S[i]} on side machines`:'', C.G[i]?`${C.G[i]} on garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other duties`:''].filter(Boolean);
+    return {ic:'✅', t:`Fully staffed — ${parts.join(' + ')} = ${crewIn[i]} crew${helpIn[i]?` (+ ${helpIn[i]} cross-dept)`:''}${sides.length?` · ${sides.map(s0=>s0.replace(/ \(\d+\)$/,'')).join(' + ')} running`:''}`, sev:'ok'};
   };
   const segs = []; for(let i=0;i<L;i++){ const lb = label(i), k = lb.ic+lb.t, last = segs[segs.length-1]; if(last && last.k===k) last.b = i+1; else segs.push({k, a:i, b:i+1, ...lb}); }
   // smooth: blips under 5 min fold into the line before
