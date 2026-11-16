@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.39 - 2026-11-15 (Staffing: standard line-up = 2 per running Variovac + 1 floater; Runner / Floater time counts as packaging labour; floater work beyond one person raises crew needed)';
+const APP_VERSION = 'v205.40 - 2026-11-15 (SHORT-STAFFED: plain-language moments — Variovac with 1 person, stopped for shortage, crew moved to side machines, all lines + side machines at once, Lead / Yield on a machine — Crew tab banner, Daily Report, Weekly)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1816,7 +1816,7 @@ function dayLogSections(date, opts){
     else { const m = om[r]; crew.push({k:r, v: (opts && opts.short) ? (m.min>0 ? `on the line ${fmtDur(m.min)}` : 'stayed off the line') : (m.min>0 ? `in today · on the line ${fmtDur(m.min)}` : 'in today · stayed off the line')}); }
   });
   out.push({title:'CREW', rows:crew});
-  { const sx = staffingFor(date); if(sx && sx.work>0) out.push({title:'STAFFING', rows: staffingRows(sx)}); } // v205.38
+  { const sx = shortStaffFor(date); if(sx) out.push({title:'SHORT-STAFFED', rows: shortRows(sx)}); } // v205.40: plain-language list replaces the numbers
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
   const side = [];
   const used = SIDE_MACHINES.filter(m=>x.perMachine[m.name].runMin>0);
@@ -2373,6 +2373,74 @@ function staffingSum(date0, date1){ const days = []; for(let dt=date0; dt<=date1
   const S = k=>xs.reduce((t,x)=>t+(x[k]||0),0), av = xs.filter(x=>x.avail!=null);
   const o = {multi:true, days:xs.length, work:S('work'), lineNeed:S('lineNeed'), side:S('side'), manual:S('manual'), runner:S('runner'), support:S('support'), flex:S('flex'), floaterSlot:S('floaterSlot'), flexCounted:S('flexCounted'), shortMin:S('shortMin'), shortCrew:S('shortCrew'), leadLine:S('leadLine'), allAtOnce:S('allAtOnce'), ot:S('ot'), help:S('help'), noCrew:S('noCrew')};
   o.needed = xs.reduce((t,x)=>t+x.needed,0)/xs.length; o.avail = av.length ? av.reduce((t,x)=>t+x.avail,0)/av.length : null; o.short = o.avail!=null ? o.needed-o.avail : null; o.perDay = xs; return o; }
+/* ===== v205.40: SHORT-STAFFED — plain-language moments when packaging didn't have enough people ===== */
+const SHORT_MIN = 5; // ignore blips shorter than 5 minutes (moving people around)
+function shortStaffFor(date){
+  const pd = personDay(date); if(!pd) return null;
+  const d = dayLogFor(date)||{}, isToday = date===todayStr(), endMin = isToday ? Math.min(DAY_TO, toMin(nowHHMM())) : DAY_TO, N = DAY_TO-DAY_FROM;
+  const cnt = {}; VARIOVACS.forEach(m=>{ cnt[m] = new Array(N).fill(0); });
+  const roleAt = {}; // name -> array of place (machine) per minute
+  pd.people.forEach(p=>{ if(p.away) return; const role = OFFLINE_ROLES.includes(p.name);
+    p.segs.forEach(sg=>{ const w = String(sg.w||''), g = sg.g, onM = g==='Lines running'||g==='Lines stopped';
+      for(let t=sg.a;t<sg.b;t++){ const i = t-DAY_FROM; if(i<0||i>=N) continue;
+        if(cnt[w] && onM) cnt[w][i]++;
+        if(role && (onM || g==='Side machines')){ const r = roleAt[p.name] || (roleAt[p.name] = new Array(N).fill('')); r[i] = w.replace(/^(Set-up|Dismantle) · /,''); } } }); });
+  const st = {}; VARIOVACS.forEach(m=>{ st[m] = lineMinuteStatus(date, m, endMin); });
+  const sideRun = {}, sideShort = {};
+  (d.side||[]).forEach(x=>{ const m = x.machine; sideRun[m] = sideRun[m] || new Array(N).fill(false); sideShort[m] = sideShort[m] || new Array(N).fill(false);
+    const a = toMin(x.start), b = x.end ? toMin(x.end) : endMin; for(let t=a;t<b;t++){ const i = t-DAY_FROM; if(i>=0&&i<N) sideRun[m][i] = true; }
+    (x.waits||[]).forEach(w=>{ const a2 = toMin(w.start), b2 = w.end ? toMin(w.end) : endMin, sh = /employee shortage/i.test(w.reason||''); for(let t=a2;t<b2;t++){ const i = t-DAY_FROM; if(i>=0&&i<N){ sideRun[m][i] = false; if(sh) sideShort[m][i] = true; } } }); });
+  const sidesAt = i=>Object.keys(sideRun).filter(m=>sideRun[m][i]);
+  // per-minute event keys
+  const keysAt = []; const lastI = Math.min(N, endMin-DAY_FROM);
+  for(let i=0;i<lastI;i++){ const K = [];
+    VARIOVACS.forEach(m=>{ const x = st[m][i], r = st[m].reason[i]||'';
+      if(x==='RUNNING' && cnt[m][i]===1) K.push('one|'+m);
+      if(x==='WAITING' && /employee shortage/i.test(r)) K.push('stop|'+m);
+      if(x==='WAITING' && /employee reassigned/i.test(r)) K.push('moved|'+m); });
+    Object.keys(sideShort).forEach(m=>{ if(sideShort[m][i]) K.push('sstop|'+m); });
+    const sides = sidesAt(i); if(sides.length && VARIOVACS.every(m=>st[m][i]==='RUNNING')) K.push('all|'+sides.join(' + '));
+    Object.keys(roleAt).forEach(n=>{ if(roleAt[n][i]) K.push('role|'+n+'|'+roleAt[n][i]); });
+    keysAt.push(K); }
+  // build intervals per key
+  const open = {}, ev = [];
+  const close = (k, endI)=>{ const a = open[k]; delete open[k]; if(endI - a >= SHORT_MIN) ev.push({key:k, a: a+DAY_FROM, b: endI+DAY_FROM}); };
+  for(let i=0;i<=keysAt.length;i++){ const K = i<keysAt.length ? keysAt[i] : [];
+    Object.keys(open).forEach(k=>{ if(!K.includes(k)) close(k, i); }); K.forEach(k=>{ if(!(k in open)) open[k] = i; }); }
+  // labels — and merge same kind with the same times (e.g. "V1 & V2 ran with 1 person each")
+  const fullAll = (a,b)=>{ let f = 0; for(let t=a;t<b;t++){ const i = t-DAY_FROM; if(VARIOVACS.every(m=>st[m][i]==='RUNNING' && cnt[m][i]>=2)) f++; } return f >= (b-a)*0.8; };
+  const groups = {};
+  ev.forEach(e=>{ const [kind, x, y] = e.key.split('|'); const gk = ['one','stop','moved','sstop'].includes(kind) ? `${kind}|${e.a}|${e.b}` : e.key+'|'+e.a; (groups[gk] = groups[gk] || {kind, a:e.a, b:e.b, items:[], x, y}).items.push(x); });
+  const out = Object.values(groups).map(g=>{ const who = g.items.map(m=>shortM(m)).join(' & '), many = g.items.length>1; let label = '', sev = 'warn';
+    if(g.kind==='one') label = `${who} ran with only 1 person${many?' each':''}`;
+    else if(g.kind==='stop'){ label = `${who} stopped — shortage of staff`; sev = 'bad'; }
+    else if(g.kind==='moved'){ let sd = []; for(let t=g.a;t<g.b;t++) sidesAt(t-DAY_FROM).forEach(m=>{ if(!sd.includes(m)) sd.push(m); }); label = `${who} stopped — crew moved to ${sd.length ? sd.join(' & ') : 'other work'}`; sev = 'bad'; }
+    else if(g.kind==='sstop'){ label = `${g.items.join(' & ')} stopped — shortage of staff`; sev = 'bad'; }
+    else if(g.kind==='all') label = `All 3 Variovacs + ${g.x} running at the same time`;
+    else if(g.kind==='role') label = `${g.x} ran ${MACHINES.includes(g.y)||SIDE_MACHINES.some(z=>z.name===g.y) ? g.y : placeLabel(g.y)}${fullAll(g.a,g.b)?' — all 3 Variovacs already had 2 each':''}`;
+    return {a:g.a, b:g.b, mins:g.b-g.a, label, sev, kind:g.kind}; }).sort((p,q)=>p.a-q.a || q.mins-p.mins);
+  // total = union (overlaps counted once)
+  const any = new Array(N).fill(false); out.forEach(e=>{ for(let t=e.a;t<e.b;t++) any[t-DAY_FROM] = true; });
+  const total = any.filter(Boolean).length;
+  const nowK = isToday && keysAt.length ? keysAt[keysAt.length-1] : [];
+  const live = isToday ? out.filter(e=>e.b>=endMin-1) : [];
+  const roleMin = out.filter(e=>e.kind==='role').reduce((t,e)=>t+e.mins,0);
+  return {date, today:isToday, total, events:out, live, roleMin};
+}
+function shortRows(x){ if(!x) return [];
+  if(!x.events.length) return [{k:'Short-staffed', v:'none ✅ — enough crew all day', big:false}];
+  return [{k: x.today ? 'Short-staffed so far' : 'Short-staffed today', v: fmtDur(x.total), big:true, red:true},
+    ...x.events.map(e=>({k:`${fmtTime12(chFmtHM(e.a))} – ${fmtTime12(chFmtHM(e.b))}`, v:`${e.label} · ${fmtDur(e.mins)}`, red: e.sev==='bad'})),
+    {k:'', v:'When two things happen at the same time, that time is counted once in the total.', sub:true}]; }
+function chFmtHM(m){ return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+let shortOpen = false;
+function shortBannerHTML(){ const x = shortStaffFor(todayStr()); if(!x) return '';
+  const nowL = x.live.length, bad = x.live.some(e=>e.sev==='bad');
+  const head = nowL ? `⚠ SHORT-STAFFED · ${escapeHtml(x.live[0].label)} · since ${fmtTime12(chFmtHM(x.live[0].a))}` : (x.total ? `✅ Fully staffed now · short-staffed ${fmtDur(x.total)} so far today` : '✅ Fully staffed');
+  const c = nowL ? (bad?'var(--wait)':'#e8742a') : 'var(--run)';
+  return `<div class="card" style="border-color:${c};padding:10px 12px;margin-bottom:10px;cursor:pointer;" onclick="shortOpen=!shortOpen;render()">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><b style="color:${c};font-size:13.5px;">${head}${nowL>1?` <span style="font-weight:600;">(+${nowL-1} more)</span>`:''}</b><span class="cb-mut">${x.events.length?(shortOpen?'▴':'▾'):''}</span></div>
+    ${shortOpen && x.events.length ? `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px;">${x.events.map(e=>`<div style="display:flex;gap:10px;padding:4px 0;font-size:12.5px;"><span class="cb-mut" style="flex:0 0 118px;">${fmtTime12(chFmtHM(e.a))} – ${e.b>=toMin(nowHHMM())-1?'now':fmtTime12(chFmtHM(e.b))}</span><span style="${e.sev==='bad'?'color:var(--wait);font-weight:600;':''}">${escapeHtml(e.label)} · ${fmtDur(e.mins)}</span></div>`).join('')}<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Total so far: <b>${fmtDur(x.total)}</b> (overlaps counted once) · full list goes in the Daily Report</div></div>` : ''}</div>`; }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
 /* v162: each person's day. Regular shift 8:00 AM–4:30 PM; anything outside it is overtime (OT), shown in red.
    Start = their start time if set on Where Everyone Is (e.g. Mandy opening at 7:30), or earlier if they were put on something earlier.
@@ -2830,7 +2898,8 @@ function crewReportHTML(start, end, forPdf){
       p.segs.forEach(sg=>{ const fill = sg.g==='Not recorded' ? 'url(#nrh)' : chColor(sg); svg += `<rect x="${x(sg.a)}" y="${y+3}" width="${Math.max(0.8, x(sg.b)-x(sg.a))}" height="${rowH-7}" fill="${fill}"><title>${escapeHtml(`${p.name} · ${m2t(sg.a)}–${m2t(sg.b)} · ${sg.k}`)}</title></rect>`; }); });
     svg += `<line x1="${x(REG_A)}" y1="${top-4}" x2="${x(REG_A)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/><line x1="${x(REG_B)}" y1="${top-4}" x2="${x(REG_B)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/></svg>`;
     const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Clean-up / closing',CH_COL.cleanup],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
-    { const sx = staffingFor(start); if(sx && sx.work>0){ H.push(hd('Staffing — crew needed vs available')); H.push(staffingTableHTML(sx, td)); } } // v205.38
+    { const ss = shortStaffFor(start); if(ss){ H.push(hd('Short-staffed')); H.push(`<table style="width:100%;border-collapse:collapse;">${shortRows(ss).map(r=> r.sub ? `<tr><td colspan="2" style="${td}font-size:10.5px;color:#777;font-style:italic;">${escapeHtml(r.v)}</td></tr>` : `<tr><td style="${td}font-weight:700;width:34%;white-space:nowrap;">${escapeHtml(r.k)}</td><td style="${td}${r.red?'color:#c0392b;font-weight:700;':''}${r.big?'font-size:15px;font-weight:800;':''}">${escapeHtml(r.v)}</td></tr>`).join('')}</table>`); } } // v205.40
+    { const sx = staffingFor(start); if(sx && sx.work>0){ H.push(hd('Staffing math (backup) — crew needed vs available')); H.push(staffingTableHTML(sx, td)); } } // v205.38
     H.push(hd('2 · Crew timeline'));
     H.push(scroll(svg) + (forPdf?'':`<div style="font-size:10.5px;color:#888;margin-top:2px;">← swipe the chart sideways →</div>`) + `<div style="margin-top:6px;font-size:10.5px;color:#555;line-height:1.9;">${lg.map(([t,c])=>`<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;vertical-align:-1px;margin-right:4px;"></span>${t}</span>`).join('')}<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;vertical-align:-1px;margin-right:4px;"></span>Not recorded</span><span style="display:inline-block;color:#c0392b;">Red shading = overtime (before 8:00 AM / after 4:30 PM)</span></div>`);
     // 3. where the crew's hours went
@@ -3922,7 +3991,7 @@ function crewHistoryHTML(){
 function renderCrewTab(){
   const T = todayStr(), active = namesCrewActive(T) || todaysCrewActive();
   let body = '';
-  if(crewSec==='list') body = `${active ? `${crewLineCards()}${crewSideCard()}${crewDowntimeAlerts()}${crewQuickActions()}${crewSupportCard()}` : `<div class="card"><div class="cb-mut">Today's crew isn't confirmed yet — open <b>Crew Setup</b> and tap ✓ Confirm today's crew.</div></div>`}<div class="cb-lbl" style="margin:4px 0 6px;">CREW LIST · tap a name to move them</div>${crewRowsHTML()}`;
+  if(crewSec==='list') body = `${active ? `${shortBannerHTML()}${crewLineCards()}${crewSideCard()}${crewDowntimeAlerts()}${crewQuickActions()}${crewSupportCard()}` : `<div class="card"><div class="cb-mut">Today's crew isn't confirmed yet — open <b>Crew Setup</b> and tap ✓ Confirm today's crew.</div></div>`}<div class="cb-lbl" style="margin:4px 0 6px;">CREW LIST · tap a name to move them</div>${crewRowsHTML()}`;
   else if(crewSec==='history') body = crewHistoryHTML();
   else body = `${renderCrewList()}${helpersCardHTML()}${active ? `<div class="card cb"><div class="cb-lbl" style="margin-top:0;">PACKAGING LINES</div>${packagingLinesNowHTML()}<div class="cb-mut" style="font-size:11.5px;margin-top:8px;">${STAFF_RULES_NOTE}.</div></div>` : ''}`;
   return `${crewSummaryBar()}${body}${crewSheetHTML()}`;
@@ -6485,7 +6554,10 @@ function renderWeeklyView(){
     <h3>Observation</h3>
     <div class="obs">${rep.observation}</div>
   </div>
-  ${(()=>{ const sx = staffingSum(weeklyRange.start, weeklyRange.end); if(!sx) return ''; /* v205.38 */
+  ${(()=>{ const ds = []; for(let dt=weeklyRange.start; dt<=weeklyRange.end; dt=shiftDate(dt,1)) ds.push(dt); const xs = ds.map(shortStaffFor).filter(Boolean); if(!xs.length) return ''; /* v205.40 */
+    const tot = xs.reduce((t,x)=>t+x.total,0), lead = xs.reduce((t,x)=>t+x.roleMin,0);
+    return `<div class="card" style="border-color:${tot?'var(--wait)':'var(--line)'};"><h3>⚠ Short-Staffed This Period</h3>${xs.map(x=>`<div class="statrow"><span class="lbl">${new Date(x.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span><span class="val" style="${x.total?'color:var(--wait);':''}">${x.total?fmtDur(x.total):'none'}</span></div>`).join('')}<div class="statrow"><span class="lbl"><b>Total</b></span><span class="val" style="color:var(--wait);">${fmtDur(tot)}</span></div><div class="statrow"><span class="lbl">Lead Hand / Yield on a machine</span><span class="val">${fmtDur(lead)}</span></div><div class="cb-mut" style="font-size:11px;margin-top:6px;">Each day's moments are listed in its Daily Report.</div></div>`; })()}
+  ${(()=>{ return ''; const sx = staffingSum(weeklyRange.start, weeklyRange.end); if(!sx) return ''; /* v205.38 — replaced by Short-Staffed (v205.40) */
     return `<div class="card" style="border-color:${sx.short>0.2?'var(--wait)':'var(--line)'};"><h3>👥 Staffing This Period · ${sx.days} day${sx.days===1?'':'s'}</h3>${staffingRows(sx,true).map(r=> r.sub ? `<div class="cb-mut" style="font-size:10.5px;font-style:italic;margin-top:8px;">${escapeHtml(r.v)}</div>` : `<div class="statrow"><span class="lbl">${escapeHtml(r.k)}</span><span class="val" style="text-align:right;${r.red?'color:var(--wait);':''}${r.big?'font-size:15px;':''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}</div>`; })()}
   ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period')}
   <div class="card">
@@ -6536,8 +6608,14 @@ Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-h
 Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
 ${plh.best ? 'Best: '+(plh.best.plh.product||'')+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}
 Note: ${PLH_DISCLAIMER}` : '';
-  const sx = staffingSum(weeklyRange.start, weeklyRange.end); // v205.38
-  const staffBlock = sx ? `
+  const sdays = []; for(let dt=weeklyRange.start; dt<=weeklyRange.end; dt=shiftDate(dt,1)) sdays.push(dt); const sxs = sdays.map(shortStaffFor).filter(Boolean), stot = sxs.reduce((t,x)=>t+x.total,0); // v205.40
+  const staffBlock = sxs.length ? `
+SHORT-STAFFED: ${fmtDur(stot)} this period
+${sxs.map(x=>`${new Date(x.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'})} ${x.total?fmtDur(x.total):'none'}`).join(' · ')}
+Lead Hand / Yield on a machine: ${fmtDur(sxs.reduce((t,x)=>t+x.roleMin,0))}
+` : '';
+  const sx = null;
+  const staffBlockOld = sx ? `
 STAFFING (${sx.days} day${sx.days===1?'':'s'}):
 Crew needed ${sx.needed.toFixed(1)}/day vs available ${sx.avail==null?'—':sx.avail.toFixed(1)}/day${sx.short!=null && sx.short>0.05?` → short ${sx.short.toFixed(1)}`:''}
 Lines run below 2-person staffing: ${sx.shortMin?fmtDur(sx.shortMin):'none'}
