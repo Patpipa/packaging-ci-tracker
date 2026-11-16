@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.43 - 2026-11-15 (Staffing timeline: fully staffed lines add up the crew — 3 Variovacs × 2 = 6 + 1 Floater / Runner = 7 crew)';
+const APP_VERSION = 'v205.44 - 2026-11-15 (Staffing timeline: when lines aren\u2019t the standard 2-2-2 it lists each line (V2 4 + V3 2) and any stopped line with its reason)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2480,8 +2480,11 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     const lines = full ? 'All 3 Variovacs (2 each)' : Object.keys(byC).sort((a,b)=>b-a).map(c=>{ const ms = byC[c]; return `${ms.join(' & ')} ${c==1?'1 person':c+(ms.length>1?' each':' people')}`; }).join(', ');
     const what = [lines, manual[i]?`Manual Pack ${manual[i]}`:'', sides.length?sides.map(s0=>s0.replace(/ \((\d+)\)$/,' ($1 people)'))+' running':''].filter(Boolean).join(', ');
     if(probs.length) return {ic: bad?'🔴':'⚠', t:`Short — ${probs.join(' · ')}${what?` (${what})`:''}`, sev: bad?'bad':'warn'};
-    const parts = [C.V[i] ? (full && C.V[i]===6 ? '3 Variovacs × 2 = 6' : `${C.V[i]} on Variovacs`) : '', C.M[i]?`${C.M[i]} on Manual Pack`:'', C.S[i]?`${C.S[i]} on side machines`:'', C.G[i]?`${C.G[i]} on garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other duties`:''].filter(Boolean);
-    return {ic:'✅', t:`Fully staffed — ${parts.join(' + ')} = ${crewIn[i]} crew${helpIn[i]?` (+ ${helpIn[i]} cross-dept)`:''}${sides.length?` · ${sides.map(s0=>s0.replace(/ \(\d+\)$/,'')).join(' + ')} running`:''}`, sev:'ok'};
+    const std = full && C.V[i]===6;
+    const lineCnt = VARIOVACS.filter(m=>cnt[m][i]>0).map(m=>`${shortM(m)} ${cnt[m][i]}`).join(' + '); // v205.44: show each line when it isn't the standard 2-2-2
+    const stopTxt = stopL.map(m=>`${shortM(m)} ${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` — ${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')}`:''}`).join(' · ');
+    const parts = [C.V[i] ? (std ? '3 Variovacs × 2 = 6' : `${lineCnt}`) : '', C.M[i]?`${C.M[i]} on Manual Pack`:'', C.S[i]?`${C.S[i]} on side machines`:'', C.G[i]?`${C.G[i]} on garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other duties`:''].filter(Boolean);
+    return {ic:'✅', t:`Fully staffed — ${parts.join(' + ')} = ${crewIn[i]} crew${helpIn[i]?` (+ ${helpIn[i]} cross-dept)`:''}${sides.length?` · ${sides.map(s0=>s0.replace(/ \(\d+\)$/,'')).join(' + ')} running`:''}${stopTxt?` · ${stopTxt}`:''}`, sev:'ok'};
   };
   const segs = []; for(let i=0;i<L;i++){ const lb = label(i), k = lb.ic+lb.t, last = segs[segs.length-1]; if(last && last.k===k) last.b = i+1; else segs.push({k, a:i, b:i+1, ...lb}); }
   // smooth: blips under 5 min fold into the line before
