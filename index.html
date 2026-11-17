@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.52 - 2026-11-16 (Staffing Report: every person accounted for by exact place — lines, Manual, each side machine, set-up / clean, garbage run (area), cleaning, closing tasks, Floater / Runner, own break, lent, absent, not in)';
+const APP_VERSION = 'v205.53 - 2026-11-16 (Staffing: every place and status named in full — Setup / Opening, Cleaning / Sanitation, lent to Trimmer / MAREL helper, late, gone home, typed duties; each change of arrangement listed; Crew tab shows where everyone is now)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2445,7 +2445,8 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     if(/^Clean-up · /.test(w)) return 'cleaning '+w.replace(/^Clean-up · /,'').replace('Variovac ','V');
     if(/^Closing/.test(w) || g==='Shutdown / Clean-up') return 'closing tasks';
     if(w==='Runner / Floater') return 'Floater / Runner';
-    return (placeLabel(w)||w||'other duties').replace(/^Other · /,''); };
+    if(PLACES.some(p0=>p0.w===w)) return w; // v205.53: known places keep their full name (Setup / Opening, Cleaning / Sanitation…)
+    return (w.replace(/^Other · /,'') || placeLabel(w) || 'other duties'); };
   const OFF = Array.from({length:N}, ()=>({})); // v205.51: why your own crew weren't on the floor — absent, lent, not in yet, not placed…
   const offAdd = (i, why)=>{ OFF[i][why] = (OFF[i][why]||0)+1; };
   pd.people.forEach(p=>{ if(OFFLINE_ROLES.includes(p.name) || helperDay(x.date, p.name)) return;
@@ -2526,21 +2527,23 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     for(let j=1;j<blk.length;j++) if(blk[j].key===blk[j-1].key){ blk[j-1].b = blk[j].b; blk[j-1].mins = blk[j-1].mins.concat(blk[j].mins); blk.splice(j,1); j--; }
   }
   while(blk.length && blk[0].type==='none') blk.shift(); while(blk.length && blk[blk.length-1].type==='none') blk.pop();
+  /* v205.53: list each arrangement of the crew that lasted 10 min+ in a block, in time order (consecutive runs of the same arrangement) */
+  const arrangements = g=>{ const runs = []; g.mins.forEach((m0,j)=>{ const l = m0.lay||''; const last = runs[runs.length-1]; if(last && last.lay===l) last.n++; else runs.push({lay:l, at:g.a+j, n:1}); });
+    const keep = runs.filter(r=>r.lay && r.n>=10); const merged = []; keep.forEach(r=>{ const last = merged[merged.length-1]; if(last && last.lay===r.lay) last.n += r.n; else merged.push({...r}); });
+    if(!merged.length){ const c = {}; g.mins.forEach(m0=>{ if(m0.lay) c[m0.lay] = (c[m0.lay]||0)+1; }); return Object.keys(c).sort((p,q)=>c[q]-c[p])[0] || ''; }
+    return merged.length===1 ? merged[0].lay : merged.map(r=>`from ${fmtTime12(chFmtHM(r.at+DAY_FROM))}: ${r.lay}`).join('\n'); };
   const top = arr=>{ const c = {}; arr.forEach(v=>{ if(v) c[v] = (c[v]||0)+1; }); return Object.keys(c).sort((p,q)=>c[q]-c[p]); };
   return blk.map(g=>{ const a = g.a+DAY_FROM, b = g.b+DAY_FROM, dur = fmtDur(g.b-g.a);
     if(g.type==='brk') return {a, b, ic:'☕', status:'Crew break', t:'', sev:''};
     if(g.type==='pl') return {a, b, ic:'⏸', status:'Planned stop', t:g.mins[0].reason, sev:''};
     if(g.type==='none') return {a, b, ic:'·', status:'No lines running', t:'', sev:''};
-    if(g.type==='ok'){ const lay = top(g.mins.map(m0=>m0.lay))[0]||'', stops = top(g.mins.flatMap(m0=>m0.stops||[])).slice(0,3);
-      return {a, b, ic:'✅', status:'Fully staffed', t:`${lay}${stops.length?` · ${stops.join(' · ')}`:''}`, sev:'ok'}; }
+    if(g.type==='ok'){ const stops = top(g.mins.flatMap(m0=>m0.stops||[])).slice(0,3);
+      return {a, b, ic:'✅', status:'Fully staffed', t: stops.length ? stops.join(' · ') : '', where: arrangements(g), sev:'ok'}; }
     const keys = g.key.replace(/^s\|/,'').replace(/\|keep$/,'').split(','), phr = {};
     g.mins.forEach(m0=>(m0.D||[]).forEach(d0=>{ if(!keys.includes(d0.k)) return; (phr[d0.k] = phr[d0.k] || []).push(d0.s); }));
     const ds = keys.filter(k=>phr[k]).map(k=>top(phr[k])[0]);
     const stopB = keys.some(k=>/^(stop|moved|sstop):/.test(k));
-    const cntL = {}; g.mins.forEach(m0=>{ if(m0.lay) cntL[m0.lay] = (cntL[m0.lay]||0)+1; });
-    const big = Object.keys(cntL).filter(k=>cntL[k] >= g.mins.length*0.3);
-    const order = []; g.mins.forEach((m0,j)=>{ if(big.includes(m0.lay) && !order.some(o=>o.lay===m0.lay)) order.push({lay:m0.lay, at:g.a+j}); });
-    const lay = order.length>1 ? order.map(o=>`from ${fmtTime12(chFmtHM(o.at+DAY_FROM))}: ${o.lay}`).join('\n') : (top(g.mins.map(m0=>m0.lay))[0] || '');
+    const lay = arrangements(g);
     return {a, b, ic: stopB?'🔴':'⚠', status: stopB ? `Short-staffed — stopped (${dur})` : `Short-staffed (${dur})`, t: ds.join(' · '), where: lay, sev: stopB?'bad':'warn'}; });
 }
 function shortRows(x){ if(!x) return [];
@@ -2554,8 +2557,10 @@ function shortBannerHTML(){ const x = shortStaffFor(todayStr()); if(!x) return '
   const nowL = x.live.length, bad = x.live.some(e=>e.sev==='bad');
   const head = nowL ? `⚠ SHORT-STAFFED · ${escapeHtml(x.live[0].label)} · since ${fmtTime12(chFmtHM(x.live[0].a))}` : (x.total ? `✅ Fully staffed now · short-staffed ${fmtDur(x.total)} so far today` : '✅ Fully staffed');
   const c = nowL ? (bad?'var(--wait)':'#e8742a') : 'var(--run)';
+  const tlNow = staffTimeline(x), lastB = tlNow[tlNow.length-1], nowWhere = lastB && lastB.where ? String(lastB.where).split('\n').pop().replace(/^from \d{1,2}:\d{2} [AP]M: /,'') : ''; // v205.53: where everyone is right now
   return `<div class="card" style="border-color:${c};padding:10px 12px;margin-bottom:10px;cursor:pointer;" onclick="shortOpen=!shortOpen;render()">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><b style="color:${c};font-size:13.5px;">${head}${nowL>1?` <span style="font-weight:600;">(+${nowL-1} more)</span>`:''}</b><span class="cb-mut">${x.events.length?(shortOpen?'▴':'▾'):''}</span></div>
+    ${nowWhere?`<div class="cb-mut" style="font-size:12px;margin-top:4px;line-height:1.4;"><b>Now:</b> ${escapeHtml(nowWhere)}</div>`:''}
     ${shortOpen && x.events.length ? `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px;">${x.events.map(e=>`<div style="display:flex;gap:10px;padding:4px 0;font-size:12.5px;"><span class="cb-mut" style="flex:0 0 118px;">${fmtTime12(chFmtHM(e.a))} – ${e.b>=toMin(nowHHMM())-1?'now':fmtTime12(chFmtHM(e.b))}</span><span style="${e.sev==='bad'?'color:var(--wait);font-weight:600;':''}">${escapeHtml(e.label)} · ${fmtDur(e.mins)}</span></div>`).join('')}<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Total so far: <b>${fmtDur(x.total)}</b> (overlaps counted once) · full list goes in the Daily Report</div></div>` : ''}</div>`; }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
 /* v162: each person's day. Regular shift 8:00 AM–4:30 PM; anything outside it is overtime (OT), shown in red.
