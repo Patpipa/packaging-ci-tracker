@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.56 - 2026-11-16 (Crew Hours & Positions now includes the Staffing Report — summary, day bar, timeline with where the crew were; old short-staffed list and staffing math removed; Staffing Report stays under Reports)';
+const APP_VERSION = 'v205.57 - 2026-11-16 (Fix: garbage runs sent from a Variovac card now show their area in Crew Hours — no more "Area not picked")';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1452,7 +1452,7 @@ async function syncGarbage(){
   let chD = false, chL = false; const now = nowHHMM();
   evs.forEach(e=>{ const live = Store.liveRuns[e.machine];
     if(!live || live.gOut!==e.id){ e.end = openEndToday(e.start); chD = true;
-      if(e.who && !whereNowMap()[e.who]){ const dd = ensureDayLog(date); dd.place = dd.place || {}; if(!dd.place[e.who]) dd.place[e.who] = {w:'Garbage run', at: e.end}; } // v161: line finished while out — still on garbage until placed
+      if(e.who && !whereNowMap()[e.who]){ const dd = ensureDayLog(date); dd.place = dd.place || {}; if(!dd.place[e.who]) dd.place[e.who] = {w:'Garbage run', at: e.end, gk: e.kind}; } // v161: line finished while out — still on garbage until placed
       return; }
     const dt = (live.downtimeSegments||[])[live.downtimeSegments.length-1];
     if(live.status!=='RUNNING' && dt && !dt.end && dt.status==='NO_WORK'){ e.end = toMin(dt.start) < toMin(e.start) ? e.start : dt.start; live.gOut = null; chD = chL = true; return; }
@@ -1481,7 +1481,7 @@ function garbageCardHTML(m, live, isRunning, lastSeg){
 }
 /* Report rows: total + per kind + per line */
 function placeGarbageRuns(dt){ const d = dayLogFor(dt), out = []; if(!d || !d.where) return out;
-  Object.keys(d.where).forEach(n=>{ const lg = d.where[n]||[]; lg.forEach((e,i)=>{ if(e.w!=='Garbage run' || !e.gk) return; const nx = lg[i+1]; const end = nx ? nx.at : (dt===todayStr() ? nowHHMM() : '16:30'); out.push({machine:'(no line)', who:n, kind:e.gk, start:e.at, end, min: Math.max(0, toMin(end)-toMin(e.at))}); }); });
+  Object.keys(d.where).forEach(n=>{ const lg = d.where[n]||[]; lg.forEach((e,i)=>{ if(e.w!=='Garbage run' || !e.gk || e.gsrc==='line') return; /* v205.57: line-card runs are already in d.garbage */ const nx = lg[i+1]; const end = nx ? nx.at : (dt===todayStr() ? nowHHMM() : '16:30'); out.push({machine:'(no line)', who:n, kind:e.gk, start:e.at, end, min: Math.max(0, toMin(end)-toMin(e.at))}); }); });
   return out; }
 function garbageSummary(dates){
   const all = []; dates.forEach(dt=>{ garbageEvents(dt).forEach(e=>{ const end = garbageEndOf(e, dt); all.push({...e, min: Math.max(0, toMin(end)-toMin(e.start))}); }); placeGarbageRuns(dt).forEach(e=>all.push(e)); });
@@ -2115,7 +2115,8 @@ async function syncWhere(){
     if(map[n] && d.place[n]){ delete d.place[n]; ch = true; } // on a machine again → the place off the machines is over
     const w = map[n] || (d.place[n] ? d.place[n].w : '');
     const log = d.where[n] || (d.where[n] = []); const last = log.length ? log[log.length-1].w : '';
-    if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; delete log[log.length-1].gk; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true; }
+    if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; delete log[log.length-1].gk; delete log[log.length-1].gsrc; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true;
+      if(w==='Garbage run'){ const L = log[log.length-1]; if(map[n]==='Garbage run'){ const ge = garbageEvents(T).find(e=>!e.end && e.who===n); if(ge && ge.kind){ L.gk = ge.kind; L.gsrc = 'line'; } } else if(d.place[n] && d.place[n].gk) L.gk = d.place[n].gk; } } // v205.57: garbage run from a line card keeps its area in the time log
     if(!log.length) delete d.where[n];
   });
   OFFLINE_ROLES.forEach(r=>{ if(map[r] && !(d.offline||[]).some(o=>o.role===r && !o.end)){ d.offline = d.offline || []; d.offline.push({id: uid(), role: r, start: at, end: null}); ch = true; } }); // v167: picked on a machine = On line
@@ -2614,7 +2615,7 @@ function personDay(date){
         const wo = iv && (iv.waits||[]).find(q=>toMin(q.start)<=t && t<(q.end ? toMin(q.end) : iv.b));
         if(onBrk && (!iv || wt)){ k='Break'; g='Break'; } else if(wt){ k=`${w} — ${(wo && wo.reason) || 'Waiting for trimmers'}`; g='Side machines'; } else if(!iv){ k=`${w} — not running`; g='Side machines'; } /* v205.26: at a side machine with no job running = stopped, not running */ else { k = w; g='Side machines'; } }
       else if(onBrk && (w || cbk[i])){ k='Break'; g='Break'; } // v200: crew break counts everyone here, placed or not
-      else if(w==='Garbage run'){ k = gk0 ? `Garbage run (${gk0})` : 'Garbage run'; g = 'Garbage run'; }
+      else if(w==='Garbage run'){ if(!gk0){ const ge = garbageEvents(date).filter(e=>e.who===n && toMin(e.start)<=t+1).sort((x,y)=>toMin(y.start)-toMin(x.start))[0]; if(ge) gk0 = ge.kind||''; } /* v205.57: line-card garbage run — area comes from the garbage event */ k = gk0 ? `Garbage run (${gk0})` : 'Garbage run'; g = 'Garbage run'; }
       else if(w==='Runner / Floater'){ k = 'Runner / Floater'; g = 'Other duties'; }
       else if(w.startsWith('Other · ')){ k = w.slice(8); g = 'Other duties'; }
       else if(w.startsWith('Planned · ')){ k = w.slice(10); g = 'Meetings & stretching'; }
