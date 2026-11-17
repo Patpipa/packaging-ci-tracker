@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.49 - 2026-11-16 (Staffing timeline says WHY each stretch is short-staffed: needs 2, the other was needed on…, all crew already on machines, more machines than crew…)';
+const APP_VERSION = 'v205.50 - 2026-11-16 (Staffing Report: every short-staffed block shows where the crew were — V1 2 + V2 1 + V3 2 + 1 Fajita + 1 Vacuum Sealer = 7 crew · Lead Hand on Manual Pack)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2475,10 +2475,10 @@ function staffTimeline(x){ if(!x || !x._m) return [];
       if(K.some(k=>k.startsWith('all|'))) D.push({k:'all', t:'short', s:`all 3 Variovacs + ${sides.join(' + ')} running at once — more machines than the crew can cover`});
       K.filter(k=>k.startsWith('role|')).forEach(k=>{ const [,n,w] = k.split('|'); D.push({k:'role:'+n+':'+w, t:'short', s: C.R[i] ? `${n} worked on ${w} (a floater was on the floor)` : `${n} had to run ${w} — all crew were already on machines`}); });
     }
-    if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(',')};
     const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2), std = full && C.V[i]===6;
     const lineCnt = VARIOVACS.filter(m=>cnt[m][i]>0 || stopL.includes(m)).map(m=>`${shortM(m)} ${cnt[m][i]}`).join(' + ');
-    const lay = [C.V[i] ? (std ? '3 Variovacs × 2' : lineCnt) : '', C.M[i]?`${C.M[i]} Manual Pack`:'', C.S[i]?`${C.S[i]} side machine${C.S[i]>1?'s':''}`:'', C.G[i]?`${C.G[i]} garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other`:''].filter(Boolean).join(' + ') + ` = ${crewIn[i]} crew`;
+    const lay = [C.V[i] ? (std ? '3 Variovacs × 2' : lineCnt) : '', C.M[i]?`${C.M[i]} Manual Pack`:'', Object.keys(sideP).filter(m=>sideP[m][i]).map(m=>`${sideP[m][i]} ${m}`).join(' + '), C.G[i]?`${C.G[i]} garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other`:''].filter(Boolean).join(' + ') + ` = ${crewIn[i]} crew` + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
+    if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(','), lay}; // v205.50: keep where everyone was
     const stops = stopL.map(m=>`${shortM(m)} ${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` (${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')})`:''}`);
     return {type:'ok', lay, stops, sides};
   };
@@ -2509,7 +2509,8 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     g.mins.forEach(m0=>(m0.D||[]).forEach(d0=>{ if(!keys.includes(d0.k)) return; (phr[d0.k] = phr[d0.k] || []).push(d0.s); }));
     const ds = keys.filter(k=>phr[k]).map(k=>top(phr[k])[0]);
     const stopB = keys.some(k=>/^(stop|moved|sstop):/.test(k));
-    return {a, b, ic: stopB?'🔴':'⚠', status: stopB ? `Short-staffed — stopped (${dur})` : `Short-staffed (${dur})`, t: ds.join(' · '), sev: stopB?'bad':'warn'}; });
+    const lay = top(g.mins.map(m0=>m0.lay))[0] || '';
+    return {a, b, ic: stopB?'🔴':'⚠', status: stopB ? `Short-staffed — stopped (${dur})` : `Short-staffed (${dur})`, t: ds.join(' · '), where: lay, sev: stopB?'bad':'warn'}; });
 }
 function shortRows(x){ if(!x) return [];
   if(!x.events.length) return [{k:'Short-staffed', v:'none ✅ — enough crew all day', big:false}];
@@ -3082,7 +3083,7 @@ function staffingReportHTML(start, end, forPdf){
     H.push(hd('2 · The day at a glance')); H.push(bar(d) + legend);
     H.push(hd('3 · Staffing timeline'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${d.tl.map(g=>{ const c = g.ic==='☕'?COL.brk:g.ic==='⏸'?COL.pl:g.sev==='ok'?COL.ok:g.sev==='warn'?COL.warn:g.sev==='bad'?COL.bad:COL.none;
-      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}</td></tr>`; }).join('')}</table>`);
+      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}${g.where?`<div style="margin-top:3px;font-size:11.5px;color:#555;"><b>Where the crew were:</b> ${escapeHtml(g.where)}</div>`:''}</td></tr>`; }).join('')}</table>`);
     H.push(`<div style="font-size:10.5px;color:#777;margin-top:6px;line-height:1.5;"><b>Fully staffed</b> = every running Variovac had 2 people and nobody had to be pulled. <b>Short-staffed</b> = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Overlapping short time is counted once.</div>`);
     H.push(hd('4 · Garbage runs (packaging labour)'));
     H.push(d.gs.n ? `<table style="width:100%;border-collapse:collapse;">${d.gs.kinds.map(k=>`<tr><td style="${td}">${escapeHtml(k)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total ${fmtDur(d.gs.min)} · ${d.gs.n} run${d.gs.n===1?'':'s'}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">No garbage runs recorded.</div>`);
