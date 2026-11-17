@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.45 - 2026-11-15 (Staffing timeline counts follow where each name is — a stopped line keeps whoever is still on it, with the stop reason)';
+const APP_VERSION = 'v205.46 - 2026-11-16 (Staffing timeline in clear blocks — Fully staffed / Short-staffed / Stopped / Break — instead of minute-by-minute lines; PDF prints plain text, no garbled symbols, colour-coded)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1786,9 +1786,9 @@ function computeSideLabour(start, end){
 }
 /* v119: line-by-line sections. Each section = {title, rows:[{k, v, red}]} and is drawn the same way on screen, in PDFs and in copied text. */
 function sectionsHTML(secs, forPdf){
-  const keyC = forPdf ? '#666' : 'var(--muted)', redC = forPdf ? '#c0392b' : 'var(--wait)', hC = forPdf ? '#888' : 'var(--muted)';
+  const keyC = forPdf ? '#666' : 'var(--muted)', nl2br = 1, redC = forPdf ? '#c0392b' : 'var(--wait)', hC = forPdf ? '#888' : 'var(--muted)';
   const fs = forPdf ? 12 : 13.5;
-  return secs.map(sec=>`<div style="font-size:10.5px;letter-spacing:.1em;color:${hC};font-weight:700;margin:10px 0 4px;">${sec.title}</div>${sec.rows.map(r=>`<div style="display:flex;gap:10px;font-size:${r.sub?fs-1:fs}px;line-height:1.45;padding:${r.sub?'0':'2px'} 0;"><span style="flex:0 0 40%;color:${keyC};${r.sub&&r.k?'padding-left:12px;':''}">${escapeHtml(r.k)}</span><span style="flex:1;${r.red?`color:${redC};font-weight:600;`:''}${r.bold?'font-weight:700;':''}${r.big?`font-size:${forPdf?17:22}px;font-weight:800;line-height:1.1;`:''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}`).join('');
+  return secs.map(sec=>`<div style="font-size:10.5px;letter-spacing:.1em;color:${hC};font-weight:700;margin:10px 0 4px;">${sec.title}</div>${sec.rows.map(r=>`<div style="display:flex;gap:10px;font-size:${r.sub?fs-1:fs}px;line-height:1.45;padding:${r.sub?'0':'2px'} 0;"><span style="flex:0 0 40%;color:${keyC};${r.sub&&r.k?'padding-left:12px;':''}">${escapeHtml(r.k)}</span><span style="flex:1;${r.red?`color:${redC};font-weight:600;`:''}${r.warn?`color:${forPdf?'#d35400':'#f0a35e'};font-weight:600;`:''}${r.bold?'font-weight:700;':''}${r.big?`font-size:${forPdf?17:22}px;font-weight:800;line-height:1.1;`:''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}`).join('');
 }
 
 function sectionsText(secs){ return secs.map(sec=>`${sec.title}\n`+sec.rows.map(r=>{ const v = String(r.v); return v.includes('\n') ? `${r.k}:\n   `+v.split('\n').join('\n   ') : (r.k ? `${r.k}: ${v}` : `   ${v}`); }).join('\n')).join('\n\n'); }
@@ -1821,8 +1821,8 @@ function dayLogSections(date, opts){
         {k: sx.today ? 'Short-staffed so far' : 'Short-staffed', v: sx.total ? fmtDur(sx.total) : 'none ✅', big:true, red: sx.total>0},
         {k: 'Fully staffed', v: fmtDur(full)},
         ...(()=>{ const gs = garbageSummary([date]); return gs.n ? [{k:'Packaging labour on garbage runs', v:`${fmtDur(gs.min)} · ${gs.n} run${gs.n===1?'':'s'}\n${gs.kinds.join('\n')}`, red: gs.trimN>0}] : []; })(),
-        ...tl.map(g=>({k:`${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}`, v:`${g.ic} ${g.t}`, red: g.sev==='bad'})),
-        {k:'', v:'Fully staffed = every running Variovac had 2 people and nobody had to be pulled. Short time is counted once when things overlap.', sub:true}]}); } }
+        ...tl.map(g=>({k:`${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}`, v:`${g.ic} ${g.status}${g.t?`\n${g.t}`:''}`, red: g.sev==='bad', warn: g.sev==='warn', ok: g.sev==='ok'})),
+        {k:'', v:'Fully staffed = every running Variovac had 2 people and nobody had to be pulled. Short-staffed = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Short time is counted once when things overlap.', sub:true}]}); } }
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
   const side = [];
   const used = SIDE_MACHINES.filter(m=>x.perMachine[m.name].runMin>0);
@@ -2459,41 +2459,60 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     if(g==='Break') return 'own break'; if(g==='Lent to other dept') return w.replace(/^Lent · /,'lent to ');
     if(g==='Not here') return 'went home'; if(w==='Runner / Floater') return 'runner';
     return placeLabel(w) || w; };
-  const label = i=>{
+  /* v205.46: one block per stretch of the day — Fully staffed / Short / Stopped / Break / Planned — so a busy day stays readable */
+  const evMask = new Array(N).fill(false); x.events.forEach(e=>{ for(let t=e.a;t<e.b;t++){ const i = t-DAY_FROM; if(i>=0&&i<N) evMask[i] = true; } });
+  const minute = i=>{
     const K = keysAt[i] || [], runL = VARIOVACS.filter(m=>st[m][i]==='RUNNING'), stopL = VARIOVACS.filter(m=>st[m][i]==='WAITING'||st[m][i]==='CHANGEOVER');
     const brk = VARIOVACS.some(m=>st[m][i]==='BREAK') || (onBreak[i] && onBreak[i] >= Math.max(1, crewIn[i]-1));
     const pl = VARIOVACS.find(m=>st[m][i]==='PLANNED');
-    const sides = Object.keys(sideRun).filter(m=>sideRun[m][i]).map(m=>`${m}${sideP[m]&&sideP[m][i]>1?` (${sideP[m][i]})`:''}`);
-    const people = `${crewIn[i]} crew${helpIn[i]?` + ${helpIn[i]} cross-dept`:''}`;
-    if(brk) return {ic:'☕', t:'Crew break', sev:''};
-    if(pl) return {ic:'⏸', t: st[pl].reason[i] || 'Planned stop', sev:''};
-    if(!runL.length && !stopL.length && !manual[i] && !sides.length) return {ic:'·', t:'No lines running', sev:''};
-    const probs = []; let bad = false;
-    K.filter(k=>k.startsWith('one|')).map(k=>k.split('|')[1]).forEach(m=>{ const to = pulledTo(m, i); probs.push(`${shortM(m)} with only 1 person${to?` — 1 pulled to ${to}`:''}`); });
-    const stp = K.filter(k=>k.startsWith('stop|')).map(k=>shortM(k.split('|')[1])); if(stp.length){ probs.push(`${stp.join(' & ')} stopped — shortage of staff`); bad = true; }
-    const mv = K.filter(k=>k.startsWith('moved|')).map(k=>shortM(k.split('|')[1])); if(mv.length){ probs.push(`${mv.join(' & ')} stopped — crew moved${sides.length?' to '+sides.map(s0=>s0.replace(/ \(\d+\)$/,'')).join(' & '):''}`); bad = true; }
-    const sst = K.filter(k=>k.startsWith('sstop|')).map(k=>k.split('|')[1]); if(sst.length){ probs.push(`${sst.join(' & ')} stopped — shortage of staff`); bad = true; }
-    if(K.some(k=>k.startsWith('all|'))) probs.push(`all 3 Variovacs + ${sides.map(s0=>s0.replace(/ \(\d+\)$/,'')).join(' + ')} at once`);
-    K.filter(k=>k.startsWith('role|')).forEach(k=>{ const [,n,w] = k.split('|'); probs.push(`${n} on ${w}`); });
-    const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2);
-    const byC = {}; runL.forEach(m=>{ (byC[cnt[m][i]] = byC[cnt[m][i]] || []).push(shortM(m)); });
-    const lines = full ? 'All 3 Variovacs (2 each)' : VARIOVACS.filter(m=>cnt[m][i]>0 || stopL.includes(m)).map(m=>`${shortM(m)} ${cnt[m][i]}${stopL.includes(m)?` (${st[m][i]==='CHANGEOVER'?'changeover':'waiting'})`:''}`).join(' + '); // v205.45: by whereabouts
-    const what = [lines, manual[i]?`Manual Pack ${manual[i]}`:'', sides.length?sides.map(s0=>s0.replace(/ \((\d+)\)$/,' ($1 people)'))+' running':''].filter(Boolean).join(', ');
-    if(probs.length) return {ic: bad?'🔴':'⚠', t:`Short — ${probs.join(' · ')}${what?` (${what})`:''}`, sev: bad?'bad':'warn'};
-    const std = full && C.V[i]===6;
-    /* v205.45: counts follow where each person's name is — a stopped line keeps whoever is still on it */
-    const why = m=>`${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` — ${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')}`:''}`;
-    const lineCnt = VARIOVACS.filter(m=>cnt[m][i]>0 || stopL.includes(m)).map(m=>`${shortM(m)} ${cnt[m][i]}${stopL.includes(m)?` (${why(m)})`:''}`).join(' + ');
-    const stopTxt = '';
-    const parts = [C.V[i] ? (std ? '3 Variovacs × 2 = 6' : `${lineCnt}`) : '', C.M[i]?`${C.M[i]} on Manual Pack`:'', C.S[i]?`${C.S[i]} on side machines`:'', C.G[i]?`${C.G[i]} on garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other duties`:''].filter(Boolean);
-    return {ic:'✅', t:`Fully staffed — ${parts.join(' + ')} = ${crewIn[i]} crew${helpIn[i]?` (+ ${helpIn[i]} cross-dept)`:''}${sides.length?` · ${sides.map(s0=>s0.replace(/ \(\d+\)$/,'')).join(' + ')} running`:''}${stopTxt?` · ${stopTxt}`:''}`, sev:'ok'};
+    const sides = Object.keys(sideRun).filter(m=>sideRun[m][i]);
+    if(brk) return {type:'brk'};
+    if(pl) return {type:'pl', reason: st[pl].reason[i] || 'Planned stop'};
+    if(!runL.length && !stopL.length && !manual[i] && !sides.length) return {type:'none'};
+    const D = []; // normalised issues: key → plain phrase
+    if(evMask[i]){
+      K.filter(k=>k.startsWith('stop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'stop:'+m, t:'stop', s:`${shortM(m)} stopped — no staff`}); });
+      K.filter(k=>k.startsWith('moved|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'moved:'+m, t:'stop', s:`${shortM(m)} stopped — crew moved${sides.length?' to '+sides.join(' & '):''}`}); });
+      K.filter(k=>k.startsWith('sstop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'sstop:'+m, t:'stop', s:`${m} stopped — no staff`}); });
+      K.filter(k=>k.startsWith('one|')).forEach(k=>{ const m = k.split('|')[1], to = pulledTo(m, i); D.push({k:'one:'+m, t:'short', s:`${shortM(m)} with 1 person${to?` (other pulled to ${to})`:''}`}); });
+      if(K.some(k=>k.startsWith('all|'))) D.push({k:'all', t:'short', s:`all 3 Variovacs + ${sides.join(' + ')} at once`});
+      K.filter(k=>k.startsWith('role|')).forEach(k=>{ const [,n,w] = k.split('|'); D.push({k:'role:'+n+':'+w, t:'short', s:`${n} on ${w}`}); });
+    }
+    if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(',')};
+    const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2), std = full && C.V[i]===6;
+    const lineCnt = VARIOVACS.filter(m=>cnt[m][i]>0 || stopL.includes(m)).map(m=>`${shortM(m)} ${cnt[m][i]}`).join(' + ');
+    const lay = [C.V[i] ? (std ? '3 Variovacs × 2' : lineCnt) : '', C.M[i]?`${C.M[i]} Manual Pack`:'', C.S[i]?`${C.S[i]} side machine${C.S[i]>1?'s':''}`:'', C.G[i]?`${C.G[i]} garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other`:''].filter(Boolean).join(' + ') + ` = ${crewIn[i]} crew`;
+    const stops = stopL.map(m=>`${shortM(m)} ${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` (${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')})`:''}`);
+    return {type:'ok', lay, stops, sides};
   };
-  const segs = []; for(let i=0;i<L;i++){ const lb = label(i), k = lb.ic+lb.t, last = segs[segs.length-1]; if(last && last.k===k) last.b = i+1; else segs.push({k, a:i, b:i+1, ...lb}); }
-  // smooth: blips under 5 min fold into the line before
-  const sm = []; segs.forEach(g=>{ const last = sm[sm.length-1]; if(last && g.b-g.a < SHORT_MIN && g.ic!=='🔴'){ last.b = g.b; } else if(last && last.k===g.k){ last.b = g.b; } else sm.push({...g}); });
-  // trim the empty start/end of the day
-  while(sm.length && sm[0].ic==='·') sm.shift(); while(sm.length && sm[sm.length-1].ic==='·') sm.pop();
-  return sm.map(g=>({a:g.a+DAY_FROM, b:g.b+DAY_FROM, ic:g.ic, t:g.t, sev:g.sev}));
+  const keyOf = m0=>m0.type==='pl' ? 'pl|'+m0.reason : (m0.type==='short'||m0.type==='stop') ? 's|'+m0.sig : m0.type;
+  let blk = []; for(let i=0;i<L;i++){ const m0 = minute(i), key = keyOf(m0), last = blk[blk.length-1];
+    if(last && last.key===key){ last.b = i+1; last.mins.push(m0); } else blk.push({key, type:m0.type, a:i, b:i+1, mins:[m0]}); }
+  // smoothing: a stretch under 10 min joins its longer neighbour (breaks / planned stops and stops of 5 min+ stay)
+  const fixed = g=>g.type==='brk' || g.type==='pl' || (g.type==='stop' && g.b-g.a>=5);
+  for(let guard=0; guard<500; guard++){
+    let idx = -1, best = 1e9; blk.forEach((g,j)=>{ const len = g.b-g.a; if(len<10 && !fixed(g) && len<best){ best = len; idx = j; } });
+    if(idx<0) break; const g = blk[idx], P = blk[idx-1], Q = blk[idx+1];
+    const ok = n=>n && n.type!=='brk' && n.type!=='pl';
+    const into = ok(P) && ok(Q) ? ((P.b-P.a)>=(Q.b-Q.a) ? P : Q) : ok(P) ? P : ok(Q) ? Q : null;
+    if(!into){ g.key += '|keep'; g.type = g.type; if(g.b-g.a<10) { /* isolated between breaks — keep as is */ } blk[idx] = {...g, fixedKeep:true}; if(blk.every(z=>z.fixedKeep || fixed(z) || z.b-z.a>=10)) break; continue; }
+    into.a = Math.min(into.a, g.a); into.b = Math.max(into.b, g.b); into.mins = into===P ? into.mins.concat(g.mins) : g.mins.concat(into.mins); blk.splice(idx,1);
+    // neighbours that now match join up
+    for(let j=1;j<blk.length;j++) if(blk[j].key===blk[j-1].key){ blk[j-1].b = blk[j].b; blk[j-1].mins = blk[j-1].mins.concat(blk[j].mins); blk.splice(j,1); j--; }
+  }
+  while(blk.length && blk[0].type==='none') blk.shift(); while(blk.length && blk[blk.length-1].type==='none') blk.pop();
+  const top = arr=>{ const c = {}; arr.forEach(v=>{ if(v) c[v] = (c[v]||0)+1; }); return Object.keys(c).sort((p,q)=>c[q]-c[p]); };
+  return blk.map(g=>{ const a = g.a+DAY_FROM, b = g.b+DAY_FROM, dur = fmtDur(g.b-g.a);
+    if(g.type==='brk') return {a, b, ic:'☕', status:'Crew break', t:'', sev:''};
+    if(g.type==='pl') return {a, b, ic:'⏸', status:'Planned stop', t:g.mins[0].reason, sev:''};
+    if(g.type==='none') return {a, b, ic:'·', status:'No lines running', t:'', sev:''};
+    if(g.type==='ok'){ const lay = top(g.mins.map(m0=>m0.lay))[0]||'', stops = top(g.mins.flatMap(m0=>m0.stops||[])).slice(0,3);
+      return {a, b, ic:'✅', status:'Fully staffed', t:`${lay}${stops.length?` · ${stops.join(' · ')}`:''}`, sev:'ok'}; }
+    const keys = g.key.replace(/^s\|/,'').replace(/\|keep$/,'').split(','), phr = {};
+    g.mins.forEach(m0=>(m0.D||[]).forEach(d0=>{ if(!keys.includes(d0.k)) return; (phr[d0.k] = phr[d0.k] || []).push(d0.s); }));
+    const ds = keys.filter(k=>phr[k]).map(k=>top(phr[k])[0]);
+    const stopB = keys.some(k=>/^(stop|moved|sstop):/.test(k));
+    return {a, b, ic: stopB?'🔴':'⚠', status: stopB ? `Short-staffed — stopped (${dur})` : `Short-staffed (${dur})`, t: ds.join(' · '), sev: stopB?'bad':'warn'}; });
 }
 function shortRows(x){ if(!x) return [];
   if(!x.events.length) return [{k:'Short-staffed', v:'none ✅ — enough crew all day', big:false}];
@@ -4370,6 +4389,11 @@ function computePLHSummary(recs){
 const PREPARED_BY = 'Prepared by Walter using the Packaging CI Tracker (built with an AI assistant) · from recorded floor data'; // v205.37
 function pdfFooter(doc){ try{ const n = doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140); doc.text(`${PREPARED_BY}  ·  ${APP_VERSION.split(' ')[0]}  ·  page ${i} of ${n}`, 46, 772); } doc.setTextColor(0); }catch(e){} }
 setTimeout(()=>{ try{ const w0 = weeklySummaryText, s0 = summaryText; weeklySummaryText = (...a)=>w0(...a)+'\n\n— '+PREPARED_BY; summaryText = (...a)=>s0(...a)+'\n\n— '+PREPARED_BY; }catch(e){} }, 0); // v205.37: copy / share text ends with the prepared-by line
+/* v205.46: the PDF fonts only print basic Latin text — swap symbols for words / plain characters so nothing comes out garbled */
+function pdfSafe(t){ return String(t==null?'':t)
+  .replace(/✅\s*/g,'').replace(/⚠️?\s*/g,'').replace(/🔴\s*/g,'').replace(/☕\s*/g,'').replace(/⏸️?\s*/g,'')
+  .replace(/[—–]/g,'-').replace(/→/g,'->').replace(/×/g,'x').replace(/≈/g,'~').replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/…/g,'...').replace(/•/g,'·')
+  .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g,''); }
 const PLH_DISCLAIMER = 'PLH figures are based only on jobs that were directly monitored and recorded during this period. They show measured production activity, not a complete productivity assessment of all machines or job orders.'; // v205.36
 function renderPLHCard(summary, title){
   if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">No finished runs with weight recorded yet.</div></div>`;
@@ -7221,8 +7245,8 @@ function exportReportPDF(date){
     const secs = dayLogSections(rep.date);
     if(secs.length){ ensure(80); y+=6; section('CREW · MAREL · SIDE MACHINES');
       secs.forEach(sec=>{ ensure(36); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(120); doc.text(sec.title, 46, y); y+=13; doc.setFontSize(10.5); doc.setTextColor(0);
-        sec.rows.forEach(r=>{ const kl = doc.splitTextToSize(String(r.k).replace(/↳/g,'  -'), 160), vl = String(r.v).replace(/↳/g,'-').replace(/→/g,'->').replace(/—/g,'-').split('\n').flatMap(t=>doc.splitTextToSize(t, 340)), h = 13*Math.max(kl.length, vl.length); ensure(h+4);
-          doc.setFont('helvetica','normal'); doc.setTextColor(95); doc.text(kl, 46, y); doc.setTextColor(0); if(r.red){ doc.setTextColor(192,57,43); doc.setFont('helvetica','bold'); } if(r.big) doc.setFontSize(16); doc.text(vl, 220, r.big ? y+2 : y); if(r.big){ doc.setFontSize(10.5); y += 6; } doc.setTextColor(0); doc.setFont('helvetica','normal'); y += h+3; });
+        sec.rows.forEach(r=>{ const kl = doc.splitTextToSize(pdfSafe(String(r.k).replace(/↳/g,'  -')), 160), vl = pdfSafe(String(r.v).replace(/↳/g,'-')).split('\n').map(t=>t.trim()).filter(Boolean).flatMap(t=>doc.splitTextToSize(t, 330)), h = 13*Math.max(kl.length, vl.length); ensure(h+4);
+          doc.setFont('helvetica','normal'); doc.setTextColor(95); doc.text(kl, 46, y); doc.setTextColor(0); if(r.red){ doc.setTextColor(192,57,43); doc.setFont('helvetica','bold'); } else if(r.warn){ doc.setTextColor(211,84,0); doc.setFont('helvetica','bold'); } else if(r.ok){ doc.setTextColor(30,120,60); } if(r.sub){ doc.setFontSize(8.5); doc.setTextColor(120); } if(r.big) doc.setFontSize(16); doc.text(vl, 220, r.big ? y+2 : y); if(r.big){ doc.setFontSize(10.5); y += 6; } if(r.sub) doc.setFontSize(10.5); doc.setTextColor(0); doc.setFont('helvetica','normal'); y += h+3; });
         y+=5; });
     }
     const h = plhHeadline(rep.date);
