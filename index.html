@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.57 - 2026-11-16 (Fix: garbage runs sent from a Variovac card now show their area in Crew Hours — no more "Area not picked")';
+const APP_VERSION = 'v205.58 - 2026-11-16 (Garbage run minutes in the Staffing Report and Daily now use the same crew time count as Crew Hours, so the totals tally)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1485,11 +1485,16 @@ function placeGarbageRuns(dt){ const d = dayLogFor(dt), out = []; if(!d || !d.wh
   return out; }
 function garbageSummary(dates){
   const all = []; dates.forEach(dt=>{ garbageEvents(dt).forEach(e=>{ const end = garbageEndOf(e, dt); all.push({...e, min: Math.max(0, toMin(end)-toMin(e.start))}); }); placeGarbageRuns(dt).forEach(e=>all.push(e)); });
+  /* v205.58: minutes come from the crew time log (same count as Crew Hours) so both reports tally; a run with no name keeps its own start–end time */
+  const pm = {}; let pmAll = 0, pmOk = false; try{ dates.forEach(dt=>{ const pd = personDay(dt); (pd && pd.people || []).forEach(p=>{ Object.keys(p.tot||{}).forEach(k=>{ const mm = k.match(/^Garbage run(?: \((.+)\))?$/); if(!mm) return; const a = mm[1] || ''; pm[a] = (pm[a]||0) + p.tot[k]; pmAll += p.tot[k]; }); }); }); pmOk = true; }catch(e){}
+  const nameless = l=>l.filter(e=>!e.who).reduce((a,e)=>a+e.min,0);
+  const kMin = k=>{ const l = all.filter(e=>e.kind===k); return pmOk ? (pm[k]||0) + nameless(l) : l.reduce((a,e)=>a+e.min,0); };
   const sum = l=>l.reduce((a,e)=>a+e.min,0);
-  const kinds = GARBAGE_KINDS.map(k=>{ const l = all.filter(e=>e.kind===k); return l.length ? `${k} ${l.length} (${fmtDur(sum(l))})` : ''; }).filter(Boolean);
+  const kinds = GARBAGE_KINDS.map(k=>{ const l = all.filter(e=>e.kind===k); return l.length ? `${k} ${l.length} (${fmtDur(kMin(k))})` : ''; }).filter(Boolean);
+  const totMin = pmOk ? pmAll + nameless(all) : sum(all);
   const lines = [...new Set(all.map(e=>e.machine))].sort().map(m=>{ const l = all.filter(e=>e.machine===m); return `${m} ×${l.length} (${fmtDur(sum(l))})`; });
   const who = [...new Set(all.filter(e=>e.who).map(e=>e.who))].map(w=>{ const l = all.filter(e=>e.who===w); return `${w} ×${l.length} (${fmtDur(sum(l))})`; });
-  return {who, n: all.length, min: sum(all), trimMin: sum(all.filter(e=>e.kind==='Trimmer')), trimN: all.filter(e=>e.kind!=='Packaging').length, kinds, lines};
+  return {who, n: all.length, min: totMin, trimMin: kMin('Trimmer'), trimN: all.filter(e=>e.kind!=='Packaging').length, kinds, lines};
 }
 function lit0(c){ return `border-color:${c};color:${c};box-shadow:0 0 0 1px ${c}, 0 0 12px ${c};font-weight:700;`; }
 let sideBreakBusy = false;
