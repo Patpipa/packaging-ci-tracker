@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.55 - 2026-11-16 (Staffing: crew counts back to plain numbers — circles removed; lines stay in V1-V2-V3 order)';
+const APP_VERSION = 'v205.56 - 2026-11-16 (Crew Hours & Positions now includes the Staffing Report — summary, day bar, timeline with where the crew were; old short-staffed list and staffing math removed; Staffing Report stays under Reports)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3018,8 +3018,7 @@ function crewReportHTML(start, end, forPdf){
       p.segs.forEach(sg=>{ const fill = sg.g==='Not recorded' ? 'url(#nrh)' : chColor(sg); svg += `<rect x="${x(sg.a)}" y="${y+3}" width="${Math.max(0.8, x(sg.b)-x(sg.a))}" height="${rowH-7}" fill="${fill}"><title>${escapeHtml(`${p.name} · ${m2t(sg.a)}–${m2t(sg.b)} · ${sg.k}`)}</title></rect>`; }); });
     svg += `<line x1="${x(REG_A)}" y1="${top-4}" x2="${x(REG_A)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/><line x1="${x(REG_B)}" y1="${top-4}" x2="${x(REG_B)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/></svg>`;
     const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Clean-up / closing',CH_COL.cleanup],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
-    { const ss = shortStaffFor(start); if(ss){ H.push(hd('Short-staffed')); H.push(`<table style="width:100%;border-collapse:collapse;">${shortRows(ss).map(r=> r.sub ? `<tr><td colspan="2" style="${td}font-size:10.5px;color:#777;font-style:italic;">${escapeHtml(r.v)}</td></tr>` : `<tr><td style="${td}font-weight:700;width:34%;white-space:nowrap;">${escapeHtml(r.k)}</td><td style="${td}${r.red?'color:#c0392b;font-weight:700;':''}${r.big?'font-size:15px;font-weight:800;':''}">${escapeHtml(r.v)}</td></tr>`).join('')}</table>`); } } // v205.40
-    { const sx = staffingFor(start); if(sx && sx.work>0){ H.push(hd('Staffing math (backup) — crew needed vs available')); H.push(staffingTableHTML(sx, td)); } } // v205.38
+    H.push(staffingReportHTML(start, end, forPdf, {embed:true})); // v205.56: the Staffing Report inside Crew Hours — one report for the manager
     H.push(hd('2 · Crew timeline'));
     H.push(scroll(svg) + (forPdf?'':`<div style="font-size:10.5px;color:#888;margin-top:2px;">← swipe the chart sideways →</div>`) + `<div style="margin-top:6px;font-size:10.5px;color:#555;line-height:1.9;">${lg.map(([t,c])=>`<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;vertical-align:-1px;margin-right:4px;"></span>${t}</span>`).join('')}<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;vertical-align:-1px;margin-right:4px;"></span>Not recorded</span><span style="display:inline-block;color:#c0392b;">Red shading = overtime (before 8:00 AM / after 4:30 PM)</span></div>`);
     // 3. where the crew's hours went
@@ -3070,7 +3069,7 @@ function crewReportHTML(start, end, forPdf){
       ${names.map(n=>{ const a = acc[n]; const aw = Object.keys(a.away||{}).map(k=>`${k} ${a.away[k]}d`).join(', '); return `<tr><td style="${td}font-weight:700;">${escapeHtml(n)}${aw?`<div style="font-size:10.5px;color:#888;font-weight:400;">${escapeHtml(aw)}</div>`:''}</td><td style="${td}">${a.days}</td><td style="${td}">${chDur(a.worked)}</td><td style="${td}">${chDur(a.brk)}</td><td style="${td}">${a.nh?chDur(a.nh):'—'}</td><td style="${td}${a.ot?red:'color:#aaa;'}">${a.ot?chDur(a.ot):'—'}</td><td style="${td}${a.nr?red:'color:#aaa;'}">${a.nr?chDur(a.nr):'—'}</td></tr>`; }).join('')}</table>`));
     const G = {}; names.forEach(n=>Object.keys(acc[n].grp).forEach(g=>G[g]=(G[g]||0)+acc[n].grp[g]));
     const order = ['Lines running','Lines stopped','Side machines','Garbage run','Shutdown / Clean-up','Setup / Opening','Cleaning / Sanitation','Lent to other dept','Break','Not here','Meetings & stretching','Lead / Yield duties','Other duties','Other','Not recorded'], tot = Object.values(G).reduce((a,b)=>a+b,0)||1;
-    { const sx = staffingSum(start, end); if(sx){ H.push(hd(`Staffing — crew needed vs available · ${sx.days} day${sx.days===1?'':'s'}`)); H.push(staffingTableHTML(sx, td)); } } // v205.38
+    H.push(staffingReportHTML(start, end, forPdf, {embed:true})); // v205.56
     H.push(hd(`2 · Where the crew's hours went — ${chDur(tot)} in total`));
     H.push(`<table style="width:100%;border-collapse:collapse;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}">${g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
     H.push(awaySectionsHTML(st, td, hd, 3, true));
@@ -3090,7 +3089,8 @@ function circleCounts(html, dark){
     .replace(/× (\d+)/g, (m0,n)=>`× ${c(n)}`)
     .replace(/(^|[+=,] |: |<br>)(\d+) (?=[A-Za-z(])/g, (m0,pre,n)=>`${pre}${c(n, n==='0')} `);
 }
-function staffingReportHTML(start, end, forPdf){
+function staffingReportHTML(start, end, forPdf, opt){
+  opt = opt || {}; const emb = !!opt.embed; // v205.56: embed = inside Crew Hours (no own header / footer / garbage)
   const single = start===end, H = [];
   const card = `background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};`;
   const hd = t=>`<div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin:22px 0 10px;text-transform:uppercase;">${t}</div>`;
@@ -3098,22 +3098,23 @@ function staffingReportHTML(start, end, forPdf){
   const COL = {ok:'#2e9e5b', warn:'#e67e22', bad:'#c0392b', brk:'#4a90d9', pl:'#8e7cc3', none:'#d5d8dc'};
   const tag = (txt,c)=>`<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${c};color:#fff;font-size:11px;font-weight:700;white-space:nowrap;">${txt}</span>`;
   const dateLabel = single ? new Date(start+'T00:00:00').toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'}) : `${fmtDate(start)} – ${fmtDate(end)}`;
-  H.push(`<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;"><div><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Staffing Report</div><div style="font-size:13px;color:#555;margin-top:2px;">${dateLabel}</div></div><div style="font-size:10.5px;color:#888;text-align:right;white-space:nowrap;">CI Tracker<br>made ${fmtTime12(nowHHMM())}</div></div>
+  if(!emb) H.push(`<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;"><div><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Staffing Report</div><div style="font-size:13px;color:#555;margin-top:2px;">${dateLabel}</div></div><div style="font-size:10.5px;color:#888;text-align:right;white-space:nowrap;">CI Tracker<br>made ${fmtTime12(nowHHMM())}</div></div>
     <div style="margin-top:8px;padding:6px 10px;background:#f3f6fa;border-radius:6px;font-size:11.5px;color:#1e3a5f;">Standard line-up: <b style="white-space:nowrap;">3 Variovacs × 2 + 1 floater = 7 crew</b></div>`);
   const days = []; for(let dt=start; dt<=end; dt=shiftDate(dt,1)) days.push(dt);
   const X = days.map(dt=>{ const x = shortStaffFor(dt); if(!x) return null; const tl = staffTimeline(x); if(!tl.length) return null; const full = tl.filter(g=>g.sev==='ok').reduce((t,g)=>t+g.b-g.a,0); return {dt, x, tl, full, crew: crewTotalFor(dt), gs: garbageSummary([dt])}; }).filter(Boolean);
-  if(!X.length){ H.push(`<div style="margin-top:20px;color:#777;font-size:13px;">No staffing recorded for this ${single?'day':'period'}.</div></div>`); return H.join(''); }
+  if(!X.length){ H.push(`<div style="margin-top:20px;color:#777;font-size:13px;">No staffing recorded for this ${single?'day':'period'}.</div>${emb?'':'</div>'}`); return H.join(''); }
+  const sec = (n, t)=> emb ? hd(`Staffing — ${t}`) : hd(`${n} · ${t}`);
   const tShort = X.reduce((t,d)=>t+d.x.total,0), tFull = X.reduce((t,d)=>t+d.full,0), tRole = X.reduce((t,d)=>t+d.x.roleMin,0), tGarb = X.reduce((t,d)=>t+d.gs.min,0);
   const daysShort = X.filter(d=>d.x.total>0).length;
   // 1 · summary
-  H.push(hd('1 · Summary'));
+  H.push(sec(1,'Summary'));
   const row = (k,v,s0)=>`<tr><td style="${td}font-weight:700;width:52%;">${k}</td><td style="${td}${s0||''}">${v}</td></tr>`;
   H.push(`<table style="width:100%;border-collapse:collapse;">${[
     row('Short-staffed', `${fmtDur(tShort)}${single?'':` · on ${daysShort} of ${X.length} days`}`, tShort?'color:#c0392b;font-weight:800;font-size:15px;':'color:#2e9e5b;font-weight:700;'),
     row('Fully staffed', fmtDur(tFull)),
     row(single?'Packaging crew in':'Packaging crew (average per day)', single ? String(X[0].crew ?? '—') : (X.filter(d=>d.crew!=null).reduce((t,d)=>t+d.crew,0)/Math.max(1,X.filter(d=>d.crew!=null).length)).toFixed(1)),
     row('Lead Hand / Yield running a machine', tRole?fmtDur(tRole):'none', tRole?'color:#c0392b;font-weight:700;':''),
-    row('Packaging labour on garbage runs', tGarb?fmtDur(tGarb):'none')
+    emb ? '' : row('Packaging labour on garbage runs', tGarb?fmtDur(tGarb):'none')
   ].join('')}</table>`);
   // 2 · the day at a glance (single day) / day by day (range)
   const bar = d=>{ const a0 = Math.min(...d.tl.map(g=>g.a)), b0 = Math.max(...d.tl.map(g=>g.b)), span = Math.max(1,b0-a0);
@@ -3123,20 +3124,20 @@ function staffingReportHTML(start, end, forPdf){
   const legend = `<div style="font-size:10.5px;color:#555;margin-top:6px;line-height:1.9;">${[['Fully staffed',COL.ok],['Short-staffed',COL.warn],['Stopped — no staff',COL.bad],['Break',COL.brk],['Planned stop',COL.pl]].map(([t,c])=>`<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:${c};vertical-align:-1px;margin-right:4px;border-radius:2px;"></span>${t}</span>`).join('')}</div>`;
   if(single){
     const d = X[0];
-    H.push(hd('2 · The day at a glance')); H.push(bar(d) + legend);
-    H.push(hd('3 · Staffing timeline'));
+    H.push(sec(2,'The day at a glance')); H.push(bar(d) + legend);
+    H.push(sec(3, emb ? 'Timeline' : 'Staffing timeline'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${d.tl.map(g=>{ const c = g.ic==='☕'?COL.brk:g.ic==='⏸'?COL.pl:g.sev==='ok'?COL.ok:g.sev==='warn'?COL.warn:g.sev==='bad'?COL.bad:COL.none;
       return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}${g.where?`<div style="margin-top:3px;font-size:11.5px;color:#555;"><b>Where the crew were:</b> ${escapeHtml(g.where).replace(/\n/g,'<br>')}</div>`:''}</td></tr>`; }).join('')}</table>`);
     H.push(`<div style="font-size:10.5px;color:#777;margin-top:6px;line-height:1.5;"><b>Fully staffed</b> = every running Variovac had 2 people and nobody had to be pulled. <b>Short-staffed</b> = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Overlapping short time is counted once.</div>`);
-    H.push(hd('4 · Garbage runs (packaging labour)'));
-    H.push(d.gs.n ? `<table style="width:100%;border-collapse:collapse;">${d.gs.kinds.map(k=>`<tr><td style="${td}">${escapeHtml(k)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total ${fmtDur(d.gs.min)} · ${d.gs.n} run${d.gs.n===1?'':'s'}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">No garbage runs recorded.</div>`);
+    if(!emb){ H.push(hd('4 · Garbage runs (packaging labour)'));
+    H.push(d.gs.n ? `<table style="width:100%;border-collapse:collapse;">${d.gs.kinds.map(k=>`<tr><td style="${td}">${escapeHtml(k)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total ${fmtDur(d.gs.min)} · ${d.gs.n} run${d.gs.n===1?'':'s'}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">No garbage runs recorded.</div>`); }
   } else {
-    H.push(hd('2 · Day by day'));
-    H.push(`<table style="width:100%;border-collapse:collapse;"><tr>${['Day','Short-staffed','Fully staffed','Lead / Yield on a machine','Garbage runs',''].map(t=>`<td style="${td}font-size:10.5px;color:#666;text-transform:uppercase;">${t}</td>`).join('')}</tr>${X.map(d=>`<tr><td style="${td}white-space:nowrap;">${new Date(d.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${td}${d.x.total?'color:#c0392b;font-weight:700;':'color:#2e9e5b;'}">${d.x.total?fmtDur(d.x.total):'none'}</td><td style="${td}">${fmtDur(d.full)}</td><td style="${td}">${d.x.roleMin?fmtDur(d.x.roleMin):'—'}</td><td style="${td}">${d.gs.min?fmtDur(d.gs.min):'—'}</td><td style="${td}">${forPdf?'':`<span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openStaffing('${d.dt}')">day →</span>`}</td></tr>`).join('')}</table>`);
-    H.push(hd('3 · Each day at a glance'));
+    H.push(sec(2,'Day by day'));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr>${['Day','Short-staffed','Fully staffed','Lead / Yield on a machine',emb?'':'Garbage runs',''].map(t=>`<td style="${td}font-size:10.5px;color:#666;text-transform:uppercase;">${t}</td>`).join('')}</tr>${X.map(d=>`<tr><td style="${td}white-space:nowrap;">${new Date(d.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${td}${d.x.total?'color:#c0392b;font-weight:700;':'color:#2e9e5b;'}">${d.x.total?fmtDur(d.x.total):'none'}</td><td style="${td}">${fmtDur(d.full)}</td><td style="${td}">${d.x.roleMin?fmtDur(d.x.roleMin):'—'}</td><td style="${td}">${emb?'':(d.gs.min?fmtDur(d.gs.min):'—')}</td><td style="${td}">${forPdf||emb?'':`<span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openStaffing('${d.dt}')">day →</span>`}</td></tr>`).join('')}</table>`);
+    H.push(sec(3,'Each day at a glance'));
     H.push(X.map(d=>`<div style="margin-bottom:10px;"><div style="font-size:11.5px;font-weight:700;color:#333;margin-bottom:3px;">${new Date(d.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} · short ${d.x.total?fmtDur(d.x.total):'none'}</div>${bar(d)}</div>`).join('') + legend);
   }
-  H.push(`<div style="border-top:1px solid #ddd;margin-top:18px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Packaging Staffing — ${escapeHtml(single?fmtDate(start):fmtDate(start)+' – '+fmtDate(end))} · ${PREPARED_BY}</span><span>${APP_VERSION.split(' ')[0]}</span></div></div>`);
+  if(!emb) H.push(`<div style="border-top:1px solid #ddd;margin-top:18px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Packaging Staffing — ${escapeHtml(single?fmtDate(start):fmtDate(start)+' – '+fmtDate(end))} · ${PREPARED_BY}</span><span>${APP_VERSION.split(' ')[0]}</span></div></div>`);
   return H.join('');
 }
 let staffRange = null;
