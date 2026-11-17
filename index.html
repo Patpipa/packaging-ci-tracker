@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.47 - 2026-11-16 (Reports → Staffing: its own report — summary, day bar, staffing timeline, garbage runs, day-by-day for a range, PDF; Daily Report back to the simple layout with one Short-staffed line)';
+const APP_VERSION = 'v205.48 - 2026-11-16 (Staffing Report header: standard line-up on its own line so it never breaks)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3053,7 +3053,8 @@ function staffingReportHTML(start, end, forPdf){
   const COL = {ok:'#2e9e5b', warn:'#e67e22', bad:'#c0392b', brk:'#4a90d9', pl:'#8e7cc3', none:'#d5d8dc'};
   const tag = (txt,c)=>`<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${c};color:#fff;font-size:11px;font-weight:700;white-space:nowrap;">${txt}</span>`;
   const dateLabel = single ? new Date(start+'T00:00:00').toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'}) : `${fmtDate(start)} – ${fmtDate(end)}`;
-  H.push(`<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;"><div><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Staffing Report</div><div style="font-size:13px;color:#555;margin-top:2px;">${dateLabel}</div></div><div style="font-size:10.5px;color:#888;text-align:right;">CI Tracker · made ${fmtTime12(nowHHMM())}<br>Standard line-up: 3 Variovacs × 2 + 1 floater = 7</div></div>`);
+  H.push(`<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;"><div><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Staffing Report</div><div style="font-size:13px;color:#555;margin-top:2px;">${dateLabel}</div></div><div style="font-size:10.5px;color:#888;text-align:right;white-space:nowrap;">CI Tracker<br>made ${fmtTime12(nowHHMM())}</div></div>
+    <div style="margin-top:8px;padding:6px 10px;background:#f3f6fa;border-radius:6px;font-size:11.5px;color:#1e3a5f;">Standard line-up: <b style="white-space:nowrap;">3 Variovacs × 2 + 1 floater = 7 crew</b></div>`);
   const days = []; for(let dt=start; dt<=end; dt=shiftDate(dt,1)) days.push(dt);
   const X = days.map(dt=>{ const x = shortStaffFor(dt); if(!x) return null; const tl = staffTimeline(x); if(!tl.length) return null; const full = tl.filter(g=>g.sev==='ok').reduce((t,g)=>t+g.b-g.a,0); return {dt, x, tl, full, crew: crewTotalFor(dt), gs: garbageSummary([dt])}; }).filter(Boolean);
   if(!X.length){ H.push(`<div style="margin-top:20px;color:#777;font-size:13px;">No staffing recorded for this ${single?'day':'period'}.</div></div>`); return H.join(''); }
