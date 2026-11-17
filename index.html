@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.48 - 2026-11-16 (Staffing Report header: standard line-up on its own line so it never breaks)';
+const APP_VERSION = 'v205.49 - 2026-11-16 (Staffing timeline says WHY each stretch is short-staffed: needs 2, the other was needed on…, all crew already on machines, more machines than crew…)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2467,12 +2467,13 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     if(!runL.length && !stopL.length && !manual[i] && !sides.length) return {type:'none'};
     const D = []; // normalised issues: key → plain phrase
     if(evMask[i]){
-      K.filter(k=>k.startsWith('stop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'stop:'+m, t:'stop', s:`${shortM(m)} stopped — no staff`}); });
-      K.filter(k=>k.startsWith('moved|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'moved:'+m, t:'stop', s:`${shortM(m)} stopped — crew moved${sides.length?' to '+sides.join(' & '):''}`}); });
-      K.filter(k=>k.startsWith('sstop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'sstop:'+m, t:'stop', s:`${m} stopped — no staff`}); });
-      K.filter(k=>k.startsWith('one|')).forEach(k=>{ const m = k.split('|')[1], to = pulledTo(m, i); D.push({k:'one:'+m, t:'short', s:`${shortM(m)} with 1 person${to?` (other pulled to ${to})`:''}`}); });
-      if(K.some(k=>k.startsWith('all|'))) D.push({k:'all', t:'short', s:`all 3 Variovacs + ${sides.join(' + ')} at once`});
-      K.filter(k=>k.startsWith('role|')).forEach(k=>{ const [,n,w] = k.split('|'); D.push({k:'role:'+n+':'+w, t:'short', s:`${n} on ${w}`}); });
+      /* v205.49: each issue says WHY it counts as short-staffed */
+      K.filter(k=>k.startsWith('stop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'stop:'+m, t:'stop', s:`${shortM(m)} stopped — no staff available to run it`}); });
+      K.filter(k=>k.startsWith('moved|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'moved:'+m, t:'stop', s:`${shortM(m)} stopped — its crew were needed ${sides.length?'on '+sides.join(' & '):'elsewhere'}`}); });
+      K.filter(k=>k.startsWith('sstop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'sstop:'+m, t:'stop', s:`${m} stopped — no staff available to run it`}); });
+      K.filter(k=>k.startsWith('one|')).forEach(k=>{ const m = k.split('|')[1], to = pulledTo(m, i); D.push({k:'one:'+m, t:'short', s:`${shortM(m)} ran with only 1 person (needs 2)${to?` — the other was needed on ${to}`:''}`}); });
+      if(K.some(k=>k.startsWith('all|'))) D.push({k:'all', t:'short', s:`all 3 Variovacs + ${sides.join(' + ')} running at once — more machines than the crew can cover`});
+      K.filter(k=>k.startsWith('role|')).forEach(k=>{ const [,n,w] = k.split('|'); D.push({k:'role:'+n+':'+w, t:'short', s: C.R[i] ? `${n} worked on ${w} (a floater was on the floor)` : `${n} had to run ${w} — all crew were already on machines`}); });
     }
     if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(',')};
     const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2), std = full && C.V[i]===6;
