@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.51 - 2026-11-16 (Staffing Report: Where the crew were also says who was not on the floor — absent, sick, lent to Warehouse, not in yet, gone home, in but not placed)';
+const APP_VERSION = 'v205.52 - 2026-11-16 (Staffing Report: every person accounted for by exact place — lines, Manual, each side machine, set-up / clean, garbage run (area), cleaning, closing tasks, Floater / Runner, own break, lent, absent, not in)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2434,6 +2434,18 @@ function staffTimeline(x){ if(!x || !x._m) return [];
   const {keysAt, st, cnt, sideRun, pd, N} = x._m, d = dayLogFor(x.date)||{};
   const L = keysAt.length, manual = new Array(N).fill(0), sideP = {}, crewIn = new Array(N).fill(0), helpIn = new Array(N).fill(0), onBreak = new Array(N).fill(0);
   const C = {}; ['V','M','S','G','R','O'].forEach(k=>{ C[k] = new Array(N).fill(0); }); // v205.43: where your own crew are, minute by minute
+  const LAY = Array.from({length:N}, ()=>({})); // v205.52: every own-crew person, by exact place — always adds up to the crew on the floor
+  const where1 = sg=>{ const w = String(sg.w||''), g = sg.g, onM = g==='Lines running'||g==='Lines stopped';
+    if(onM && (VARIOVACS.includes(w) || w==='Manual Pack')) return w==='Manual Pack' ? 'Manual Pack' : shortM(w);
+    if(g==='Break') return 'own break';
+    if(/^Set-up · /.test(w)) return w.replace(/^Set-up · /,'')+' set-up';
+    if(/^Dismantle · /.test(w)) return w.replace(/^Dismantle · /,'')+(/Fajita/.test(w)?' dismantle / clean':' dismantle');
+    if(g==='Side machines') return w;
+    if(g==='Garbage run'){ const a = (String(sg.k).match(/\((.+)\)/)||[])[1]; return `garbage run${a?` (${a})`:''}`; }
+    if(/^Clean-up · /.test(w)) return 'cleaning '+w.replace(/^Clean-up · /,'').replace('Variovac ','V');
+    if(/^Closing/.test(w) || g==='Shutdown / Clean-up') return 'closing tasks';
+    if(w==='Runner / Floater') return 'Floater / Runner';
+    return (placeLabel(w)||w||'other duties').replace(/^Other · /,''); };
   const OFF = Array.from({length:N}, ()=>({})); // v205.51: why your own crew weren't on the floor — absent, lent, not in yet, not placed…
   const offAdd = (i, why)=>{ OFF[i][why] = (OFF[i][why]||0)+1; };
   pd.people.forEach(p=>{ if(OFFLINE_ROLES.includes(p.name) || helperDay(x.date, p.name)) return;
@@ -2449,6 +2461,7 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     p.segs.forEach(sg=>{ const w = String(sg.w||''), g = sg.g; for(let t=sg.a;t<sg.b;t++){ const i = t-DAY_FROM; if(i<0||i>=N) continue;
       if(g==='Not here'||g==='Not recorded'||g==='Lent to other dept') continue; // v205.51: lent / not in = not on the floor
       if(!role){ if(hlp) helpIn[i]++; else { crewIn[i]++; const onM = g==='Lines running'||g==='Lines stopped';
+        { const lb = where1(sg); LAY[i][lb] = (LAY[i][lb]||0)+1; }
         if(g==='Break'){} else if(onM && VARIOVACS.includes(w)) C.V[i]++; else if(onM && w==='Manual Pack') C.M[i]++; else if(g==='Side machines') C.S[i]++; else if(g==='Garbage run') C.G[i]++; else if(w==='Runner / Floater') C.R[i]++; else C.O[i]++; } }
       if(g==='Break' && !role) onBreak[i]++;
       if(w==='Manual Pack' && (g==='Lines running'||g==='Lines stopped')) manual[i]++;
@@ -2488,7 +2501,11 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     }
     const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2), std = full && C.V[i]===6;
     const lineCnt = VARIOVACS.filter(m=>cnt[m][i]>0 || stopL.includes(m)).map(m=>`${shortM(m)} ${cnt[m][i]}`).join(' + ');
-    const lay = [C.V[i] ? (std ? '3 Variovacs × 2' : lineCnt) : '', C.M[i]?`${C.M[i]} Manual Pack`:'', Object.keys(sideP).filter(m=>sideP[m][i]).map(m=>`${sideP[m][i]} ${m}`).join(' + '), C.G[i]?`${C.G[i]} garbage run`:'', C.R[i]?`${C.R[i]} Floater / Runner`:'', C.O[i]?`${C.O[i]} other`:''].filter(Boolean).join(' + ') + ` = ${crewIn[i]} crew` + offTxt(i) + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
+    const Lm = LAY[i], ord = ['V1','V2','V3','Manual Pack'], vStd = ['V1','V2','V3'].every(v=>Lm[v]===2) && runL.length===3;
+    const keysL = Object.keys(Lm).sort((p,q)=>{ const a = ord.indexOf(p), b = ord.indexOf(q); return (a<0?99:a)-(b<0?99:b) || Lm[q]-Lm[p]; });
+    const partsL = vStd ? ['3 Variovacs × 2'].concat(keysL.filter(k=>!['V1','V2','V3'].includes(k)).map(k=>`${Lm[k]} ${k}`)) : keysL.map(k=>['V1','V2','V3'].includes(k) ? `${k} ${Lm[k]}` : `${Lm[k]} ${k}`);
+    const stoppedNote = stopL.filter(m=>!Lm[shortM(m)]).map(m=>`${shortM(m)} 0`);
+    const lay = [...partsL, ...stoppedNote].join(' + ') + ` = ${crewIn[i]} crew` + (helpIn[i]?` (+ ${helpIn[i]} cross-dept help)`:'') + offTxt(i) + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
     if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(','), lay}; // v205.50: keep where everyone was
     const stops = stopL.map(m=>`${shortM(m)} ${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` (${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')})`:''}`);
     return {type:'ok', lay, stops, sides};
