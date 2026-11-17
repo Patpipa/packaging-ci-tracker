@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.54 - 2026-11-16 (Staffing: crew counts shown in circles — red when a line has 0)';
+const APP_VERSION = 'v205.55 - 2026-11-16 (Staffing: crew counts back to plain numbers — circles removed; lines stay in V1-V2-V3 order)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2559,7 +2559,7 @@ function shortBannerHTML(){ const x = shortStaffFor(todayStr()); if(!x) return '
   const tlNow = staffTimeline(x), lastB = tlNow[tlNow.length-1], nowWhere = lastB && lastB.where ? String(lastB.where).split('\n').pop().replace(/^from \d{1,2}:\d{2} [AP]M: /,'') : ''; // v205.53: where everyone is right now
   return `<div class="card" style="border-color:${c};padding:10px 12px;margin-bottom:10px;cursor:pointer;" onclick="shortOpen=!shortOpen;render()">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><b style="color:${c};font-size:13.5px;">${head}${nowL>1?` <span style="font-weight:600;">(+${nowL-1} more)</span>`:''}</b><span class="cb-mut">${x.events.length?(shortOpen?'▴':'▾'):''}</span></div>
-    ${nowWhere?`<div class="cb-mut" style="font-size:12px;margin-top:4px;line-height:1.7;"><b>Now:</b> ${circleCounts(escapeHtml(nowWhere), true)}</div>`:''}
+    ${nowWhere?`<div class="cb-mut" style="font-size:12px;margin-top:4px;line-height:1.7;"><b>Now:</b> ${escapeHtml(nowWhere)}</div>`:''}
     ${shortOpen && x.events.length ? `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px;">${x.events.map(e=>`<div style="display:flex;gap:10px;padding:4px 0;font-size:12.5px;"><span class="cb-mut" style="flex:0 0 118px;">${fmtTime12(chFmtHM(e.a))} – ${e.b>=toMin(nowHHMM())-1?'now':fmtTime12(chFmtHM(e.b))}</span><span style="${e.sev==='bad'?'color:var(--wait);font-weight:600;':''}">${escapeHtml(e.label)} · ${fmtDur(e.mins)}</span></div>`).join('')}<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Total so far: <b>${fmtDur(x.total)}</b> (overlaps counted once) · full list goes in the Daily Report</div></div>` : ''}</div>`; }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
 /* v162: each person's day. Regular shift 8:00 AM–4:30 PM; anything outside it is overtime (OT), shown in red.
@@ -3126,7 +3126,7 @@ function staffingReportHTML(start, end, forPdf){
     H.push(hd('2 · The day at a glance')); H.push(bar(d) + legend);
     H.push(hd('3 · Staffing timeline'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${d.tl.map(g=>{ const c = g.ic==='☕'?COL.brk:g.ic==='⏸'?COL.pl:g.sev==='ok'?COL.ok:g.sev==='warn'?COL.warn:g.sev==='bad'?COL.bad:COL.none;
-      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}${g.where?`<div style="margin-top:3px;font-size:11.5px;color:#555;"><b>Where the crew were:</b><br>${circleCounts(escapeHtml(g.where).replace(/\n/g,'<br>'))}</div>`:''}</td></tr>`; }).join('')}</table>`);
+      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}${g.where?`<div style="margin-top:3px;font-size:11.5px;color:#555;"><b>Where the crew were:</b> ${escapeHtml(g.where).replace(/\n/g,'<br>')}</div>`:''}</td></tr>`; }).join('')}</table>`);
     H.push(`<div style="font-size:10.5px;color:#777;margin-top:6px;line-height:1.5;"><b>Fully staffed</b> = every running Variovac had 2 people and nobody had to be pulled. <b>Short-staffed</b> = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Overlapping short time is counted once.</div>`);
     H.push(hd('4 · Garbage runs (packaging labour)'));
     H.push(d.gs.n ? `<table style="width:100%;border-collapse:collapse;">${d.gs.kinds.map(k=>`<tr><td style="${td}">${escapeHtml(k)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total ${fmtDur(d.gs.min)} · ${d.gs.n} run${d.gs.n===1?'':'s'}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">No garbage runs recorded.</div>`);
