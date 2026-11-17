@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.53 - 2026-11-16 (Staffing: every place and status named in full — Setup / Opening, Cleaning / Sanitation, lent to Trimmer / MAREL helper, late, gone home, typed duties; each change of arrangement listed; Crew tab shows where everyone is now)';
+const APP_VERSION = 'v205.54 - 2026-11-16 (Staffing: crew counts shown in circles — red when a line has 0)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2502,11 +2502,10 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     }
     const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2), std = full && C.V[i]===6;
     const lineCnt = VARIOVACS.filter(m=>cnt[m][i]>0 || stopL.includes(m)).map(m=>`${shortM(m)} ${cnt[m][i]}`).join(' + ');
-    const Lm = LAY[i], ord = ['V1','V2','V3','Manual Pack'], vStd = ['V1','V2','V3'].every(v=>Lm[v]===2) && runL.length===3;
+    const Lm = {...LAY[i]}; stopL.forEach(m=>{ if(!Lm[shortM(m)]) Lm[shortM(m)] = 0; }); const ord = ['V1','V2','V3','Manual Pack'], vStd = ['V1','V2','V3'].every(v=>Lm[v]===2) && runL.length===3;
     const keysL = Object.keys(Lm).sort((p,q)=>{ const a = ord.indexOf(p), b = ord.indexOf(q); return (a<0?99:a)-(b<0?99:b) || Lm[q]-Lm[p]; });
     const partsL = vStd ? ['3 Variovacs × 2'].concat(keysL.filter(k=>!['V1','V2','V3'].includes(k)).map(k=>`${Lm[k]} ${k}`)) : keysL.map(k=>['V1','V2','V3'].includes(k) ? `${k} ${Lm[k]}` : `${Lm[k]} ${k}`);
-    const stoppedNote = stopL.filter(m=>!Lm[shortM(m)]).map(m=>`${shortM(m)} 0`);
-    const lay = [...partsL, ...stoppedNote].join(' + ') + ` = ${crewIn[i]} crew` + (helpIn[i]?` (+ ${helpIn[i]} cross-dept help)`:'') + offTxt(i) + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
+    const lay = partsL.join(' + ') + ` = ${crewIn[i]} crew` + (helpIn[i]?` (+ ${helpIn[i]} cross-dept help)`:'') + offTxt(i) + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
     if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(','), lay}; // v205.50: keep where everyone was
     const stops = stopL.map(m=>`${shortM(m)} ${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` (${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')})`:''}`);
     return {type:'ok', lay, stops, sides};
@@ -2560,7 +2559,7 @@ function shortBannerHTML(){ const x = shortStaffFor(todayStr()); if(!x) return '
   const tlNow = staffTimeline(x), lastB = tlNow[tlNow.length-1], nowWhere = lastB && lastB.where ? String(lastB.where).split('\n').pop().replace(/^from \d{1,2}:\d{2} [AP]M: /,'') : ''; // v205.53: where everyone is right now
   return `<div class="card" style="border-color:${c};padding:10px 12px;margin-bottom:10px;cursor:pointer;" onclick="shortOpen=!shortOpen;render()">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><b style="color:${c};font-size:13.5px;">${head}${nowL>1?` <span style="font-weight:600;">(+${nowL-1} more)</span>`:''}</b><span class="cb-mut">${x.events.length?(shortOpen?'▴':'▾'):''}</span></div>
-    ${nowWhere?`<div class="cb-mut" style="font-size:12px;margin-top:4px;line-height:1.4;"><b>Now:</b> ${escapeHtml(nowWhere)}</div>`:''}
+    ${nowWhere?`<div class="cb-mut" style="font-size:12px;margin-top:4px;line-height:1.7;"><b>Now:</b> ${circleCounts(escapeHtml(nowWhere), true)}</div>`:''}
     ${shortOpen && x.events.length ? `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px;">${x.events.map(e=>`<div style="display:flex;gap:10px;padding:4px 0;font-size:12.5px;"><span class="cb-mut" style="flex:0 0 118px;">${fmtTime12(chFmtHM(e.a))} – ${e.b>=toMin(nowHHMM())-1?'now':fmtTime12(chFmtHM(e.b))}</span><span style="${e.sev==='bad'?'color:var(--wait);font-weight:600;':''}">${escapeHtml(e.label)} · ${fmtDur(e.mins)}</span></div>`).join('')}<div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Total so far: <b>${fmtDur(x.total)}</b> (overlaps counted once) · full list goes in the Daily Report</div></div>` : ''}</div>`; }
 const P_LINE_ST = {RUNNING:'running', WAITING:'waiting', CHANGEOVER:'changeover', PLANNED:'planned stop', NO_WORK:'no work scheduled'};
 /* v162: each person's day. Regular shift 8:00 AM–4:30 PM; anything outside it is overtime (OT), shown in red.
@@ -3083,6 +3082,14 @@ function crewReportHTML(start, end, forPdf){
   return H.join('');
 }
 /* ===== v205.47: STAFFING REPORT — its own report (Reports → Staffing): summary, day bar, timeline, garbage runs; no names ===== */
+/* v205.54: crew counts in "where the crew were" shown in circles so they stand out */
+function circleCounts(html, dark){
+  const c = (n, zero)=>`<span style="display:inline-block;min-width:19px;height:19px;padding:0 4px;box-sizing:border-box;border-radius:10px;background:${zero?'#c0392b':(dark?'#3b82c4':'#1e3a5f')};color:#fff;font-weight:800;font-size:11px;line-height:19px;text-align:center;vertical-align:1px;margin:0 1px;">${n}</span>`;
+  return String(html)
+    .replace(/\b(V[123]) (\d+)\b/g, (m0,v,n)=>`${v} ${c(n, n==='0')}`)
+    .replace(/× (\d+)/g, (m0,n)=>`× ${c(n)}`)
+    .replace(/(^|[+=,] |: |<br>)(\d+) (?=[A-Za-z(])/g, (m0,pre,n)=>`${pre}${c(n, n==='0')} `);
+}
 function staffingReportHTML(start, end, forPdf){
   const single = start===end, H = [];
   const card = `background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};`;
@@ -3119,7 +3126,7 @@ function staffingReportHTML(start, end, forPdf){
     H.push(hd('2 · The day at a glance')); H.push(bar(d) + legend);
     H.push(hd('3 · Staffing timeline'));
     H.push(`<table style="width:100%;border-collapse:collapse;">${d.tl.map(g=>{ const c = g.ic==='☕'?COL.brk:g.ic==='⏸'?COL.pl:g.sev==='ok'?COL.ok:g.sev==='warn'?COL.warn:g.sev==='bad'?COL.bad:COL.none;
-      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}${g.where?`<div style="margin-top:3px;font-size:11.5px;color:#555;"><b>Where the crew were:</b> ${escapeHtml(g.where).replace(/\n/g,'<br>')}</div>`:''}</td></tr>`; }).join('')}</table>`);
+      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}${g.where?`<div style="margin-top:3px;font-size:11.5px;color:#555;"><b>Where the crew were:</b><br>${circleCounts(escapeHtml(g.where).replace(/\n/g,'<br>'))}</div>`:''}</td></tr>`; }).join('')}</table>`);
     H.push(`<div style="font-size:10.5px;color:#777;margin-top:6px;line-height:1.5;"><b>Fully staffed</b> = every running Variovac had 2 people and nobody had to be pulled. <b>Short-staffed</b> = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Overlapping short time is counted once.</div>`);
     H.push(hd('4 · Garbage runs (packaging labour)'));
     H.push(d.gs.n ? `<table style="width:100%;border-collapse:collapse;">${d.gs.kinds.map(k=>`<tr><td style="${td}">${escapeHtml(k)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total ${fmtDur(d.gs.min)} · ${d.gs.n} run${d.gs.n===1?'':'s'}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">No garbage runs recorded.</div>`);
