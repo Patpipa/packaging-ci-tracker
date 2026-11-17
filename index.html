@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.46 - 2026-11-16 (Staffing timeline in clear blocks — Fully staffed / Short-staffed / Stopped / Break — instead of minute-by-minute lines; PDF prints plain text, no garbled symbols, colour-coded)';
+const APP_VERSION = 'v205.47 - 2026-11-16 (Reports → Staffing: its own report — summary, day bar, staffing timeline, garbage runs, day-by-day for a range, PDF; Daily Report back to the simple layout with one Short-staffed line)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -815,7 +815,7 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours'||v==='scales') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours'||v==='staffing'||v==='scales') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
@@ -833,6 +833,7 @@ function render(){
     case 'reportView': html += renderReportView(Router.arg); break;
     case 'weekly': html += renderWeeklyView(); break;
     case 'crewHours': html += renderCrewHoursView(); break;
+    case 'staffing': html += renderStaffingView(); break;
     case 'scales': html += renderScaleReportView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
@@ -1815,14 +1816,9 @@ function dayLogSections(date, opts){
     if(!roleIn(date,r)) crew.push({k:r, v:'off today'});
     else { const m = om[r]; crew.push({k:r, v: (opts && opts.short) ? (m.min>0 ? `on the line ${fmtDur(m.min)}` : 'stayed off the line') : (m.min>0 ? `in today · on the line ${fmtDur(m.min)}` : 'in today · stayed off the line')}); }
   });
+  { const sx = shortStaffFor(date); if(sx && staffTimeline(sx).length) crew.push({k:'Short-staffed', v: sx.total ? `${fmtDur(sx.total)} · see Staffing Report` : 'none ✅', red: sx.total>0}); }
   out.push({title:'CREW', rows:crew});
-  { const sx = shortStaffFor(date); if(sx){ const tl = staffTimeline(sx), full = tl.filter(g=>g.sev==='ok').reduce((t,g)=>t+g.b-g.a,0); // v205.41: whole-day staffing timeline
-      if(tl.length) out.push({title:'STAFFING TIMELINE', rows:[
-        {k: sx.today ? 'Short-staffed so far' : 'Short-staffed', v: sx.total ? fmtDur(sx.total) : 'none ✅', big:true, red: sx.total>0},
-        {k: 'Fully staffed', v: fmtDur(full)},
-        ...(()=>{ const gs = garbageSummary([date]); return gs.n ? [{k:'Packaging labour on garbage runs', v:`${fmtDur(gs.min)} · ${gs.n} run${gs.n===1?'':'s'}\n${gs.kinds.join('\n')}`, red: gs.trimN>0}] : []; })(),
-        ...tl.map(g=>({k:`${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}`, v:`${g.ic} ${g.status}${g.t?`\n${g.t}`:''}`, red: g.sev==='bad', warn: g.sev==='warn', ok: g.sev==='ok'})),
-        {k:'', v:'Fully staffed = every running Variovac had 2 people and nobody had to be pulled. Short-staffed = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Short time is counted once when things overlap.', sub:true}]}); } }
+  /* v205.47: the full staffing timeline lives in Reports → Staffing; the Daily Report keeps one line */
   if(d.marelStart || d.marelEnd) out.push({title:'MAREL', rows:[marelRowFor(d)]});
   const side = [];
   const used = SIDE_MACHINES.filter(m=>x.perMachine[m.name].runMin>0);
@@ -3048,6 +3044,74 @@ function crewReportHTML(start, end, forPdf){
   H.push(`<div style="border-top:1px solid #ddd;margin-top:12px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Crew Hours — ${escapeHtml(start===end?fmtDate(start):fmtDate(start)+' – '+fmtDate(end))} · ${PREPARED_BY}</span><span>${APP_VERSION.split(' ')[0]}</span></div>`); // v205.37
   return H.join('');
 }
+/* ===== v205.47: STAFFING REPORT — its own report (Reports → Staffing): summary, day bar, timeline, garbage runs; no names ===== */
+function staffingReportHTML(start, end, forPdf){
+  const single = start===end, H = [];
+  const card = `background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};`;
+  const hd = t=>`<div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin:22px 0 10px;text-transform:uppercase;">${t}</div>`;
+  const td = 'padding:7px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;line-height:1.4;';
+  const COL = {ok:'#2e9e5b', warn:'#e67e22', bad:'#c0392b', brk:'#4a90d9', pl:'#8e7cc3', none:'#d5d8dc'};
+  const tag = (txt,c)=>`<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${c};color:#fff;font-size:11px;font-weight:700;white-space:nowrap;">${txt}</span>`;
+  const dateLabel = single ? new Date(start+'T00:00:00').toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'}) : `${fmtDate(start)} – ${fmtDate(end)}`;
+  H.push(`<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;"><div><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Staffing Report</div><div style="font-size:13px;color:#555;margin-top:2px;">${dateLabel}</div></div><div style="font-size:10.5px;color:#888;text-align:right;">CI Tracker · made ${fmtTime12(nowHHMM())}<br>Standard line-up: 3 Variovacs × 2 + 1 floater = 7</div></div>`);
+  const days = []; for(let dt=start; dt<=end; dt=shiftDate(dt,1)) days.push(dt);
+  const X = days.map(dt=>{ const x = shortStaffFor(dt); if(!x) return null; const tl = staffTimeline(x); if(!tl.length) return null; const full = tl.filter(g=>g.sev==='ok').reduce((t,g)=>t+g.b-g.a,0); return {dt, x, tl, full, crew: crewTotalFor(dt), gs: garbageSummary([dt])}; }).filter(Boolean);
+  if(!X.length){ H.push(`<div style="margin-top:20px;color:#777;font-size:13px;">No staffing recorded for this ${single?'day':'period'}.</div></div>`); return H.join(''); }
+  const tShort = X.reduce((t,d)=>t+d.x.total,0), tFull = X.reduce((t,d)=>t+d.full,0), tRole = X.reduce((t,d)=>t+d.x.roleMin,0), tGarb = X.reduce((t,d)=>t+d.gs.min,0);
+  const daysShort = X.filter(d=>d.x.total>0).length;
+  // 1 · summary
+  H.push(hd('1 · Summary'));
+  const row = (k,v,s0)=>`<tr><td style="${td}font-weight:700;width:52%;">${k}</td><td style="${td}${s0||''}">${v}</td></tr>`;
+  H.push(`<table style="width:100%;border-collapse:collapse;">${[
+    row('Short-staffed', `${fmtDur(tShort)}${single?'':` · on ${daysShort} of ${X.length} days`}`, tShort?'color:#c0392b;font-weight:800;font-size:15px;':'color:#2e9e5b;font-weight:700;'),
+    row('Fully staffed', fmtDur(tFull)),
+    row(single?'Packaging crew in':'Packaging crew (average per day)', single ? String(X[0].crew ?? '—') : (X.filter(d=>d.crew!=null).reduce((t,d)=>t+d.crew,0)/Math.max(1,X.filter(d=>d.crew!=null).length)).toFixed(1)),
+    row('Lead Hand / Yield running a machine', tRole?fmtDur(tRole):'none', tRole?'color:#c0392b;font-weight:700;':''),
+    row('Packaging labour on garbage runs', tGarb?fmtDur(tGarb):'none')
+  ].join('')}</table>`);
+  // 2 · the day at a glance (single day) / day by day (range)
+  const bar = d=>{ const a0 = Math.min(...d.tl.map(g=>g.a)), b0 = Math.max(...d.tl.map(g=>g.b)), span = Math.max(1,b0-a0);
+    const cOf = g=>g.ic==='☕'?COL.brk:g.ic==='⏸'?COL.pl:g.sev==='ok'?COL.ok:g.sev==='warn'?COL.warn:g.sev==='bad'?COL.bad:COL.none;
+    return `<div style="display:flex;height:22px;border-radius:5px;overflow:hidden;border:1px solid #ccc;">${d.tl.map(g=>`<div title="${escapeHtml(g.status)}" style="width:${((g.b-g.a)/span*100).toFixed(2)}%;background:${cOf(g)};"></div>`).join('')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#777;margin-top:2px;"><span>${fmtTime12(chFmtHM(a0))}</span><span>${fmtTime12(chFmtHM(b0))}</span></div>`; };
+  const legend = `<div style="font-size:10.5px;color:#555;margin-top:6px;line-height:1.9;">${[['Fully staffed',COL.ok],['Short-staffed',COL.warn],['Stopped — no staff',COL.bad],['Break',COL.brk],['Planned stop',COL.pl]].map(([t,c])=>`<span style="display:inline-block;margin-right:14px;white-space:nowrap;"><span style="display:inline-block;width:10px;height:10px;background:${c};vertical-align:-1px;margin-right:4px;border-radius:2px;"></span>${t}</span>`).join('')}</div>`;
+  if(single){
+    const d = X[0];
+    H.push(hd('2 · The day at a glance')); H.push(bar(d) + legend);
+    H.push(hd('3 · Staffing timeline'));
+    H.push(`<table style="width:100%;border-collapse:collapse;">${d.tl.map(g=>{ const c = g.ic==='☕'?COL.brk:g.ic==='⏸'?COL.pl:g.sev==='ok'?COL.ok:g.sev==='warn'?COL.warn:g.sev==='bad'?COL.bad:COL.none;
+      return `<tr><td style="${td}border-left:4px solid ${c};padding-left:10px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;color:#222;white-space:nowrap;">${fmtTime12(chFmtHM(g.a))} – ${fmtTime12(chFmtHM(g.b))}</b>${tag(g.status.replace(/ \(([^)]*)\)$/,''), c)}<span style="font-size:11.5px;color:#777;">${fmtDur(g.b-g.a)}</span></div>${g.t?`<div style="margin-top:4px;${g.sev==='bad'?'color:#c0392b;':g.sev==='warn'?'color:#a04000;':'color:#333;'}">${escapeHtml(g.t)}</div>`:''}</td></tr>`; }).join('')}</table>`);
+    H.push(`<div style="font-size:10.5px;color:#777;margin-top:6px;line-height:1.5;"><b>Fully staffed</b> = every running Variovac had 2 people and nobody had to be pulled. <b>Short-staffed</b> = a Variovac ran with 1 person, everything ran at once, Lead / Yield had to run a machine, or a machine stopped for lack of staff. Overlapping short time is counted once.</div>`);
+    H.push(hd('4 · Garbage runs (packaging labour)'));
+    H.push(d.gs.n ? `<table style="width:100%;border-collapse:collapse;">${d.gs.kinds.map(k=>`<tr><td style="${td}">${escapeHtml(k)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total ${fmtDur(d.gs.min)} · ${d.gs.n} run${d.gs.n===1?'':'s'}</td></tr></table>` : `<div style="font-size:12.5px;color:#777;">No garbage runs recorded.</div>`);
+  } else {
+    H.push(hd('2 · Day by day'));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr>${['Day','Short-staffed','Fully staffed','Lead / Yield on a machine','Garbage runs',''].map(t=>`<td style="${td}font-size:10.5px;color:#666;text-transform:uppercase;">${t}</td>`).join('')}</tr>${X.map(d=>`<tr><td style="${td}white-space:nowrap;">${new Date(d.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${td}${d.x.total?'color:#c0392b;font-weight:700;':'color:#2e9e5b;'}">${d.x.total?fmtDur(d.x.total):'none'}</td><td style="${td}">${fmtDur(d.full)}</td><td style="${td}">${d.x.roleMin?fmtDur(d.x.roleMin):'—'}</td><td style="${td}">${d.gs.min?fmtDur(d.gs.min):'—'}</td><td style="${td}">${forPdf?'':`<span style="color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="openStaffing('${d.dt}')">day →</span>`}</td></tr>`).join('')}</table>`);
+    H.push(hd('3 · Each day at a glance'));
+    H.push(X.map(d=>`<div style="margin-bottom:10px;"><div style="font-size:11.5px;font-weight:700;color:#333;margin-bottom:3px;">${new Date(d.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} · short ${d.x.total?fmtDur(d.x.total):'none'}</div>${bar(d)}</div>`).join('') + legend);
+  }
+  H.push(`<div style="border-top:1px solid #ddd;margin-top:18px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Packaging Staffing — ${escapeHtml(single?fmtDate(start):fmtDate(start)+' – '+fmtDate(end))} · ${PREPARED_BY}</span><span>${APP_VERSION.split(' ')[0]}</span></div></div>`);
+  return H.join('');
+}
+let staffRange = null;
+function openStaffing(date){ staffRange = {start:date, end:date, preset: date===todayStr()?'today':''}; Router.go('staffing'); }
+function staffRangeNow(){ return staffRange || {start:todayStr(), end:todayStr(), preset:'today'}; }
+function setStaffPreset(p){ const T = todayStr(); staffRange = p==='today' ? {start:T,end:T,preset:p} : p==='yesterday' ? {start:shiftDate(T,-1),end:shiftDate(T,-1),preset:p} : {start:shiftDate(T,-(+p-1)), end:T, preset:p}; render(); }
+function setStaffDate(k, v){ const r = {...staffRangeNow(), preset:''}; r[k] = v; if(r.start>r.end){ if(k==='start') r.end = r.start; else r.start = r.end; } staffRange = r; render(); }
+function renderStaffingView(){
+  const r = staffRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setStaffPreset('${p}')">${l}</button>`;
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
+  <div class="card"><h3>⚠ Staffing Report</h3>
+    <div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('yesterday','Yesterday')}${pb('7','Last 7')}${pb('30','Last 30')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setStaffDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setStaffDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
+    <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="exportStaffingPDF()">Export PDF</button><button class="btn btn-secondary" onclick="copyStaffing()">Copy text</button></div>
+  </div>
+  <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${staffingReportHTML(r.start, r.end)}</div>`;
+}
+async function exportStaffingPDF(){ const r = staffRangeNow(); await buildHtmlReportPDF(staffingReportHTML(r.start, r.end, true), `Staffing-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
+async function copyStaffing(){ const r = staffRangeNow(), el = document.createElement('div'); el.innerHTML = staffingReportHTML(r.start, r.end, true);
+  el.querySelectorAll('tr').forEach(tr=>{ tr.appendChild(document.createTextNode('\n')); }); el.querySelectorAll('td').forEach(td=>{ td.appendChild(document.createTextNode('  ')); });
+  const txt = el.innerText.replace(/\n{3,}/g,'\n\n'); try{ await navigator.clipboard.writeText(txt); toast('Copied'); }catch(e){ toast('Could not copy'); } }
 function renderCrewHoursView(){
   const r = crewRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setCrewPreset('${p}')">${l}</button>`;
   return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
@@ -6925,6 +6989,7 @@ function renderReportsList(){
   let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('scales')">🖥 Scale Downtime</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="openStaffing(todayStr())">⚠ Staffing Report</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="openCrewHours(todayStr())">👥 Crew Hours & Positions</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('upstreamImpact')">🏭 Upstream Impact Summary</button>`;
