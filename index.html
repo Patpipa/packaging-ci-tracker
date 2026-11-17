@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.58 - 2026-11-16 (Garbage run minutes in the Staffing Report and Daily now use the same crew time count as Crew Hours, so the totals tally)';
+const APP_VERSION = 'v205.59 - 2026-11-16 (Lent crew not back by end of shift show "– end of shift · not back to packaging" instead of returning at 4:30)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2636,6 +2636,7 @@ function personDay(date){
       const ot = t<REG_A || t>=REG_B, last = segs[segs.length-1];
       if(last && last.k===k && last.det===det && last.ot===ot && last.b===t) last.b = t+1; else segs.push({a:t, b:t+1, k, g, det, ot, w});
     }
+    { const ls = segs[segs.length-1], le = log[log.length-1]; if(ls && ls.g==='Lent to other dept' && le && String(le.w).startsWith('Lent') && ls.b===win.b && !(isToday && win.b>=toMin(nowHHMM()))) ls.notBack = true; } // v205.59: still lent at end of shift — never came back to packaging
     return {name:n, tot, grp, segs, total: win.b-win.a, a: win.a, b: win.b, otA: win.otA, otB: win.otB, ot: win.otA+win.otB};
   });
   return {people, isToday};
@@ -3021,7 +3022,7 @@ function crewReportHTML(start, end, forPdf){
     P.forEach((p,i)=>{ const y = top + i*rowH;
       svg += `<text x="${L-6}" y="${y+15}" font-size="11.5" font-weight="700" fill="#1a1a2e" text-anchor="end">${escapeHtml(p.name)}</text>`;
       if(p.away) svg += `<text x="${L+6}" y="${y+15}" font-size="11" fill="#888">${escapeHtml(p.away)} — all day</text>`;
-      p.segs.forEach(sg=>{ const fill = sg.g==='Not recorded' ? 'url(#nrh)' : chColor(sg); svg += `<rect x="${x(sg.a)}" y="${y+3}" width="${Math.max(0.8, x(sg.b)-x(sg.a))}" height="${rowH-7}" fill="${fill}"><title>${escapeHtml(`${p.name} · ${m2t(sg.a)}–${m2t(sg.b)} · ${sg.k}`)}</title></rect>`; }); });
+      p.segs.forEach(sg=>{ const fill = sg.g==='Not recorded' ? 'url(#nrh)' : chColor(sg); svg += `<rect x="${x(sg.a)}" y="${y+3}" width="${Math.max(0.8, x(sg.b)-x(sg.a))}" height="${rowH-7}" fill="${fill}"><title>${escapeHtml(`${p.name} · ${m2t(sg.a)}–${sg.notBack?'end of shift (not back)':m2t(sg.b)} · ${sg.k}`)}</title></rect>`; }); });
     svg += `<line x1="${x(REG_A)}" y1="${top-4}" x2="${x(REG_A)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/><line x1="${x(REG_B)}" y1="${top-4}" x2="${x(REG_B)}" y2="${Hh}" stroke="#c0392b" stroke-dasharray="3 3"/></svg>`;
     const lg = [['Line running',CH_COL.run],['Line waiting',CH_COL.waiting],['Changeover',CH_COL.changeover],['Planned stop',CH_COL.planned],['No work',CH_COL.nowork],['Break',CH_COL.brk],['Side machine',CH_COL.side],['Garbage',CH_COL.garbage],['Clean-up / closing',CH_COL.cleanup],['Cleaning',CH_COL.clean],['Lent out',CH_COL.lent],['Setup',CH_COL.setup],['Not here',CH_COL.away]];
     H.push(staffingReportHTML(start, end, forPdf, {embed:true})); // v205.56: the Staffing Report inside Crew Hours — one report for the manager
@@ -3037,11 +3038,11 @@ function crewReportHTML(start, end, forPdf){
       <table style="width:100%;border-collapse:collapse;margin-top:8px;">${order.filter(g=>G[g]).map(g=>`<tr><td style="${td}"><span style="display:inline-block;width:10px;height:10px;background:${gc[g]};border-radius:2px;margin-right:6px;"></span>${g==='Lines stopped'?'Lines stopped (waiting / changeover / planned / no work)':g}</td><td style="${td}text-align:right;${g==='Not recorded'?red:''}">${chDur(G[g])}</td><td style="${td}text-align:right;width:60px;color:#666;">${Math.round(G[g]/tot*100)}%</td></tr>`).join('')}</table>`);
     { const st = {}; awayAdd(st, start, pd); H.push(awaySectionsHTML(st, td, hd, 4, false)); }
     // 7. lent out
-    const lent = []; P.forEach(p=>p.segs.forEach(sg=>{ if(sg.g==='Lent to other dept') lent.push({n:p.name, dep: sg.k.replace('Lent · ',''), a:sg.a, b:sg.b}); }));
+    const lent = []; P.forEach(p=>p.segs.forEach(sg=>{ if(sg.g==='Lent to other dept') lent.push({n:p.name, dep: sg.k.replace('Lent · ',''), a:sg.a, b:sg.b, nb: sg.notBack}); }));
     const lentAll = P.filter(p=>p.awaySt==='lent');
     H.push(hd('7 · Lent to other departments'));
     H.push(lentAll.length ? `<table style="width:100%;border-collapse:collapse;margin-bottom:6px;">${lentAll.map(p=>`<tr><td style="${td}width:150px;">All day</td><td style="${td}"><b>${escapeHtml(p.name)}</b> → ${escapeHtml(p.away.replace('Lent to ',''))}</td><td style="${td}text-align:right;color:#777;">not tracked</td></tr>`).join('')}</table>` : '');
-    H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total (part of the day)</td><td style="${td}"></td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : (lentAll.length ? '' : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`));
+    H.push(lent.length ? `<table style="width:100%;border-collapse:collapse;">${lent.map(l=>`<tr><td style="${td}width:150px;">${m2t(l.a)} – ${l.nb?'end of shift':m2t(l.b)}</td><td style="${td}"><b>${escapeHtml(l.n)}</b> → ${escapeHtml(l.dep)}${l.nb?` <span style="color:#b9770e;">· not back to packaging by end of shift</span>`:''}</td><td style="${td}text-align:right;">${chDur(l.b-l.a)}${l.nb?`<div style="font-size:10.5px;color:#777;">to ${m2t(l.b)}</div>`:''}</td></tr>`).join('')}<tr><td style="${td}font-weight:700;">Total (part of the day)</td><td style="${td}font-size:11px;color:#777;">${lent.some(l=>l.nb)?`Counted to ${m2t(Math.max(...lent.filter(l=>l.nb).map(l=>l.b)))} (end of shift) — time after that was with the other dept and isn't packaging time.`:''}</td><td style="${td}text-align:right;font-weight:700;">${chDur(lent.reduce((t,l)=>t+l.b-l.a,0))}</td></tr></table>` : (lentAll.length ? '' : `<div style="font-size:12.5px;color:#777;">Nobody lent out.</div>`));
     // 8. each person, line by line
     H.push(hd('8 · Each person — where they were'));
     P.forEach(p=>{
@@ -3049,7 +3050,7 @@ function crewReportHTML(start, end, forPdf){
       const pos = {}; p.segs.forEach(sg=>{ if(sg.g==='Break'||sg.g==='Not recorded'||sg.g==='Not here') return; const key = MACHINES.includes(sg.w) ? sg.w : (sg.g==='Side machines' ? sg.w : sg.k); pos[key] = (pos[key]||0) + (sg.b-sg.a); });
       H.push(`<div style="page-break-inside:avoid;margin-bottom:14px;"><div style="background:#f2f5f9;border-left:4px solid #1e3a5f;padding:6px 10px;font-size:13px;"><b>${escapeHtml(p.name.toUpperCase())}</b> · ${chFmt(p.a)} – ${chFmt(p.b)} · worked ${chDur(chWorked(p))}${p.ot?` · <span style="${red}">OT ${chDur(p.ot)}</span>`:''}${(p.tot['Not recorded']||0)?` · <span style="${red}">not recorded ${chDur(p.tot['Not recorded'])}</span>`:''}</div>
         <table style="width:100%;border-collapse:collapse;">${p.segs.map(sg=>{ const bad = sg.g==='Not recorded'; const c = bad || sg.ot ? red : '';
-          return `<tr><td style="${td}width:150px;white-space:nowrap;${c}">${m2t(sg.a)} – ${m2t(sg.b)}</td><td style="${td}${c}"><span style="display:inline-block;width:9px;height:9px;background:${chColor(sg)};border-radius:2px;margin-right:6px;"></span>${escapeHtml(sg.k)}${sg.det?` <span style="color:#777;font-weight:400;">· ${escapeHtml(sg.det)}</span>`:''}</td><td style="${td}text-align:right;width:70px;${c}">${chDur(sg.b-sg.a)}</td><td style="${td}width:30px;${red}">${sg.ot?'OT':''}</td></tr>`; }).join('')}</table>
+          return `<tr><td style="${td}width:150px;white-space:nowrap;${c}">${m2t(sg.a)} – ${sg.notBack?'end of shift':m2t(sg.b)}</td><td style="${td}${c}"><span style="display:inline-block;width:9px;height:9px;background:${chColor(sg)};border-radius:2px;margin-right:6px;"></span>${escapeHtml(sg.k)}${sg.notBack?' <span style="color:#b9770e;font-weight:400;">· not back by end of shift</span>':''}${sg.det?` <span style="color:#777;font-weight:400;">· ${escapeHtml(sg.det)}</span>`:''}</td><td style="${td}text-align:right;width:70px;${c}">${chDur(sg.b-sg.a)}</td><td style="${td}width:30px;${red}">${sg.ot?'OT':''}</td></tr>`; }).join('')}</table>
         <div style="font-size:11px;color:#555;padding:4px 6px;">Positions: ${Object.keys(pos).sort((a,b)=>pos[b]-pos[a]).map(k=>`${escapeHtml(k)} ${chDur(pos[k])}`).join(' · ') || '—'}</div></div>`);
     });
     // 5. each position
@@ -3183,7 +3184,7 @@ function crewHoursText(start, end){
   if(!pd){ L.push('No names recorded.'); return L.join('\n'); }
   const ot = pd.people.reduce((t,p)=>t+p.ot,0); if(ot) L.push(`Overtime: ${chDur(ot)} · ${pd.people.filter(p=>p.ot).length} people`);
   pd.people.forEach(p=>{ L.push(''); if(p.away){ L.push(`${p.name.toUpperCase()} · ${p.away} — all day (hours not tracked)`); return; } L.push(`${p.name.toUpperCase()} · ${m2t(p.a)} – ${m2t(p.b)} · worked ${chDur(chWorked(p))}${p.ot?` · OT ${chDur(p.ot)}`:''}${(p.tot['Not recorded']||0)?` · NOT RECORDED ${chDur(p.tot['Not recorded'])}`:''}`);
-    p.segs.forEach(sg=>L.push(`  ${m2t(sg.a)} – ${m2t(sg.b)}  ${sg.k}${sg.det?` (${sg.det})`:''}  ${chDur(sg.b-sg.a)}${sg.ot?'  OT':''}`)); });
+    p.segs.forEach(sg=>L.push(`  ${m2t(sg.a)} – ${sg.notBack?'end of shift':m2t(sg.b)}  ${sg.k}${sg.notBack?' (not back by end of shift)':''}${sg.det?` (${sg.det})`:''}  ${chDur(sg.b-sg.a)}${sg.ot?'  OT':''}`)); });
   return L.join('\n');
 }
 async function copyCrewHours(){ const r = crewRangeNow(), t = crewHoursText(r.start, r.end);
