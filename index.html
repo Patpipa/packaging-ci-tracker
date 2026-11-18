@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.61 - 2026-11-17 (Garbage runs sent from the Crew tab now count in the gross labour of the line the person came from, same as the Variovac card button)';
+const APP_VERSION = 'v205.62 - 2026-11-17 (Export JSON / Copy Data now include the full day log, live runs, settings and products, so every report number can be checked)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -7526,7 +7526,7 @@ function renderSettings(){
 async function copyDataText(format){
   let text;
   if(format==='json'){
-    text = JSON.stringify({records:Store.records, dailyReports:Store.dailyReports, exportedAt:new Date().toISOString()}, null, 2);
+    text = JSON.stringify(fullBackupData(), null, 2);
   } else {
     const headers = ['Date','Machine','Product','Start Time','End Time','Duration (min)','Status','Reason Category','Reason','Upstream/Internal','Notes'];
     const machineOrder = [...MACHINES, ...[...new Set(Store.records.map(r=>r.machine))].filter(m=>!MACHINES.includes(m)).sort()];
@@ -7554,8 +7554,10 @@ function downloadBlob(content, filename, type){
   const a = document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
 }
+/* v205.62: the backup now carries everything the reports are built from — crew moves, breaks, garbage, side machines, lent, helpers (dayLog), live runs, settings and products — so a day can be checked number by number */
+function fullBackupData(){ return {records:Store.records, dailyReports:Store.dailyReports, dayLog:Store.dayLog||{}, liveRuns:Store.liveRuns||{}, settings:Store.settings||{}, productLibrary:Store.productLibrary||[], appVersion:APP_VERSION, exportedAt:new Date().toISOString()}; }
 function exportJSON(){
-  const data = {records:Store.records, dailyReports:Store.dailyReports, exportedAt:new Date().toISOString()};
+  const data = fullBackupData();
   downloadBlob(JSON.stringify(data,null,2), `Packaging_CI_Data_${todayStr()}.json`, 'application/json');
   toast('Data exported');
 }
