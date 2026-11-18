@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.62 - 2026-11-17 (Export JSON / Copy Data now include the full day log, live runs, settings and products, so every report number can be checked)';
+const APP_VERSION = 'v205.63 - 2026-11-17 (Audit: a stop edited or deleted in History now updates its run labour and PLH; negative weight / quantity refused; Report check GREEN / YELLOW / RED on Daily, Crew Hours and Staffing screens; Reports list totals always live)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3195,6 +3195,7 @@ function renderStaffingView(){
     <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setStaffDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setStaffDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
     <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="exportStaffingPDF()">Export PDF</button><button class="btn btn-secondary" onclick="copyStaffing()">Copy text</button></div>
   </div>
+  ${reportCheckRangeHTML(r.start, r.end)}
   <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${staffingReportHTML(r.start, r.end)}</div>`;
 }
 async function exportStaffingPDF(){ const r = staffRangeNow(); await buildHtmlReportPDF(staffingReportHTML(r.start, r.end, true), `Staffing-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
@@ -3209,6 +3210,7 @@ function renderCrewHoursView(){
     <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setCrewDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setCrewDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
     <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="exportCrewHoursPDF()">Export PDF</button><button class="btn btn-secondary" onclick="copyCrewHours()">Copy text</button></div>
   </div>
+  ${reportCheckRangeHTML(r.start, r.end)}
   <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${crewReportHTML(r.start, r.end)}</div>`;
 }
 async function exportCrewHoursPDF(){ const r = crewRangeNow(); await buildHtmlReportPDF(crewReportHTML(r.start, r.end, true), `Crew-Hours-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
@@ -5916,6 +5918,7 @@ async function confirmFinishProduct(){
   if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='Saving…'; }
   try{
     const s = liveFinishSetup;
+    if((parseFloat(s.weight)||0) < 0 || (parseFloat(s.quantity)||0) < 0){ toast('Weight and quantity can\'t be negative'); return; } // v205.63: audit — never save a negative production figure
     const result = await closeOutLiveRun(s.machine, {quantity:s.quantity, weight:s.weight, notes:s.notes});
     if(!result) return;
     delete Store.liveRuns[s.machine];
@@ -6499,6 +6502,7 @@ async function confirmAddPLHData(){
   const weightNum = parseFloat(document.getElementById('plhWeightInput').value)||0;
   const qtyNum = parseFloat(document.getElementById('plhQtyInput').value)||0;
   if(weightNum<=0){ toast('Enter a weight to compute PLH'); return; }
+  if(qtyNum<0){ toast('Quantity can\'t be negative'); return; } // v205.63
   await Store.refreshRecords();
   const idx = Store.records.findIndex(r=>r.id===plhDataFormId);
   if(idx===-1){ toast('Record not found — it may have been deleted'); Router.go('history'); return; }
@@ -6526,11 +6530,26 @@ async function confirmAddPLHData(){
   toast(`PLH saved — ${grossPLH.toFixed(0)} PLH`);
   Router.go('history');
 }
+/* v205.63 (audit): a stop (waiting / changeover / break / planned) saved from a Live Floor run is also inside that run's labour (plh.downtimeSegments).
+   When the stop is edited or deleted in History, the run's copy follows and its gross labour + PLH are worked out again — so History, PLH and the reports never disagree. */
+function syncStopIntoRun(oldRec, newRec){
+  if(!oldRec || oldRec.status==='RUNNING') return false;
+  const runs = Store.records.filter(r=>r.date===oldRec.date && r.machine===oldRec.machine && r.status==='RUNNING' && r.plh && Array.isArray(r.plh.downtimeSegments));
+  let hit = null, idx = -1;
+  for(const r of runs){ const i = r.plh.downtimeSegments.findIndex(d=>d.start===oldRec.startTime && d.end===oldRec.endTime && d.status===oldRec.status); if(i>=0){ hit = r; idx = i; break; } }
+  if(!hit) return false;
+  const segs = hit.plh.downtimeSegments.slice();
+  const keep = newRec && newRec.status!=='RUNNING' && newRec.status!=='NO_WORK' && newRec.date===oldRec.date && newRec.machine===oldRec.machine;
+  if(keep) segs[idx] = {...segs[idx], start:newRec.startTime, end:newRec.endTime, status:newRec.status, reason:newRec.reason};
+  else segs.splice(idx, 1);
+  const ri = Store.records.indexOf(hit); Store.records[ri] = {...hit, plh:{...hit.plh, downtimeSegments: segs}};
+  applyPaidBreakRule(Store.records.filter(r=>r.date===oldRec.date && r.machine===oldRec.machine)); // gross labour, gross PLH and the run note again
+  return true; }
 async function deleteRecord(id){
   { const r = Store.records.find(x=>x.id===id); if(r && r.side && String(id).startsWith('side-')){ await cancelSideJob(id.slice(5), r.date); return; } } // v205.22: a side job goes with its time and crew hours
   if(!confirm('Delete this record?')) return;
   await Store.refreshRecords();
-  Store.records = Store.records.filter(r=>r.id!==id);
+  { const gone = Store.records.find(r=>r.id===id); Store.records = Store.records.filter(r=>r.id!==id); if(gone) syncStopIntoRun(gone, null); }
   await Store.saveRecords();
   toast('Record deleted');
   render();
@@ -6586,6 +6605,7 @@ saveRecord = async function(){
         }
         if(!confirmNoOverlap([upd], draft._editId)) return;
         Store.records[idx] = upd;
+        if(old.status!=='RUNNING') syncStopIntoRun(old, upd); // v205.63
         await Store.saveRecords();
         toast('Record Updated');
       }
@@ -6608,6 +6628,59 @@ function renderBottleneckListWithNotes(rep){
     return `<div class="rank-item" style="align-items:flex-start;"><div class="rank-num">${i+1}</div><div class="rank-bar-wrap"><div class="rank-name">${name}</div>${noteHtml}</div><div class="rank-min">${fmtDur(min)}</div></div>`;
   }).join('');
 }
+/* ============ v205.63: REPORT CHECK (audit) ============
+Adds up the same figures from every report for one day and compares them. Screen only — never printed in a PDF or copied text.
+RED = a total that doesn't reconcile, a duplicate or a negative figure. YELLOW = data missing or still open (the reports are right for what was recorded, but not complete). GREEN = every check passed and nothing is missing. */
+function reportCheck(T){
+  const items = []; const add = (lvl, name, a, b)=>items.push({lvl, name, a, b});
+  const same = (a,b)=>(typeof a==='number' && typeof b==='number') ? Math.abs(a-b)<=1 : a===b;
+  const rec = (name, a, b)=>add(same(a,b) ? 'ok' : 'red', name, a, b);
+  const dur = v=>{ if(v==null) return null; if(/none/i.test(v)) return 0; const h = String(v).match(/(\d+)h/), m = String(v).match(/(\d+)m/); return (h||m) ? (h?+h[1]*60:0)+(m?+m[1]:0) : null; };
+  let pd = null; try{ pd = personDay(T); }catch(e){}
+  const recs = Store.records.filter(r=>r.date===T);
+  const runs = recs.filter(r=>!r.side && r.status==='RUNNING' && r.plh);
+  runs.forEach(r=>{ const p = r.plh, w = Number(p.weightLbs)||0, lab = `${r.machine} ${fmtTime12(r.startTime)}`;
+    if(w<0 || (Number(p.quantity)||0)<0) add('red', `${lab}: negative weight or quantity`, w, '0 or more');
+    if(p.grossLaborHours<0 || p.netLaborHours<0) add('red', `${lab}: negative labour hours`, p.grossLaborHours, '0 or more');
+    if(p.grossPLH!=null) rec(`${lab}: PLH = lbs ÷ gross labour hours`, Math.round(p.grossPLH*10)/10, Math.round(w/p.grossLaborHours*10)/10);
+    else add('yellow', `${lab}: weight not entered — left out of PLH`, 'missing', 'add it in History'); });
+  MACHINES.forEach(m=>{ const rs = runs.filter(r=>r.machine===m); for(let i=0;i<rs.length;i++) for(let j=i+1;j<rs.length;j++){ if(busySpans(rs[i]).some(([a,b])=>busySpans(rs[j]).some(([c,d])=>rangesOverlap(a,b,c,d)))) add('red', `${shortM(m)}: two runs overlap (${fmtTime12(rs[i].startTime)} and ${fmtTime12(rs[j].startTime)}) — possible duplicate`, 'overlap', 'none'); } });
+  recs.forEach(r=>{ if(r.durationMin<0 || (r.startTime && r.endTime && toMin(r.endTime) < toMin(r.startTime))) add('red', `${r.machine} ${fmtTime12(r.startTime)}: finish earlier than start`, r.endTime, 'after '+r.startTime); });
+  { const all = plhRecordsInRange(T,T), s0 = computePLHSummary(all), lbs = MACHINES.reduce((t,m)=>t+computePLHSummary(all.filter(r=>r.machine===m)).totalWeight,0); if(s0.totalWeight || lbs) rec('Department lbs = sum of each machine', s0.totalWeight, lbs); }
+  if(pd){ const P = pd.people.filter(p=>!p.away);
+    P.forEach(p=>{ const seg = p.segs.reduce((t,x)=>t+x.b-x.a,0), grp = Object.values(p.grp).reduce((a,b)=>a+b,0); if(seg!==p.total || grp!==p.total) add('red', `${p.name}: hours don't add up to their shift`, seg, p.total); });
+    if(P.length) add('ok', 'Each person’s hours add up to their shift', P.length+' people', '');
+    { const nr = P.filter(p=>p.grp['Not recorded']); if(nr.length) add('yellow', 'Crew time not recorded (in, but not placed anywhere)', nr.map(p=>`${p.name} ${fmtDur(p.grp['Not recorded'])}`).join(', '), '0m'); }
+    MACHINES.forEach(m=>{ const rs = runs.filter(r=>r.machine===m && Array.isArray(r.plh.segments) && r.plh.segments.some(sg=>Array.isArray(sg.names))); if(!rs.length) return;
+      const net = Math.round(rs.reduce((t,r)=>t+(r.plh.netLaborHours||0)*60,0)), crew = P.reduce((t,p)=>t+(p.tot[`${shortM(m)} running`]||0),0); rec(`${shortM(m)}: crew minutes running = PLH net labour`, crew, net); });
+    const gs = garbageSummary([T]), gP = P.reduce((t,p)=>t+Object.keys(p.tot).filter(k=>/^Garbage run/.test(k)).reduce((a,k)=>a+p.tot[k],0),0);
+    if(gs.min || gP) rec('Garbage runs: Staffing Report = Crew Hours', gs.min, gP);
+    { const na = P.reduce((t,p)=>t+(p.tot['Garbage run']||0),0); if(na) add('yellow', 'Garbage run with no area picked', fmtDur(na), '0m'); }
+    try{ const x = shortStaffFor(T); if(x){ const daily = sectionsText(dayLogSections(T)); const dS = dur((daily.match(/Short-staffed: ([^\n·]+)/)||[])[1]); if(dS!=null) rec('Short-staffed: Daily = Staffing Report', dS, x.total);
+        const om = offlineMinutes(T), onM = p=>p ? p.segs.filter(sg=>['Lines running','Lines stopped','Side machines'].includes(sg.g)).reduce((t,sg)=>t+sg.b-sg.a,0) : 0;
+        OFFLINE_ROLES.forEach(r=>{ const p = P.find(q=>q.name===r); if(p) rec(`${r} on a machine: Daily = Crew Hours`, om[r].min, onM(p)); });
+        rec('Lead / Yield on a machine: Staffing Report = Crew Hours', x.roleMin, OFFLINE_ROLES.reduce((t,r)=>t+onM(P.find(q=>q.name===r)),0));
+        const crewN = (daily.match(/Packaging crew: (\d+)/)||[])[1]; if(crewN!=null) rec('Packaging crew: Daily = Staffing Report', +crewN, crewTotalFor(T)); } }catch(e){ add('red', 'Staffing check could not run', e.message, ''); }
+    try{ const sl = computeSideLabour(T,T); SIDE_MACHINES.forEach(m=>{ const pm = sl.perMachine[m.name]; if(!pm || !pm.runMin) return; if(!sideIntervals(T).some(x=>x.machine===m.name && (x.names||[]).length)) return; rec(`${m.name}: Daily labour = crew minutes running`, Math.round(pm.packMin), P.reduce((t,p)=>t+(p.tot[m.name]||0),0)); }); }catch(e){}
+  }
+  const d = dayLogFor(T)||{};
+  Object.keys(Store.liveRuns||{}).forEach(m=>{ const l = Store.liveRuns[m]; if(l && (l.date||todayStr())===T) add('yellow', `${m} still running — numbers so far`, 'open', 'finished'); });
+  (d.side||[]).filter(x=>!x.end).forEach(x=>add('yellow', `${x.machine} still open`, 'open', 'finished'));
+  (d.garbage||[]).filter(g=>!g.end).forEach(()=>add('yellow', 'Garbage run not brought back', 'open', 'back'));
+  if(!d.shiftEnd && (recs.length || Object.keys(d.where||{}).length) && (T!==todayStr() || toMin(nowHHMM())>=SHIFT_END_MIN)) add('yellow', 'End Shift not tapped — crew time may run past the shift', 'not tapped', 'tapped');
+  const level = items.some(i=>i.lvl==='red') ? 'red' : items.some(i=>i.lvl==='yellow') ? 'yellow' : 'green';
+  return {level, items};
+}
+function reportCheckRangeHTML(a, b){ if(a===b) return reportCheckHTML(a); const days = []; for(let dt=a; dt<=b; dt=shiftDate(dt,1)) if(Store.records.some(r=>r.date===dt) || (dayLogFor(dt) && Object.keys(dayLogFor(dt).where||{}).length)) days.push(dt);
+  if(!days.length) return ''; const cs = days.map(dt=>{ try{ return {dt, c: reportCheck(dt)}; }catch(e){ return {dt, c:{level:'red', items:[{lvl:'red', name:'check could not run'}]}}; } });
+  const worst = cs.some(x=>x.c.level==='red') ? 'red' : cs.some(x=>x.c.level==='yellow') ? 'yellow' : 'green', col = {green:'var(--run)', yellow:'var(--change)', red:'var(--wait)'}[worst], ic = {green:'🟢', yellow:'🟡', red:'🔴'};
+  return `<div class="card" style="border-color:${col};"><div style="font-weight:700;color:${col};">${ic[worst]} Report check · ${days.length} day${days.length===1?'':'s'}</div><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Each day checked on its own · open a single day to see the details · only you see this</div>${cs.map(x=>{ const bad = x.c.items.filter(i=>i.lvl!=='ok'); return `<div style="font-size:12.5px;padding:3px 0;border-top:1px solid var(--line);">${ic[x.c.level]} ${new Date(x.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}${bad.length?` <span style="color:var(--muted);">— ${escapeHtml(bad.slice(0,2).map(i=>i.name).join(' · '))}${bad.length>2?` +${bad.length-2} more`:''}</span>`:' <span style="color:var(--muted);">— all reconcile</span>'}</div>`; }).join('')}</div>`; }
+function reportCheckHTML(T){ let c; try{ c = reportCheck(T); }catch(e){ return `<div class="card" style="border-color:var(--wait);"><b>🔴 Report check could not run</b><div style="font-size:12px;color:var(--muted);">${escapeHtml(e.message)}</div></div>`; }
+  const col = {green:'var(--run)', yellow:'var(--change)', red:'var(--wait)'}[c.level], lab = {green:'🟢 GREEN — every total reconciles, nothing missing', yellow:'🟡 YELLOW — totals reconcile, but some data is missing or still open', red:'🔴 RED — a total does not reconcile'}[c.level];
+  const bad = c.items.filter(i=>i.lvl!=='ok'), good = c.items.filter(i=>i.lvl==='ok');
+  const row = i=>`<div style="font-size:12.5px;padding:3px 0;border-top:1px solid var(--line);">${i.lvl==='ok'?'✅':i.lvl==='yellow'?'🟡':'🔴'} ${escapeHtml(i.name)}${i.lvl==='ok'?` <span style="color:var(--muted);">${escapeHtml(String(i.a))}</span>`:` <span style="color:var(--muted);">— ${escapeHtml(String(i.a))} vs ${escapeHtml(String(i.b))}</span>`}</div>`;
+  return `<div class="card" id="reportCheck" style="border-color:${col};"><div onclick="const x=this.nextElementSibling; x.style.display = x.style.display==='none' ? 'block' : 'none';" style="cursor:pointer;"><div style="font-weight:700;color:${col};">${lab}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Report check · ${good.length} of ${c.items.length} passed${bad.length?` · ${bad.length} to look at`:''} · tap for details · only you see this</div></div>
+    <div style="display:${bad.length?'block':'none'};margin-top:6px;">${bad.map(row).join('')}${good.map(row).join('')}</div></div>`; }
 function buildReport(date){
   const recs = recordsForDate(date);
   const dt = dayTotals(recs);
@@ -7088,7 +7161,7 @@ function renderReportsList(){
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
       <div>
         <div style="font-family:'Oswald';font-size:15px;">${fmtDate(r.date)}</div>
-        <div style="font-size:12px;color:var(--muted)">Waiting ${fmtDur(r.totals.WAITING)} · Running ${fmtDur(r.totals.RUNNING)}</div>
+        <div style="font-size:12px;color:var(--muted)">${(()=>{ const t = buildReport(r.date).totals; return `Waiting ${fmtDur(t.WAITING)} · Running ${fmtDur(t.RUNNING)}`; })()}</div>
       </div>
       <button class="btn btn-secondary" style="width:auto;padding:10px 16px;" onclick="Router.go('reportView','${r.date}')">View →</button>
     </div>
@@ -7115,6 +7188,7 @@ function renderReportView(date){
   const bnList = renderBottleneckListWithNotes(rep);
 
   return `
+  ${reportCheckHTML(rep.date)}
   <div class="reporthead">
     <div class="eyebrow">Packaging Continuous Improvement</div>
     <h2>Daily Production &amp; Bottleneck Report</h2>
