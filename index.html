@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.68 - 2026-11-17 (PLH Log: Mark all runs without weight as Not measured in one tap)';
+const APP_VERSION = 'v205.69 - 2026-11-17 (Scale report: Effect on the lines — when a line ran on the backup scale or had no working scale, from-to)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3962,6 +3962,28 @@ let scaleRange = null;
 function scaleRangeNow(){ if(!scaleRange){ const t = todayStr(), d = new Date(); d.setDate(d.getDate()-6); scaleRange = {start: localDateStr(d), end: t, preset:'7'}; } return scaleRange; }
 function setScalePreset(p){ const t = todayStr(), d = new Date(); if(p==='today') scaleRange = {start:t, end:t, preset:p}; else { d.setDate(d.getDate()-(p==='7'?6:29)); scaleRange = {start: localDateStr(d), end: t, preset:p}; } render(); }
 function setScaleDate(w, v){ if(!v) return; const r = scaleRangeNow(); r[w] = v; r.preset = ''; if(r.end < r.start){ if(w==='start') r.end = v; else r.start = v; } render(); }
+/* v205.69: what a scale being down meant for the lines that were running. Scale 3 = V3 · Scale 7 = V1 & V2 · Scale 5 = Manual Pack, and the backup for V1 / V2 when Scale 7 is down */
+const SCALE_HOME = {'Variovac 3':'Scale 3', 'Variovac 1':'Scale 7', 'Variovac 2':'Scale 7', 'Manual Pack':'Scale 5'};
+function scaleEffectFor(date){
+  const N = DAY_TO-DAY_FROM, isToday = date===todayStr(), endMin = isToday ? Math.min(DAY_TO, toMin(nowHHMM())) : DAY_TO;
+  const ev = scaleEvents(date); if(!ev.length) return null;
+  const down = {}; SCALES.forEach(sc=>{ down[sc] = new Array(N).fill(''); }); ev.forEach(e=>{ const a = toMin(e.start), b = toMin(scaleEnd(e, date)); for(let t=a;t<b;t++){ const i = t-DAY_FROM; if(i>=0 && i<N && down[e.scale]) down[e.scale][i] = e.reason || 'down'; } });
+  const run = {}; Object.keys(SCALE_HOME).forEach(m=>{ run[m] = lineMinuteStatus(date, m, endMin); });
+  const sum = {anyRun:0, ok:0, backup:0, none:0, downIdle:0};
+  const keyAt = i=>{ const R = m=>run[m][i]==='RUNNING', D = sc=>!!down[sc][i]; const anyDown = SCALES.some(D), anyR = Object.keys(run).some(R);
+    if(anyR) sum.anyRun++; if(!anyDown) { if(anyR) sum.ok++; return ''; }
+    const out = [], v12 = ['Variovac 1','Variovac 2'].filter(R), nm = v12.map(shortM).join(' & '); let none = false, bk = false;
+    if(R('Variovac 3') && D('Scale 3')){ out.push('V3 had no scale (Scale 3 down)'); none = true; }
+    if(v12.length && D('Scale 7')){ if(!D('Scale 5')){ out.push(`${nm} on backup Scale 5${R('Manual Pack')?' (shared with Manual Pack)':''}`); bk = true; } else { out.push(`${nm} had no scale (Scale 7 and backup Scale 5 down)`); none = true; } }
+    if(R('Manual Pack') && D('Scale 5')){ out.push('Manual Pack had no scale (Scale 5 down)'); none = true; }
+    if(anyR){ if(none) sum.none++; else if(bk) sum.backup++; else sum.ok++; } else sum.downIdle++;
+    const dl = SCALES.filter(D).map(sc=>`${sc} down (${String(down[sc][i]).toLowerCase()})`).join(', ');
+    const runL = ['Variovac 1','Variovac 2','Variovac 3','Manual Pack'].filter(R).map(m=>m==='Manual Pack'?'Manual':shortM(m)).join(', ');
+    return `${none?'none':bk?'backup':'ok'}|${dl}|${out.length ? out.join(' · ') : (anyR ? 'no running line affected' : 'no line running')}|${runL}`; };
+  const blocks = []; let cur = null;
+  for(let i=0;i<Math.min(N, endMin-DAY_FROM);i++){ const k = keyAt(i); if(cur && cur.k===k){ cur.b = i+DAY_FROM+1; continue; } if(cur && cur.k) blocks.push(cur); cur = {k, a:i+DAY_FROM, b:i+DAY_FROM+1}; }
+  if(cur && cur.k) blocks.push(cur);
+  return {sum, blocks: blocks.map(x=>{ const [sev, dl, eff, runL] = x.k.split('|'); return {a:x.a, b:x.b, sev, dl, eff, runL}; })}; }
 function scaleReportHTML(start, end, forPdf){
   const td = 'padding:6px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;', th = 'text-align:left;font-size:10.5px;color:#666;text-transform:uppercase;letter-spacing:.04em;padding:6px;border-bottom:1px solid #ddd;';
   const hd = t=>`<div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin:22px 0 10px;text-transform:uppercase;">${t}</div>`;
@@ -3972,15 +3994,23 @@ function scaleReportHTML(start, end, forPdf){
   if(!all.length){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No scale downtime recorded in this period.</div></div>`); return H.join(''); }
   const days = new Set(all.map(e=>e.date)).size, tot = all.reduce((t,e)=>t+e.min,0);
   H.push(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">${[[`${all.length}`,'times down'],[chDur(tot),'total down'],[`${days}`,`day${days===1?'':'s'} with problems`],[chDur(Math.max(...all.map(e=>e.min))),'longest outage']].map(([v,l])=>`<div style="flex:1;min-width:120px;border:1px solid #e3e3e3;border-radius:8px;padding:10px;"><div style="font-size:20px;font-weight:800;color:#c0392b;">${v}</div><div style="font-size:11px;color:#666;">${l}</div></div>`).join('')}</div>`);
-  H.push(hd('1 · By scale'));
+  { const dates = [...new Set(all.map(e=>e.date))].sort(), fx = dates.map(dt=>({dt, x: scaleEffectFor(dt)})).filter(o=>o.x); // v205.69
+    if(fx.length){ const S = fx.reduce((t,o)=>{ Object.keys(o.x.sum).forEach(k=>t[k]=(t[k]||0)+o.x.sum[k]); return t; }, {});
+      H.push(hd('1 · Effect on the lines'));
+      H.push(`<div style="font-size:12px;color:#555;margin-bottom:8px;">Scale 3 = V3 · Scale 7 = V1 &amp; V2 · Scale 5 = Manual Pack, and the backup for V1 / V2 when Scale 7 is down. Only time when a line was running counts.</div>`);
+      H.push(`<table style="width:100%;border-collapse:collapse;margin-bottom:10px;">${[['All running lines had their own scale', S.ok, ''], ['A line ran on the backup scale', S.backup, 'color:#b9770e;font-weight:700;'], ['A line had no working scale', S.none, red]].map(([l,v,c])=>`<tr><td style="${td}">${l}</td><td style="${td}text-align:right;${v?c:''}">${chDur(v||0)}</td></tr>`).join('')}<tr><td style="${td}color:#777;">Scales down while no line was running</td><td style="${td}text-align:right;color:#777;">${chDur(S.downIdle||0)}</td></tr></table>`);
+      fx.forEach(o=>{ if(fx.length>1) H.push(`<div style="font-weight:700;font-size:12.5px;margin:10px 0 4px;">${new Date(o.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</div>`);
+        H.push(o.x.blocks.map(bk=>{ const col = bk.sev==='none' ? '#c0392b' : bk.sev==='backup' ? '#b9770e' : '#7f8c8d';
+          return `<div style="border-left:4px solid ${col};padding:6px 10px;margin:4px 0;background:#fafafa;"><div style="font-size:12.5px;"><b>${m2t(bk.a)} – ${m2t(bk.b)}</b> <span style="color:#777;">· ${chDur(bk.b-bk.a)}</span></div><div style="font-size:12.5px;color:${col};font-weight:${bk.sev==='ok'?400:700};">${escapeHtml(bk.eff)}</div><div style="font-size:11.5px;color:#666;">${escapeHtml(bk.dl)}${bk.runL?` · lines running: ${escapeHtml(bk.runL)}`:''}</div></div>`; }).join('')); }); } }
+  H.push(hd('2 · By scale'));
   H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Scale</th><th style="${th}">Times down</th><th style="${th}">Total</th><th style="${th}">Longest</th><th style="${th}">Most common</th><th style="${th}">Reported after (avg)</th></tr>${SCALES.map(sc=>{ const l = all.filter(e=>e.scale===sc); if(!l.length) return `<tr><td style="${td}font-weight:700;">${sc}</td><td colspan="5" style="${td}color:#2e9d5b;">no downtime</td></tr>`;
     const by = {}; l.forEach(e=>by[e.reason]=(by[e.reason]||0)+1); const top = Object.keys(by).sort((a,b)=>by[b]-by[a])[0]; const it = l.filter(e=>e.itAt); const avgIt = it.length ? Math.round(it.reduce((t,e)=>t+Math.max(0,toMin(e.itAt)-toMin(e.start)),0)/it.length) : null;
     return `<tr><td style="${td}font-weight:700;">${sc}</td><td style="${td}${red}">${l.length}</td><td style="${td}${red}">${chDur(l.reduce((t,e)=>t+e.min,0))}</td><td style="${td}">${chDur(Math.max(...l.map(e=>e.min)))}</td><td style="${td}">${escapeHtml(top)} (${by[top]}×)</td><td style="${td}">${avgIt!=null?`called after ${chDur(avgIt)}`:'—'}</td></tr>`; }).join('')}</table>`));
   const R = {}; all.forEach(e=>{ R[e.reason] = R[e.reason] || {n:0, m:0}; R[e.reason].n++; R[e.reason].m += e.min; });
-  H.push(hd('2 · By problem'));
+  H.push(hd('3 · By problem'));
   H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(R).sort((a,b)=>R[b].m-R[a].m).map(r=>`<tr><td style="${td}">${escapeHtml(r)}</td><td style="${td}text-align:right;">${R[r].n}×</td><td style="${td}text-align:right;${red}">${chDur(R[r].m)}</td></tr>`).join('')}</table>`);
   if(start!==end){ const D = {}; all.forEach(e=>{ D[e.date] = D[e.date] || {n:0,m:0}; D[e.date].n++; D[e.date].m += e.min; });
-    H.push(hd('3 · By day')); H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(D).sort().map(dt=>`<tr><td style="${td}">${fmtDate(dt)}</td><td style="${td}text-align:right;">${D[dt].n}×</td><td style="${td}text-align:right;${red}">${chDur(D[dt].m)}</td></tr>`).join('')}</table>`); }
+    H.push(hd('4 · By day')); H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(D).sort().map(dt=>`<tr><td style="${td}">${fmtDate(dt)}</td><td style="${td}text-align:right;">${D[dt].n}×</td><td style="${td}text-align:right;${red}">${chDur(D[dt].m)}</td></tr>`).join('')}</table>`); }
   H.push(hd(`${start!==end?'4':'3'} · Every incident`));
   H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Day</th><th style="${th}">Scale</th><th style="${th}">Down</th><th style="${th}">Problem</th><th style="${th}">Reported</th><th style="${th}">Minutes</th></tr>${all.map(e=>`<tr><td style="${td}white-space:nowrap;">${fmtDate(e.date)}</td><td style="${td}font-weight:700;">${e.scale}</td><td style="${td}white-space:nowrap;">${fmtTime12(e.start)} – ${e.end?fmtTime12(e.end):'still down'}${e.endShift?' (end of shift)':''}</td><td style="${td}">${escapeHtml(e.reason)}</td><td style="${td}">${e.itAt?`${fmtTime12(e.itAt)} (+${chDur(Math.max(0,toMin(e.itAt)-toMin(e.start)))})`:'—'}</td><td style="${td}text-align:right;${red}">${chDur(e.min)}</td></tr>`).join('')}</table>`));
   H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">Logged live on the packaging floor in the CI Tracker: the time a scale / label computer stopped working, why, when it was reported to the supervisor / manager, and when it worked again. Packaging lines share the scales, so a scale down means slower weighing and labelling for every line; lines that stopped completely are also logged as Waiting — Scale Problem.</div></div>`);
