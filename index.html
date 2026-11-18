@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.67 - 2026-11-17 (Not measured today: finish a run without weight on purpose — left out of PLH, not counted as missing; mark or undo in History)';
+const APP_VERSION = 'v205.68 - 2026-11-17 (PLH Log: Mark all runs without weight as Not measured in one tap)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4507,6 +4507,10 @@ function incompletePLHRecordsInRange(startDate, endDate, kind){
 function notMeasuredPLHRecordsInRange(startDate, endDate, kind){
   return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.plh.notMeasured && r.date>=startDate && r.date<=endDate && plhKindOk(r, kind));
 }
+async function markAllNotMeasured(){ const ids = incompletePLHRecordsInRange(plhLogRange.start, plhLogRange.end, 'lines').map(r=>r.id); if(!ids.length) return;
+  if(!confirm(`Mark ${ids.length} run${ids.length===1?'':'s'} without a weight as "Not measured today"?\n\nThey stay out of PLH and stop showing as missing. Add a weight first to any run you did weigh.`)) return;
+  await Store.refreshRecords(); let n = 0; Store.records = Store.records.map(r=>{ if(!ids.includes(r.id) || !r.plh || r.plh.grossPLH!=null) return r; const plh = {...r.plh, notMeasured:true}; const u = {...r, plh, notes: refreshPlhNote(r.notes, plh)}; logChange(r.date, 'edit', r, u); n++; return u; });
+  await Store.saveRecords(); await Store.saveDayLog(); toast(`${n} run${n===1?'':'s'} marked not measured`); render(); }
 async function markNotMeasured(id, on){ await Store.refreshRecords(); const i = Store.records.findIndex(r=>r.id===id); if(i<0) return; const r = Store.records[i]; if(!r.plh || r.plh.grossPLH!=null) return;
   const plh = {...r.plh, notMeasured: !!on}; Store.records[i] = {...r, plh, notes: refreshPlhNote(r.notes, plh)}; logChange(r.date, 'edit', r, Store.records[i]); await Store.saveRecords(); await Store.saveDayLog(); toast(on ? 'Marked not measured — left out of PLH' : 'Back to awaiting weight'); render(); }
 /* v99: Same product run in several pieces on the same machine on the same day (e.g. stopped waiting for strogi/trim, then restarted) is ONE job. Runs are combined by date + machine + product (product ID if set, otherwise the product name). Combined PLH = total lbs ÷ total labour hours across all its runs — never an average of the runs' PLH, so a short run can't skew it. Each run is still kept (job.runs) so its time window and staffing stay visible. Single runs pass through unchanged. */
@@ -4744,7 +4748,7 @@ function renderPLHLogView(){
   }).join('') : '<div class="empty">No finished runs in this range.</div>';
 
   const kindBar = `<div class="filterbar">${[['lines','Lines only'],['side','Side machine hours & output']].map(([k,l])=>`<div class="mchip ${plhKind===k?'sel':''}" style="flex:1;padding:9px 12px;font-size:12.5px;text-align:center;" onclick="setPLHKind('${k}')">${l}</div>`).join('')}</div>`;
-  const missRows = missingW.length ? `<div class="card" style="border-color:var(--change);"><h3 style="color:var(--change);">Weight not entered — ${missingW.length} job${missingW.length===1?'':'s'}</h3>${missingW.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(r=>`<div class="statrow" style="cursor:pointer;" onclick="openAddPLHData('${r.id}')"><span class="lbl">${fmtDate(r.date)} · ${r.machine} · ${escapeHtml(r.plh.product||r.product||'')}</span><span class="val" style="color:var(--brk);">Add →</span></div>`).join('')}<div style="font-size:12px;color:var(--muted);margin-top:6px;">Not in PLH until QTY / LBS are added.</div></div>` : '';
+  const missRows = missingW.length ? `<div class="card" style="border-color:var(--change);"><h3 style="color:var(--change);">Weight not entered — ${missingW.length} job${missingW.length===1?'':'s'}</h3>${missingW.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(r=>`<div class="statrow" style="cursor:pointer;" onclick="openAddPLHData('${r.id}')"><span class="lbl">${fmtDate(r.date)} · ${r.machine} · ${escapeHtml(r.plh.product||r.product||'')}</span><span class="val" style="color:var(--brk);">Add →</span></div>`).join('')}<div style="font-size:12px;color:var(--muted);margin-top:6px;">Not in PLH until QTY / LBS are added.${missingW.length>12?` Showing the 12 newest of ${missingW.length}.`:''}</div>${plhKind!=='side' ? `<button class="btn btn-secondary" style="margin-top:10px;" onclick="markAllNotMeasured()">⊘ Mark all ${missingW.length} as not measured</button><div style="font-size:11.5px;color:var(--muted);margin-top:4px;">For runs you didn't weigh on purpose. Add a weight first to any you did weigh. You can undo each one in History.</div>` : ''}</div>` : '';
   if(plhKind==='side') return `${kindBar}
   <div class="filterbar">${presets.map(([v,l])=>`<div class="mchip ${plhLogRange.preset===v?'sel':''}" style="flex:0 0 auto;padding:8px 14px;font-size:12px;" onclick="setPLHLogPreset('${v}')">${l}</div>`).join('')}</div>
   ${sideHoursOutputHTML(plhLogRange.start, plhLogRange.end)}`;
