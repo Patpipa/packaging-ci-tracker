@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.72 - 2026-11-17 (Cancel run / delete a run in History also removes that run\'s crew time from Crew Hours)';
+const APP_VERSION = 'v205.73 - 2026-11-17 (Crew → History: remove a crew move logged by mistake; hours worked out again)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4238,7 +4238,7 @@ async function crewSheetGo(dest){ const sh = crewSheet; if(!sh) return; const n 
   if(dest==='__other' && !(sh.text||'').trim()){ toast('Type what they are doing'); return; }
   const ok = await sendNamesTo([n], dest, {otherText: sh.text||''}); if(ok){ crewSheet = null; render(); } }
 async function crewSheetOff(){ const n = crewSheet && crewSheet.n; if(!n) return; await roleOffAll(n); crewSheet = null; render(); }
-function personMovesToday(n){ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); return lg.map(e=>({at:e.at, to: e.w==='Garbage run' && e.gk ? `Garbage run (${e.gk})` : (String(e.w).startsWith('Not here') ? e.w.replace('Not here · ','') : placeLabel(e.w))})); }
+function personMovesToday(n){ const lg = ((((dayLogFor(todayStr())||{}).where)||{})[n]||[]); return lg.map((e,i)=>({i, w:e.w, at:e.at, to: !e.w ? 'off — not on anything' : e.w==='Garbage run' && e.gk ? `Garbage run (${e.gk})` : (String(e.w).startsWith('Not here') ? e.w.replace('Not here · ','') : placeLabel(e.w))})); }
 function crewSheetHTML(){
   const sh = crewSheet; if(!sh) return ''; const n = sh.n, T = todayStr(), st = crewStatusOf(n), cur = whereOf(n), role = OFFLINE_ROLES.includes(n);
   const tile = (lab, sub, dest, c, dis)=>`<button type="button" ${dis?'disabled':''} onclick="crewSheetGo('${cjs(dest)}')" style="padding:10px 6px;border-radius:10px;border:1.5px solid ${dis?'var(--amber)':'var(--line)'};background:${dis?'var(--amber-dim)':'var(--panel2)'};color:var(--text);text-align:left;min-height:52px;${dis?'opacity:.8;':''}"><div style="font-weight:700;font-size:13.5px;">${escapeHtml(lab)}</div>${sub?`<div style="font-size:11px;color:${c||'var(--muted)'};margin-top:2px;">${escapeHtml(sub)}</div>`:''}</button>`;
@@ -4265,12 +4265,19 @@ function crewSheetHTML(){
       ${moves.length ? moves.map(e=>`<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;"><span class="mono cb-mut" style="min-width:64px;">${fmtTime12(e.at)}</span><span>→ ${escapeHtml(e.to)}</span></div>`).join('') : '<div class="cb-mut" style="font-size:12.5px;">No moves yet today.</div>'}
     </div></div>`;
 }
+/* v205.73: remove one crew move logged by mistake (e.g. an accidental run). A move onto something takes its "came off" entry with it. */
+async function removeCrewMove(n, i){ const T = todayStr(), d = dayLogFor(T); if(!d || !d.where || !d.where[n]) return; const lg = d.where[n], e = lg[i]; if(!e) return;
+  const nx = lg[i+1], to = nx && !nx.w ? toMin(nx.at) : toMin(e.at);
+  if(Store.liveRuns && Object.values(Store.liveRuns).some(l=>l && liveNames(l).includes(n) && e.w===l.machine && !nx)){ toast(`${n} is on ${e.w} right now — take them off first`); return; }
+  if(!confirm(`Remove ${n}'s move at ${fmtTime12(e.at)} → ${e.w ? placeLabel(e.w) || e.w : 'off'}${nx && !nx.w ? ` (until ${fmtTime12(nx.at)})` : ''}?\n\nUse this only for a move that didn't really happen. Their hours are worked out again.`)) return;
+  removeRunCrewTime(T, [n], toMin(e.at), to); logChange(T, 'edit', {status:'CREW', machine:n, startTime:e.at, endTime: nx ? nx.at : e.at, durationMin: Math.max(0, to-toMin(e.at)), reason: e.w}, null);
+  await Store.saveDayLog(); toast(`${n} — move removed`); render(); }
 function crewHistoryHTML(){
   const T = todayStr(), d = dayLogFor(T) || {}, W = d.where || {};
   const ppl = [...crewRoster(), ...OFFLINE_ROLES].filter(n=>(W[n]||[]).length);
   const und = d.undoLog || [];
   return `${ppl.length ? ppl.map(n=>`<div class="card" style="padding:10px 12px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><b>${escapeHtml(n)}</b><span class="cb-mut" style="font-size:12px;">${(W[n]||[]).length} move${(W[n]||[]).length===1?'':'s'}</span></div>
-      ${personMovesToday(n).map(e=>`<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;"><span class="mono cb-mut" style="min-width:64px;">${fmtTime12(e.at)}</span><span>→ ${escapeHtml(e.to)}</span></div>`).join('')}</div>`).join('') : '<div class="card"><div class="cb-mut">No crew moves recorded yet today.</div></div>'}
+      ${personMovesToday(n).map(e=>`<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;align-items:center;"><span class="mono cb-mut" style="min-width:64px;">${fmtTime12(e.at)}</span><span style="flex:1;">→ ${escapeHtml(e.to)}</span>${e.w ? `<span class="cb-link" style="font-size:11.5px;color:var(--wait);" onclick="removeCrewMove('${n.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', ${e.i})">✕ remove</span>` : ''}</div>`).join('')}</div>`).join('') : '<div class="card"><div class="cb-mut">No crew moves recorded yet today.</div></div>'}
     ${und.length ? `<div class="card" style="padding:10px 12px;"><div class="cb-lbl" style="margin:0 0 6px;">UNDONE TODAY</div>${und.map(u=>`<div style="font-size:13px;padding:3px 0;"><span class="mono cb-mut">${fmtTime12(u.at)}</span> ↩ ${escapeHtml(u.what)}</div>`).join('')}</div>` : ''}
     <div class="cb-mut" style="font-size:11.5px;margin-top:6px;">Full hours by person: Reports → 👥 Crew Hours &amp; Positions.</div>`;
 }
