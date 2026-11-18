@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.66 - 2026-11-17 (Cross-dept help: one-tap Back to their department at the top of the Crew tab and in their name sheet)';
+const APP_VERSION = 'v205.67 - 2026-11-17 (Not measured today: finish a run without weight on purpose — left out of PLH, not counted as missing; mark or undo in History)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4501,8 +4501,14 @@ function plhRecordsInRange(startDate, endDate, kind){
 }
 /* Live Entry runs that finished without Quantity/Weight entered — still have full staffing/timing detail preserved, just missing the numbers needed to compute PLH */
 function incompletePLHRecordsInRange(startDate, endDate, kind){
-  return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.date>=startDate && r.date<=endDate && plhKindOk(r, kind));
+  return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && !r.plh.notMeasured && r.date>=startDate && r.date<=endDate && plhKindOk(r, kind));
 }
+/* v205.67: runs finished as "Not measured today" — no weight on purpose (Lead Hand weighs one line at a time). Left out of PLH like a missing weight, but not "awaiting weight" and never a warning */
+function notMeasuredPLHRecordsInRange(startDate, endDate, kind){
+  return Store.records.filter(r=>r.plh && r.plh.grossPLH==null && r.plh.notMeasured && r.date>=startDate && r.date<=endDate && plhKindOk(r, kind));
+}
+async function markNotMeasured(id, on){ await Store.refreshRecords(); const i = Store.records.findIndex(r=>r.id===id); if(i<0) return; const r = Store.records[i]; if(!r.plh || r.plh.grossPLH!=null) return;
+  const plh = {...r.plh, notMeasured: !!on}; Store.records[i] = {...r, plh, notes: refreshPlhNote(r.notes, plh)}; logChange(r.date, 'edit', r, Store.records[i]); await Store.saveRecords(); await Store.saveDayLog(); toast(on ? 'Marked not measured — left out of PLH' : 'Back to awaiting weight'); render(); }
 /* v99: Same product run in several pieces on the same machine on the same day (e.g. stopped waiting for strogi/trim, then restarted) is ONE job. Runs are combined by date + machine + product (product ID if set, otherwise the product name). Combined PLH = total lbs ÷ total labour hours across all its runs — never an average of the runs' PLH, so a short run can't skew it. Each run is still kept (job.runs) so its time window and staffing stay visible. Single runs pass through unchanged. */
 function plhJobKey(r){
   const pid = String((r.plh && r.plh.productId) || '').trim().toLowerCase();
@@ -4540,8 +4546,9 @@ function groupPLHJobs(recs){
 function plhCoverage(start, end, kind, machine){
   const all = Store.records.filter(r=>r.plh && r.status==='RUNNING' && r.date>=start && r.date<=end && plhKindOk(r, kind) && (!machine || r.machine===machine) && (r.plh.grossLaborHours||0)>0);
   const w = all.filter(r=>r.plh.grossPLH!=null), hA = all.reduce((t,r)=>t+r.plh.grossLaborHours,0), hW = w.reduce((t,r)=>t+r.plh.grossLaborHours,0);
-  const pct = hA>0 ? hW/hA*100 : 0, awaiting = all.length - w.length;
-  return {w: w.length, n: all.length, pct, awaiting, hA, hW, text: all.length ? `Based on ${w.length} of ${all.length} run${all.length===1?'':'s'} · ${(Math.round(pct*10)/10)%1===0 ? (Math.round(pct*10)/10).toFixed(0) : (Math.round(pct*10)/10).toFixed(1)}% of labour hours${awaiting?` · ${awaiting} awaiting weight`:''}` : ''}; }
+  const notMeasured = all.filter(r=>r.plh.grossPLH==null && r.plh.notMeasured).length;
+  const pct = hA>0 ? hW/hA*100 : 0, awaiting = all.length - w.length - notMeasured;
+  return {w: w.length, n: all.length, pct, awaiting, notMeasured, hA, hW, text: all.length ? `Based on ${w.length} of ${all.length} run${all.length===1?'':'s'} · ${(Math.round(pct*10)/10)%1===0 ? (Math.round(pct*10)/10).toFixed(0) : (Math.round(pct*10)/10).toFixed(1)}% of labour hours${notMeasured?` · ${notMeasured} not measured`:''}${awaiting?` · ${awaiting} awaiting weight`:''}` : ''}; }
 /* Best / Lowest product: only runs long enough to mean something (15 min+ and 0.25 labour hours+) with a believable PLH (20–2,000) */
 const PLH_BEST_MIN_MIN = 15, PLH_SANE_LO = 20, PLH_SANE_HI = 2000;
 function plhJobEligible(j){ const mins = (j.runs||[j]).reduce((t,r)=>t+(r.durationMin||0),0); const g = j.plh.grossPLH; return mins>=PLH_BEST_MIN_MIN && (j.plh.grossLaborHours||0)>=0.25 && g!=null && g>=PLH_SANE_LO && g<=PLH_SANE_HI; }
@@ -4803,11 +4810,12 @@ function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
 
   const statCard = (label,val,sub)=>`<div style="flex:1;min-width:0;background:#f7f7f7;border-radius:8px;padding:14px 16px;"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;">${label}</div><div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px;">${val}</div>${sub?`<div style="font-size:10.5px;color:#999;margin-top:2px;">${sub}</div>`:''}</div>`;
 
-  const incompleteSection = incomplete.length ? `
+  const nm = notMeasuredPLHRecordsInRange(startDate, endDate, kind).filter(r=>!machineFilter || r.machine===machineFilter);
+  const incompleteSection = (nm.length ? `<div style="font-size:11.5px;color:#666;margin-bottom:10px;">⊘ ${nm.length} run${nm.length===1?'':'s'} not measured on purpose (${[...new Set(nm.map(r=>shortM(r.machine)))].join(', ')}) — left out of PLH.</div>` : '') + (incomplete.length ? `
     <div style="background:#fff8e6;border:1px solid #f0d58c;border-radius:8px;padding:14px 18px;margin-bottom:22px;">
       <div style="font-weight:700;color:#8a6d1a;font-size:13px;margin-bottom:6px;">⚠ ${incomplete.length} run${incomplete.length===1?'':'s'} missing Quantity/Weight — not included in the totals above</div>
       ${incomplete.map(r=>`<div style="font-size:11.5px;color:#6b5a1e;">• ${escapeHtml(r.plh.product||r.product||'(no product)')} — ${fmtDate(r.date)}, ${r.machine}</div>`).join('')}
-    </div>` : '';
+    </div>` : '');
 
   const machineSections = Object.keys(byMachine).sort().map(m=>{
     const list = byMachine[m];
@@ -5935,7 +5943,9 @@ function renderLiveFinishCard(live){
     <div style="font-size:11.5px;color:var(--muted);margin:-6px 0 14px;">Leave these blank if you don't have the numbers yet — you can fill them in later by editing the record in History.</div>
     ${finishLinkHTML()}
     <div class="field"><label>Notes (optional)</label><textarea oninput="liveFinishSetup.notes=this.value" placeholder="Anything worth noting about this run">${s.notes}</textarea></div>
-    <button class="btn btn-primary" id="finishBtn" onclick="confirmFinishProduct()">✅ Save &amp; Finish</button>
+    <button class="btn btn-primary" id="finishBtn" onclick="liveFinishSetup.notMeasured=false; confirmFinishProduct()">✅ Save &amp; Finish</button>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="liveFinishSetup.notMeasured=true; confirmFinishProduct()">⊘ Finish — not measured today</button>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:4px;">For a line you didn't weigh on purpose: left out of PLH and not shown as missing. You can still add a weight later in History.</div>
     <button class="btn btn-secondary" style="margin-top:8px;" onclick="liveFinishSetup=null; render()">Keep Running</button>
   </div>`;
 }
@@ -5947,7 +5957,7 @@ async function confirmFinishProduct(){
   try{
     const s = liveFinishSetup;
     if((parseFloat(s.weight)||0) < 0 || (parseFloat(s.quantity)||0) < 0){ toast('Weight and quantity can\'t be negative'); return; } // v205.63: audit — never save a negative production figure
-    const result = await closeOutLiveRun(s.machine, {quantity:s.quantity, weight:s.weight, notes:s.notes});
+    const result = await closeOutLiveRun(s.machine, {quantity:s.quantity, weight:s.weight, notes:s.notes, notMeasured: !!s.notMeasured && !((parseFloat(s.weight)||0)>0)});
     if(!result) return;
     delete Store.liveRuns[s.machine];
     const okL = await Store.saveLiveRuns();
@@ -6014,11 +6024,11 @@ function plhNoteExtras(p){
     extras.push(`Labour: ${p.grossLaborHours.toFixed(1)}h gross (${Math.round(p.grossLaborHours*60)} min) / ${p.netLaborHours.toFixed(1)}h net (${Math.round(p.netLaborHours*60)} min)`);
     extras.push(`PLH: ${p.grossPLH.toFixed(0)} gross${p.netPLH!=null?' / '+p.netPLH.toFixed(0)+' net':''}`);
     if(p.targetPLH){ const v=p.grossPLH-p.targetPLH, pct=v/p.targetPLH*100; extras.push(`vs Target ${p.targetPLH}: ${v>=0?'+':''}${v.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
-  } else extras.push('Qty/Weight not entered yet — add later from History');
+  } else extras.push(p.notMeasured ? 'Not measured today — PLH skipped on purpose' : 'Qty/Weight not entered yet — add later from History');
   return extras;
 }
 /* v155: rewrites only the generated Qty / Weight / Labour / PLH / vs Target pieces of a run's note so it always matches the current numbers — the operator's own words stay where they were */
-const PLH_NOTE_PART = /^(Qty: |Weight: |Labour: |PLH: |vs Target |Qty\/Weight not entered yet)/;
+const PLH_NOTE_PART = /^(Qty: |Weight: |Labour: |PLH: |vs Target |Qty\/Weight not entered yet|Not measured today)/;
 function refreshPlhNote(notes, p){
   const parts = String(notes||'').split(' · ').map(x=>x.trim()).filter(Boolean);
   const at = parts.findIndex(x=>PLH_NOTE_PART.test(x));
@@ -6088,12 +6098,12 @@ async function closeOutLiveRun(m, opts){
       extras.push(`vs Target ${target.targetPLH}: ${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`);
     }
   } else {
-    extras.push('Qty/Weight not entered yet — add later from History');
+    extras.push(opts.notMeasured ? 'Not measured today — PLH skipped on purpose' : 'Qty/Weight not entered yet — add later from History');
   }
   if(opts.notes) extras.push(opts.notes);
   const extraNote = extras.join(' · ');
   const plhData = {
-    weightLbs: weightNum, quantity: parseFloat(opts.quantity)||0,
+    weightLbs: weightNum, quantity: parseFloat(opts.quantity)||0, ...(opts.notMeasured && !(weightNum>0) ? {notMeasured:true} : {}),
     grossLaborHours, netLaborHours, grossPLH, netPLH,
     targetPLH: (target && target.targetPLH) ? target.targetPLH : null,
     productId: live.productId||'', product: live.product||'',
@@ -6459,6 +6469,7 @@ function renderHistory(){
       ${hasTimeline ? `<div style="cursor:pointer;color:var(--brk);font-size:12px;margin-top:6px;text-decoration:underline;" onclick="toggleTimeline('${r.id}')">${isExpanded?'▾':'▸'} View Timeline</div>` : ''}
       ${hasTimeline && isExpanded ? renderTimelineRows(r) : ''}
       ${showsPLHButton ? `<button class="btn btn-ghost" style="margin-top:6px;padding:8px;font-size:12px;" onclick="openAddPLHData('${r.id}')">${plhButtonLabel}</button>` : ''}
+      ${showsPLHButton && !r.side && r.plh && r.plh.grossPLH==null ? (r.plh.notMeasured ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">⊘ Not measured today — left out of PLH</span><span style="font-size:12px;color:var(--brk);text-decoration:underline;cursor:pointer;" onclick="markNotMeasured('${r.id}', false)">undo</span></div>` : `<button class="btn btn-ghost" style="margin-top:4px;padding:6px;font-size:11.5px;" onclick="markNotMeasured('${r.id}', true)">⊘ Not measured today</button>`) : ''}
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editRecord('${r.id}')">✎</div>
         <div class="iconsmall" onclick="deleteRecord('${r.id}')">🗑</div>
@@ -6559,7 +6570,7 @@ async function confirmAddPLHData(){
   }
   const grossPLH = p.grossLaborHours>0 ? weightNum/p.grossLaborHours : null;
   const netPLH = p.netLaborHours>0 ? weightNum/p.netLaborHours : null;
-  const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH};
+  const updatedPLH = {...p, weightLbs: weightNum, quantity: qtyNum, grossPLH, netPLH, notMeasured: false};
   // Strip any previously-generated summary (the placeholder text, or a prior real Qty/Weight/Labour/PLH block from an earlier edit) so correcting a value replaces it cleanly instead of stacking a second, conflicting summary alongside the old one
   const notes = refreshPlhNote(r.notes, updatedPLH);
   Store.records[idx] = {...r, plh: updatedPLH, notes};
@@ -6692,7 +6703,7 @@ function reportCheck(T){
     if(w<0 || (Number(p.quantity)||0)<0) add('red', `${lab}: negative weight or quantity`, w, '0 or more');
     if(p.grossLaborHours<0 || p.netLaborHours<0) add('red', `${lab}: negative labour hours`, p.grossLaborHours, '0 or more');
     if(p.grossPLH!=null) rec(`${lab}: PLH = lbs ÷ gross labour hours`, Math.round(p.grossPLH*10)/10, Math.round(w/p.grossLaborHours*10)/10);
-    else add('yellow', `${lab}: weight not entered — left out of PLH`, 'missing', 'add it in History');
+    else if(!p.notMeasured) add('yellow', `${lab}: weight not entered — left out of PLH (or mark it Not measured in History)`, 'missing', 'add it in History');
     const lost = (p.downtimeSegments||[]).filter(d=>d.status!=='NO_WORK' && duration(d.start,d.end)>0 && !recs.some(x=>x.machine===r.machine && x.status===d.status && x.startTime===d.start && x.endTime===d.end));
     if(lost.length) add('red', `${lab}: labour still counts a stop that was changed or deleted in History (${lost.map(d=>fmtTime12(d.start)+'–'+fmtTime12(d.end)).join(', ')})`, 'stale', 'matches History'); }); // v205.63: edits made before this version
   MACHINES.forEach(m=>{ const rs = runs.filter(r=>r.machine===m); for(let i=0;i<rs.length;i++) for(let j=i+1;j<rs.length;j++){ if(busySpans(rs[i]).some(([a,b])=>busySpans(rs[j]).some(([c,d])=>rangesOverlap(a,b,c,d)))) add('red', `${shortM(m)}: two runs overlap (${fmtTime12(rs[i].startTime)} and ${fmtTime12(rs[j].startTime)}) — possible duplicate`, 'overlap', 'none'); } });
@@ -6708,8 +6719,7 @@ function reportCheck(T){
     if(!String(r.product||p.product||'').trim()) add('yellow', `${lab}: no product`, 'blank', 'product');
     if((p.segments||[]).some(sg=>duration(sg.start, sg.end)>0 && !(Number(sg.employees)>0))) add('yellow', `${lab}: running time with 0 people on the line`, '0 people', '1 or more'); });
   recs.filter(r=>r.startTime && (toMin(r.startTime) < 5*60 || toMin(r.endTime||r.startTime) > 20*60)).forEach(r=>add('yellow', `${r.machine}: entry at ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)} is outside 5 AM – 8 PM — confirm it`, 'after hours', 'confirm'));
-  { const all = runs.filter(r=>r.plh.grossLaborHours>0), w = all.filter(r=>r.plh.grossPLH!=null), hA = all.reduce((t,r)=>t+r.plh.grossLaborHours,0), hW = w.reduce((t,r)=>t+r.plh.grossLaborHours,0);
-    if(all.length) add(w.length===all.length ? 'ok' : 'yellow', `PLH covers ${w.length} of ${all.length} line runs · ${Math.round(hA ? hW/hA*100 : 0)}% of line labour hours`, `${w.length}/${all.length}`, 'all runs weighed'); }
+  { const c = plhCoverage(T, T); if(c.n) add(c.awaiting ? 'yellow' : 'ok', `PLH ${c.text.replace(/^Based on/,'based on')}`, `${c.w}/${c.n}`, 'every run weighed or marked not measured'); }
   { const sv = (Store.dailyReports||[]).find(x=>x.date===T); if(sv && sv.totals){ const lv = buildReport(T).totals, keys = ['RUNNING','WAITING','CHANGEOVER','PLANNED','NO_WORK','BREAK'], lab = {RUNNING:'Running',WAITING:'Waiting',CHANGEOVER:'Changeover',PLANNED:'Planned',NO_WORK:'No work',BREAK:'Break'};
       const ch = keys.filter(k=>Math.round(sv.totals[k]||0)!==Math.round(lv[k]||0)).map(k=>`${lab[k]} ${fmtDur(sv.totals[k]||0)} → ${fmtDur(lv[k]||0)}`);
       if(ch.length) add('yellow', `Records changed after End Shift saved this report${sv.generatedAt?` (${new Date(sv.generatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})})`:''}: ${ch.join(' · ')} — the report shows the current records; re-send it if the earlier one was already sent`, 'changed', 'same as saved'); } }
@@ -7401,7 +7411,7 @@ function endShiftChecks(){
   let pd = null; try{ pd = personDay(T); }catch(e){}
   if(pd) pd.people.forEach(p=>{ const nr = p.segs.filter(sg=>sg.g==='Not recorded' && !(sg.b<=REG_A)).reduce((t,sg)=>t+sg.b-sg.a,0); if(nr>=5) items.push(li(`<b>${escapeHtml(p.name)}</b> — ${fmtDur(nr)} not recorded today <span style="color:var(--muted);">(shows as a gap in Crew Hours)</span>`)); });
   MACHINES.forEach(m=>{ const l = Store.liveRuns[m]; if(!l || l.status==='RUNNING' || isStaleLive(l)) return; const o = (l.downtimeSegments||[]).slice(-1)[0]; if(o && !o.end) items.push(li(`<b>${escapeHtml(m)}</b> — stopped since ${fmtTime12(o.start)} · ${escapeHtml(o.reason||o.status)}`+btn('Finish', `Router.go('live');openFinishSetup('${m}')`))); });
-  Store.records.filter(r=>r.date===T && r.plh && !(r.plh.weightLbs>0) && !(r.plh.quantity>0) && (r.side || r.status==='RUNNING')).forEach(r=>items.push(li(`<b>${escapeHtml(r.machine)}</b> ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)} — no QTY / LBS`+btn('Add', `openAddPLHData('${r.id}')`))));
+  Store.records.filter(r=>r.date===T && r.plh && !r.plh.notMeasured && !(r.plh.weightLbs>0) && !(r.plh.quantity>0) && (r.side || r.status==='RUNNING')).forEach(r=>items.push(li(`<b>${escapeHtml(r.machine)}</b> ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)} — no QTY / LBS`+btn('Add', `openAddPLHData('${r.id}')`))));
   if(!items.length) return `<div class="card" style="border-color:var(--run);"><div style="color:var(--run);font-weight:700;">✓ Checklist clear — everyone placed, no gaps, every job has its output.</div></div>`;
   return `<div class="card" style="border-color:var(--change);"><h3 style="color:var(--change);">Before you close — check these</h3><ul style="margin:6px 0 0 18px;padding:0;font-size:14px;line-height:1.45;">${items.join('')}</ul>
     <p style="color:var(--muted);font-size:12.5px;margin-top:8px;">Fix what you can, or close anyway — anything left stays as it is in the reports.</p></div>`;
