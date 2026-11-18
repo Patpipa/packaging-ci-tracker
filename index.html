@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.70 - 2026-11-17 (Scale report: scale reference footnote — Scale 3 = V3, Scale 7 = V1 & V2, Scale 5 = Manual + backup)';
+const APP_VERSION = 'v205.71 - 2026-11-17 (Scale report timeline: shows when all scales are working again, or which scale is still down at the end)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3983,7 +3983,11 @@ function scaleEffectFor(date){
   const blocks = []; let cur = null;
   for(let i=0;i<Math.min(N, endMin-DAY_FROM);i++){ const k = keyAt(i); if(cur && cur.k===k){ cur.b = i+DAY_FROM+1; continue; } if(cur && cur.k) blocks.push(cur); cur = {k, a:i+DAY_FROM, b:i+DAY_FROM+1}; }
   if(cur && cur.k) blocks.push(cur);
-  return {sum, blocks: blocks.map(x=>{ const [sev, dl, eff, runL] = x.k.split('|'); return {a:x.a, b:x.b, sev, dl, eff, runL}; })}; }
+  const lastI = Math.min(N, endMin-DAY_FROM), anyDownAt = i=>i>=0 && i<N && SCALES.some(sc=>!!down[sc][i]);
+  return {sum, end: lastI+DAY_FROM, blocks: blocks.map(x=>{ const [sev, dl, eff, runL] = x.k.split('|'); const i = x.b-DAY_FROM;
+    const openHere = ev.filter(e=>!e.end && toMin(scaleEnd(e, date))===x.b).map(e=>e.scale); // never marked back up — closed at end of shift
+    const restored = !openHere.length && i<lastI && !anyDownAt(i), stillDown = openHere.length ? openHere : (i>=lastI ? SCALES.filter(sc=>!!down[sc][lastI-1]) : []); // v205.71: all scales back / still down at the end
+    return {a:x.a, b:x.b, sev, dl, eff, runL, restored, stillDown}; })}; }
 function scaleReportHTML(start, end, forPdf){
   const td = 'padding:6px 6px;border-bottom:1px solid #eee;font-size:12.5px;vertical-align:top;', th = 'text-align:left;font-size:10.5px;color:#666;text-transform:uppercase;letter-spacing:.04em;padding:6px;border-bottom:1px solid #ddd;';
   const hd = t=>`<div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin:22px 0 10px;text-transform:uppercase;">${t}</div>`;
@@ -4001,7 +4005,7 @@ function scaleReportHTML(start, end, forPdf){
       H.push(`<table style="width:100%;border-collapse:collapse;margin-bottom:10px;">${[['All running lines had their own scale', S.ok, ''], ['A line ran on the backup scale', S.backup, 'color:#b9770e;font-weight:700;'], ['A line had no working scale', S.none, red]].map(([l,v,c])=>`<tr><td style="${td}">${l}</td><td style="${td}text-align:right;${v?c:''}">${chDur(v||0)}</td></tr>`).join('')}<tr><td style="${td}color:#777;">Scales down while no line was running</td><td style="${td}text-align:right;color:#777;">${chDur(S.downIdle||0)}</td></tr></table>`);
       fx.forEach(o=>{ if(fx.length>1) H.push(`<div style="font-weight:700;font-size:12.5px;margin:10px 0 4px;">${new Date(o.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</div>`);
         H.push(o.x.blocks.map(bk=>{ const col = bk.sev==='none' ? '#c0392b' : bk.sev==='backup' ? '#b9770e' : '#7f8c8d';
-          return `<div style="border-left:4px solid ${col};padding:6px 10px;margin:4px 0;background:#fafafa;"><div style="font-size:12.5px;"><b>${m2t(bk.a)} – ${m2t(bk.b)}</b> <span style="color:#777;">· ${chDur(bk.b-bk.a)}</span></div><div style="font-size:12.5px;color:${col};font-weight:${bk.sev==='ok'?400:700};">${escapeHtml(bk.eff)}</div><div style="font-size:11.5px;color:#666;">${escapeHtml(bk.dl)}${bk.runL?` · lines running: ${escapeHtml(bk.runL)}`:''}</div></div>`; }).join('')); }); } }
+          return `<div style="border-left:4px solid ${col};padding:6px 10px;margin:4px 0;background:#fafafa;"><div style="font-size:12.5px;"><b>${m2t(bk.a)} – ${m2t(bk.b)}</b> <span style="color:#777;">· ${chDur(bk.b-bk.a)}</span></div><div style="font-size:12.5px;color:${col};font-weight:${bk.sev==='ok'?400:700};">${escapeHtml(bk.eff)}</div><div style="font-size:11.5px;color:#666;">${escapeHtml(bk.dl)}${bk.runL?` · lines running: ${escapeHtml(bk.runL)}`:''}</div></div>${bk.restored ? `<div style="border-left:4px solid #2e9e5b;padding:4px 10px;margin:4px 0;font-size:12.5px;color:#2e9e5b;font-weight:700;">✅ ${m2t(bk.b)} — all ${SCALES.length} scales working again</div>` : ''}${bk.stillDown && bk.stillDown.length ? `<div style="border-left:4px solid #c0392b;padding:4px 10px;margin:4px 0;font-size:12.5px;color:#c0392b;font-weight:700;">⛔ ${escapeHtml(bk.stillDown.join(' and '))} still down at ${m2t(bk.b)}${o.dt===todayStr() ? ' (now)' : ' — not marked back up'}</div>` : ''}`; }).join('')); }); } }
   H.push(hd('2 · By scale'));
   H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Scale</th><th style="${th}">Times down</th><th style="${th}">Total</th><th style="${th}">Longest</th><th style="${th}">Most common</th><th style="${th}">Reported after (avg)</th></tr>${SCALES.map(sc=>{ const l = all.filter(e=>e.scale===sc); if(!l.length) return `<tr><td style="${td}font-weight:700;">${sc}</td><td colspan="5" style="${td}color:#2e9d5b;">no downtime</td></tr>`;
     const by = {}; l.forEach(e=>by[e.reason]=(by[e.reason]||0)+1); const top = Object.keys(by).sort((a,b)=>by[b]-by[a])[0]; const it = l.filter(e=>e.itAt); const avgIt = it.length ? Math.round(it.reduce((t,e)=>t+Math.max(0,toMin(e.itAt)-toMin(e.start)),0)/it.length) : null;
