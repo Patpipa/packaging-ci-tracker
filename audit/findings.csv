@@ -1,0 +1,443 @@
+severity,area,id,date,machine,field,expected,actual,explanation
+YELLOW,classification,rmsz8z7so2q7uw,2026-08-18,Variovac 1,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmsz93fbk14h32,2026-08-18,Variovac 1,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmsz97cs2tijv2,2026-08-18,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmsz98iyjuvaei,2026-08-18,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmsz9bn4n9yvow,2026-08-18,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmsz9dim3n5zdz,2026-08-18,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmsz9fn96clyq0,2026-08-18,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0n0ihuu5y2g,2026-08-19,Variovac 1,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0n3vcssgthv,2026-08-19,Variovac 1,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0nasuga5pr9,2026-08-19,Variovac 1,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0nnzsq0tr3p,2026-08-19,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0nqvmtd5m3k,2026-08-19,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0ntxco6r4io,2026-08-19,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0nwxyoguux6,2026-08-19,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmt0o09k7uh03e,2026-08-19,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Cut Meat,Reason not in its category list (custom text)
+YELLOW,classification,rmtdjz8qlqob14,2026-08-28,Variovac 3,reason,a reason listed under Machine / Equipment,Temperature not reach,Reason not in its category list (custom text)
+YELLOW,classification,rmtuna4dp6m39e,2026-09-09,Variovac 1,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtvtf1rnbguux,2026-09-09,Variovac 2,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtvwenqooekac,2026-09-09,Variovac 3,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtvwzz3y3oys6,2026-09-10,Variovac 1,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtvx7e30l1atd,2026-09-10,Variovac 1,reason,a reason listed under Labour / Operational,TOWN HALL MEETING,Reason not in its category list (custom text)
+YELLOW,classification,rmtvxc87d11ji0,2026-09-10,Variovac 2,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtvxqygqkwv7d,2026-09-10,Variovac 2,reason,a reason listed under Labour / Operational,YOWN HALL MEETING ,Reason not in its category list (custom text)
+YELLOW,classification,rmtvxtzfa4muyi,2026-09-10,Variovac 3,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtvya9o7t508z,2026-09-10,Variovac 3,reason,a reason listed under Labour / Operational,TOWN HALL MEETING ,Reason not in its category list (custom text)
+YELLOW,classification,rmtk9huf2yuwtw,2026-09-01,Variovac 1,reason,a reason listed under Labour / Operational,QA CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtk9uwbdyhcj0,2026-09-01,Variovac 2,reason,a reason listed under Labour / Operational,QA CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtkaszkmx69h5,2026-09-01,Variovac 3,reason,a reason listed under Labour / Operational,Getting boxes-warehouse ,Reason not in its category list (custom text)
+YELLOW,classification,rmtkaw7hf1zhka,2026-09-01,Variovac 3,reason,a reason listed under Labour / Operational,QA CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtx4o3rue8xjk,2026-09-11,Variovac 1,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtx4qubc2tg83,2026-09-11,Variovac 2,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmtx4tby8dcp2j,2026-09-11,Variovac 3,reason,a reason listed under Labour / Operational,CREW TALK,Reason not in its category list (custom text)
+YELLOW,classification,rmu1wwwy5yyz31,2026-09-14,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu1xfolau0pws,2026-09-14,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu1xlfw4y5zl5,2026-09-14,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu3bksh10auzg,2026-09-15,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu3bp3gto50tm,2026-09-15,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu3cnuhk7tg0c,2026-09-15,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu48vz5g5cwxj,2026-09-16,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmu49zcqf6yzgf,2026-09-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4afq9jj2a0s,2026-09-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4bpkua5zh5t,2026-09-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4bylfn6ubzr,2026-09-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4iqb5xm0u9o,2026-09-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4lrrk41acl4,2026-09-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmu4mvclohlf2w,2026-09-16,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmu4mvcloxst0n,2026-09-16,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmu4mzsugoi4l0,2026-09-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4no4lzvx15w,2026-09-16,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4pl9nqy6lnm,2026-09-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu4q0vzvdw223,2026-09-16,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmu5on5ql404yh,2026-09-17,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu5ooh0dj9tic,2026-09-17,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmu5p1qz93xjlc,2026-09-17,Variovac 3,reason,a reason listed under Machine / Equipment,Waiting for sealing Temperature ,Reason not in its category list (custom text)
+YELLOW,classification,rmu5pgm1ldb28l,2026-09-17,Variovac 3,reason,a reason listed under Machine / Equipment,Sealing temperature,Reason not in its category list (custom text)
+YELLOW,records,rmu5pm36nqlbrc,2026-09-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu5pzzqasnwb9,2026-09-17,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu5qg999ha2pt,2026-09-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu5rxg2hb0fxq,2026-09-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu5v6vem0kq32,2026-09-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu5ximchizdan,2026-09-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu5y8bp3flny0,2026-09-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu61bwi85n4oj,2026-09-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu634d8y8cri1,2026-09-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmu63hfpkk04ni,2026-09-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmu6689wvjb0nh,2026-09-17,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmue94qykl9qw0,2026-09-23,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmue959hyxi6pn,2026-09-23,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmue95kv68v5q7,2026-09-23,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmue9qxouzhzwu,2026-09-23,Variovac 3,reason,a reason listed under Machine / Equipment,Temperature ,Reason not in its category list (custom text)
+YELLOW,records,rmueabr69g7o28,2026-09-23,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuecj11rdqx8e,2026-09-23,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuecjebv9v53n,2026-09-23,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuee897w4sz28,2026-09-23,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmueefingfi29o,2026-09-23,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuej3dsdpum96,2026-09-23,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmueqyx4gv6xcn,2026-09-23,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuer6zwvcewh5,2026-09-23,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuer6zwvxyord,2026-09-23,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuernkg8fcebu,2026-09-23,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmufoqecu5g2nb,2026-09-24,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmufoqrhvbqj4z,2026-09-24,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuforqyk8fxg8,2026-09-24,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmufphbe2r7z4n,2026-09-24,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmufvgr8on4put,2026-09-24,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmufxo1qfkaes1,2026-09-24,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmufyh9kst8azo,2026-09-24,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmug16d12bycca,2026-09-24,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmug4v2x7gf7pt,2026-09-24,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmug4v2x7idcdf,2026-09-24,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmug5kk09czui4,2026-09-24,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmug79urusfumd,2026-09-24,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmug79urv7ln39,2026-09-24,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuh4mq1s2jmot,2026-09-25,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuh4sb4xtt6az,2026-09-25,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuh4tjka5sutz,2026-09-25,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmuh5xapsh5iy6,2026-09-25,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuh8kz0l5cg96,2026-09-25,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuhf0ykihexd5,2026-09-25,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuhh5lwkf2lt7,2026-09-25,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuhnbvyfslplc,2026-09-25,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuhnbvyf4da0a,2026-09-25,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuhnwmm4d5p8x,2026-09-25,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmulgmbgxh1vh5,2026-09-28,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmulj6torcxaxj,2026-09-28,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmulj6torba119,2026-09-28,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmullwfnlopung,2026-09-28,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmullwfnlhf0mt,2026-09-28,Variovac 1,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmulnv3wyczxnb,2026-09-28,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmulqc1a4wz200,2026-09-28,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuluna3mdzxwu,2026-09-28,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmulup8pk2xmxv,2026-09-28,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmulus7zpua6y8,2026-09-28,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmulwofqwg5d6z,2026-09-28,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmumuxyvg4txd9,2026-09-29,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmun0scwerwu2i,2026-09-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmun0scweqwksf,2026-09-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmun0smi4nn55v,2026-09-29,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmun1wutnnd233,2026-09-29,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmun7rt9srnn4q,2026-09-29,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmun962e9fxde0,2026-09-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmun9bjapo9flu,2026-09-29,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmun9db10o55jt,2026-09-29,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmun9g889lzrrf,2026-09-29,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmunczuu2080b3,2026-09-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmundssr2o70ik,2026-09-29,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for chicken muscle,Reason not in its category list (custom text)
+YELLOW,records,rmuneb9wjy84gf,2026-09-29,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuneb9wjr6884,2026-09-29,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuneb9wj0cja4,2026-09-29,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmupqgae9dthqr,2026-10-01,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmupr4kvy1htnv,2026-10-01,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmupt8qun75no8,2026-10-01,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for cutlet,Reason not in its category list (custom text)
+YELLOW,records,rmur59kuaf30iw,2026-10-02,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmur6m9mz73mzn,2026-10-02,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmur6uktl0v80k,2026-10-02,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmurfecizu1hdk,2026-10-02,Manual Pack,reason,a reason listed under Upstream / Product,Waiting for material chicken,Reason not in its category list (custom text)
+YELLOW,classification,rmurfecizvhjjf,2026-10-02,Manual Pack,reason,a reason listed under Upstream / Product,Waiting for material,Reason not in its category list (custom text)
+YELLOW,classification,rmurijcl2eal9s,2026-10-02,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmurjz4p60zqhs,2026-10-02,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmurjz4p6lo881,2026-10-02,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmurlsuwre6hc4,2026-10-02,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmurlx9ald0j48,2026-10-02,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmurly2o8lgc4w,2026-10-02,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmurlywejr3ho9,2026-10-02,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmurnarobmykbw,2026-10-02,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuvehti2b7lta,2026-10-05,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuvehti2ntnn1,2026-10-05,Variovac 2,reason,a reason listed under Labour / Operational,Scheduled Stretching,Reason not in its category list (custom text)
+YELLOW,classification,rmuvehti313njh,2026-10-05,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuvg4cct679p8,2026-10-05,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuvg4cct869wu,2026-10-05,Variovac 3,reason,a reason listed under Labour / Operational,Scheduled Stretching,Reason not in its category list (custom text)
+YELLOW,classification,rmuvg4cctmlemi,2026-10-05,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuvg4ccuxmdgg,2026-10-05,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmuvpi6yb4v1vq,2026-10-05,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuvpi6ybvl2s3,2026-10-05,Variovac 1,reason,a reason listed under Labour / Operational,Scheduled Stretching,Reason not in its category list (custom text)
+YELLOW,classification,rmuvpi6ybwl5wd,2026-10-05,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,records,rmuvpprzs7u4cx,2026-10-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuvpprzsm9gy6,2026-10-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuvpvejpn89wz,2026-10-05,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuvq8ztg74kve,2026-10-05,Variovac 1,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmuvr0yjrzbjbg,2026-10-05,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuvrfw4fe1ctf,2026-10-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuvu24ymnepqp,2026-10-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuwv72e8dohf3,2026-10-06,Variovac 2,reason,a reason listed under Labour / Operational,Scheduled Stretching,Reason not in its category list (custom text)
+YELLOW,classification,rmuwv72e82ja3s,2026-10-06,Variovac 2,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuwv72e8wbb93,2026-10-06,Variovac 2,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmuwv909xbp0oo,2026-10-06,Variovac 1,reason,a reason listed under Labour / Operational,Scheduled Stretching,Reason not in its category list (custom text)
+YELLOW,classification,rmuwv909xs8smh,2026-10-06,Variovac 1,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuwx71ktxdztc,2026-10-06,Variovac 3,reason,a reason listed under Labour / Operational,Scheduled Stretching,Reason not in its category list (custom text)
+YELLOW,classification,rmuwx71ktyb6sf,2026-10-06,Variovac 3,reason,a reason listed under Labour / Operational,Crew Talk,Reason not in its category list (custom text)
+YELLOW,classification,rmuwx71ktunxqp,2026-10-06,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for cutlet,Reason not in its category list (custom text)
+YELLOW,classification,rmuwx71ktyqpr4,2026-10-06,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmux3qz0zh0gn9,2026-10-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmux7bw6091pi7,2026-10-06,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmux7bw60ejarh,2026-10-06,Variovac 1,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmux8du30pue8n,2026-10-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmux9cdsjy7per,2026-10-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuxadnnla3ze7,2026-10-06,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuyac5yz2rg8k,2026-10-07,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuyfcpalidb9g,2026-10-07,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmuyfcpam14i1s,2026-10-07,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmuyglzjtlsfxn,2026-10-07,Variovac 2,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmuyn420an5ybd,2026-10-07,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuyq1qttl4nmc,2026-10-07,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuyslxluwtiht,2026-10-07,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuyslxlvt0a9c,2026-10-07,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuzqda25jzixn,2026-10-08,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuzumjaqikq6p,2026-10-08,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuzvc1rz7rhoi,2026-10-08,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmuzxv7hmpxnmd,2026-10-08,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmuzxv7hmw6l2z,2026-10-08,Variovac 2,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,records,rmv03szuxl5pbw,2026-10-08,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv06svgv97i2h,2026-10-08,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv06svgvxa93z,2026-10-08,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv15u86dirgxg,2026-10-09,Variovac 2,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmv16r8pl3pp9b,2026-10-09,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmv1cmnzixn95e,2026-10-09,Variovac 3,reason,a reason listed under QA / Pre-Op,Metal Detector Test,Reason not in its category list (custom text)
+YELLOW,classification,rmv1iv1dqjeii5,2026-10-09,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for fajita 601777,Reason not in its category list (custom text)
+YELLOW,records,rmv1jir0llavqh,2026-10-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv1kaiuzzkuud,2026-10-09,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv6wpcza0n02j,2026-10-13,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for cutlet,Reason not in its category list (custom text)
+YELLOW,records,rmv792kxu0jtsb,2026-10-13,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv792kxufn8o4,2026-10-13,Variovac 2,reason,a reason listed under Upstream / Product,Waiting for Marel operator to start cutting meat,Reason not in its category list (custom text)
+YELLOW,records,rmv792kxu4grj4,2026-10-13,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv79zxr4is2xd,2026-10-13,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv79zxr4ndic0,2026-10-13,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for fajita,Reason not in its category list (custom text)
+YELLOW,records,rmv7cuvmbmz4it,2026-10-13,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv8b0gq0611nf,2026-10-14,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv8ce41fqwxxj,2026-10-14,Manual Pack,reason,a reason listed under Machine / Equipment,ALL SCALE NOT WORKING-all boxes waiting for LABEL,Reason not in its category list (custom text)
+YELLOW,records,rmv8hxiruw5k9f,2026-10-14,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv8mzxq9y13dp,2026-10-14,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for fajita,Reason not in its category list (custom text)
+YELLOW,records,rmv8nk6hvcflsq,2026-10-14,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv8pfaupkpiyr,2026-10-14,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv8rhbhyi73pe,2026-10-14,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv8rhbhyylppt,2026-10-14,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv8s5grlgpgz6,2026-10-14,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmv9wbtu8jk4x3,2026-10-15,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmv9y9fibi38yd,2026-10-15,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for fajita ,Reason not in its category list (custom text)
+YELLOW,classification,rmv9zsbe97jiao,2026-10-15,Variovac 3,reason,a reason listed under Machine / Equipment,Fajita machine broken waiting for Andre as he still fixing variovac 1,Reason not in its category list (custom text)
+YELLOW,classification,rmva25rpjvymrb,2026-10-15,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for cutlet,Reason not in its category list (custom text)
+YELLOW,classification,rmva25rpje07m2,2026-10-15,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for chicken muscle from MAREL,Reason not in its category list (custom text)
+YELLOW,records,rmva4jrzphrph3,2026-10-15,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmva5y8ogppyoq,2026-10-15,Variovac 3,reason,a reason listed under Upstream / Product,Waiting for cutlet,Reason not in its category list (custom text)
+YELLOW,records,rmvb8xu4qy1mql,2026-10-16,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvbjrc14btb9t,2026-10-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvbjrc142ys9o,2026-10-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmvbknfcnlp6me,2026-10-16,Variovac 3,reason,a reason listed under Machine / Equipment,Waiting for temperature before setup,Reason not in its category list (custom text)
+YELLOW,records,rmvbre10ow7bfi,2026-10-16,Variovac 2,time,within 05:00-18:00,16:01-18:04,Outside normal shift window
+YELLOW,records,rmvbre10ow7bfi,2026-10-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvbre10odru6i,2026-10-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvbre10oe3sqh,2026-10-16,Variovac 2,time,within 05:00-18:00,18:04-19:09,Outside normal shift window
+YELLOW,records,rmvbre6awfi4ug,2026-10-16,Variovac 1,time,within 05:00-18:00,14:16-19:10,Outside normal shift window
+YELLOW,records,rmvbre6awfi4ug,2026-10-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvff2dizot2t7,2026-10-19,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvfvvejh2pogp,2026-10-19,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvgvxpz757bkc,2026-10-20,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmvgwo5a6ueuny,2026-10-20,Variovac 3,reason,a reason listed under Labour / Operational,Getting boxes,Reason not in its category list (custom text)
+YELLOW,records,rmvgxhxoj3c3qh,2026-10-20,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmvh1an193f7m9,2026-10-20,Manual Pack,reason,a reason listed under Materials / Warehouse,Checking clear liner availability for trim and Strogi ,Reason not in its category list (custom text)
+YELLOW,records,rmvh3ss5n92gj3,2026-10-20,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvh59shhtlfmb,2026-10-20,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvha4ojf8tx58,2026-10-20,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvha7rxpq4okx,2026-10-20,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvi9zths975yk,2026-10-21,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvigu661mp9yi,2026-10-21,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvihl7o5tw9xb,2026-10-21,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvin711htrfff,2026-10-21,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvipno7azjh2r,2026-10-21,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvisjqajmzj1d,2026-10-21,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvjr53w51b7s4,2026-10-22,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvjr53w50fsp6,2026-10-22,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvjx68qxuwryr,2026-10-22,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvk1p7511lixh,2026-10-22,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvk4oaywtp45k,2026-10-22,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvk4oaywxi78l,2026-10-22,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvlbblaq04tnj,2026-10-23,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvldluiakv9vl,2026-10-23,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvliscixo31jd,2026-10-23,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvliscixcpddg,2026-10-23,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvpflij6qn904,2026-10-26,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvpkhay6e78j1,2026-10-26,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvpoighbphor2,2026-10-26,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvptbctxnhd3c,2026-10-26,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvpte97os4lmg,2026-10-26,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvpvpcp653zod,2026-10-26,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvpxv65yvb4fp,2026-10-26,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvqz0yioodwx0,2026-10-27,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvr3xjifrktrt,2026-10-27,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvr8b47v0l5gt,2026-10-27,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvr8tm10qa6sk,2026-10-27,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvsanfzti8s4r,2026-10-28,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvsanousamz1e,2026-10-28,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvsje67bnb3sz,2026-10-28,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvslf3ey1gznj,2026-10-28,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvslpft4qwdsn,2026-10-28,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvsnew7qgmvuk,2026-10-28,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvu2b1fhnivgn,2026-10-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmvu509btio30p,2026-10-29,Variovac 3,reason,a reason listed under Labour / Operational,All scales are occupied ,Reason not in its category list (custom text)
+YELLOW,records,rmvu6qyqm6yceo,2026-10-29,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmvu7wdzd54kgi,2026-10-29,Variovac 3,reason,a reason listed under Labour / Operational,All scale are occupied ,Reason not in its category list (custom text)
+YELLOW,records,rmvu7wlmolf3hr,2026-10-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvulmgamqnfpc,2026-10-29,Variovac 1,time,within 05:00-18:00,23:34-23:36,Outside normal shift window
+YELLOW,records,rmvulmgamqnfpc,2026-10-29,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvv4nug5d9a65,2026-10-30,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvvjhcjhyqi13,2026-10-30,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvzr6n7kzrmbt,2026-11-02,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvzr8ro0yotof,2026-11-02,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvzs3cuf3ix6v,2026-11-02,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmvzsrqgvdd6e1,2026-11-02,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw0vwv9ozw85z,2026-11-03,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw12hj2wvbp1s,2026-11-03,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw164zthx18o0,2026-11-03,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw2a5ihxfy7wg,2026-11-04,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw2c9c017gqig,2026-11-04,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,classification,rmw2fy9btu8dxr,2026-11-04,Variovac 2,reason,a reason listed under Upstream / Product,MAREL OPERATOR ON TRAINING-BOARD ROOM ,Reason not in its category list (custom text)
+YELLOW,records,rmw2hb061ydqsq,2026-11-04,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw2m89jn4rt4x,2026-11-04,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw2rpg2gyxjim,2026-11-04,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw2sdfut1bk9y,2026-11-04,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw2sdfutoqniv,2026-11-04,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw3yb563h6owg,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw40xbtdu87dp,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw414v7u5o8vz,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw41bh68to2lz,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw41qn54nbipz,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw42iqrfso2ih,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw438q3vywaj4,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw43ggc1ekang,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw471x34ij97k,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw471x34hi25a,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw48agxyz6xdf,2026-11-05,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw59zpkfdbyrk,2026-11-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw5bf3iciogx7,2026-11-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw5j8cg75jaho,2026-11-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw5j8cg79ylst,2026-11-06,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw5n31x56jw4o,2026-11-06,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9fk4qhw8vxg,2026-11-09,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9i0nlagawtj,2026-11-09,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9kyfi0zl8n5,2026-11-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9s6kfsirtj5,2026-11-09,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9sogjnlzbvr,2026-11-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9t94t39txm3,2026-11-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9to3eznkg8c,2026-11-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9ul8velpv7i,2026-11-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9ux3rajphig,2026-11-09,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmw9vbp0zjag31,2026-11-09,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwdpk1em57ffp,2026-11-12,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwdupwur5tuht,2026-11-12,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwdwdskfpmtcr,2026-11-12,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwdxrj5x5tzxt,2026-11-12,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwdys3v3nmpvf,2026-11-12,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwe5mx9d02e6b,2026-11-12,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwe5mx9dkpdkw,2026-11-12,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwe7ehn14i3l6,2026-11-12,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwe7f4g6d9u6b,2026-11-12,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwfgbygbhi9ss,2026-11-13,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwfkomddo6jfl,2026-11-13,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwflqvegmpe6e,2026-11-13,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwfmcekbox1s8,2026-11-13,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjgmb45wrt0g,2026-11-16,Variovac 3,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwji2zcjmn5fx,2026-11-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjklxorv8w4s,2026-11-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjlqdgklrduk,2026-11-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjms8aaso0hy,2026-11-16,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjq7onmpaeyp,2026-11-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjqfa8v8382u,2026-11-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjr5pgevu4he,2026-11-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjrx103wwo3l,2026-11-16,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwju5rx0wanvz,2026-11-16,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjuhybbs413p,2026-11-16,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwjvf27z5ntzx,2026-11-16,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwkvc0an82uwm,2026-11-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwkvlygbpg2m7,2026-11-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwl20nusjqso7,2026-11-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwl6i8cm02bfh,2026-11-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwl6i8cmuxaui,2026-11-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwl7rlla2v4mi,2026-11-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwla8esnp9v28,2026-11-17,Variovac 2,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwlb0nz09fsbo,2026-11-17,Manual Pack,product,non-empty,,No product on a production/changeover record
+YELLOW,records,rmwlbedpi0slmx,2026-11-17,Variovac 1,product,non-empty,,No product on a production/changeover record
+RED,duration,rmumz2tpj8hiyg,2026-09-29,Variovac 3,durationMin,72 (sum of running segments),102,Running minutes do not equal the run's own segments
+YELLOW,timeline,rmundssr2t8rkv,2026-09-29,Variovac 3,span,118 = run 37 + stops 39,unexplained 42 min,"Start-to-end window not fully explained by running + downtime segments (NO_WORK stops are dropped from plh.downtimeSegments, so a positive gap can be a No Work stop)"
+YELLOW,duration,side-rmwdq318bgc258,2026-11-12,Slicer,startTime/endTime,11:40-15:27,08:48-15:28,Record window differs from its running segments (record edited?)
+RED,duplicates,rmu3chul6xkto2,2026-09-15,Variovac 3,record,one entry,same as rmu3c2yi9ucl2c (15:10-15:25 WAITING Employee Shortage),Identical machine/date/time/status/reason - likely double entry
+RED,duplicates,rmunczuu2ytv4f,2026-09-29,Variovac 1,record,one entry,same as rmun962e9ze5sw (13:00-13:30 BREAK ),Identical machine/date/time/status/reason - likely double entry
+RED,duplicates,rmw137htn711gj,2026-11-03,Variovac 2,plh.weightLbs,unique production entry,same weight 234 lbs as rmw0vyoaqjo206 (08:24-09:12 vs 12:03-12:34),"Same product, machine, day and exact weight - possible duplicated production"
+RED,overlap,rmt0nwxyoguux6,2026-08-19,Variovac 2,time,no overlap with rmt0n5tprpoffs (BREAK 10:00-10:30),"WAITING 10:00-10:55, overlap 30 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt0odrficjnot,2026-08-19,Variovac 3,time,no overlap with rmt0n5tprj6ldm (BREAK 10:00-10:30),"WAITING 10:00-10:39, overlap 30 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3k351p5xabx,2026-08-21,Variovac 1,time,no overlap with rmt3krlnbw370a (WAITING 07:01-12:05),"BREAK 10:00-10:30, overlap 30 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3kxe5ih8ifz,2026-08-21,Variovac 1,time,no overlap with rmt3k8nh1mhaq5 (BREAK 13:00-13:30),"WAITING 13:05-13:25, overlap 20 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3kxvuwzi7q1,2026-08-21,Variovac 1,time,no overlap with rmt3k8nh1mhaq5 (BREAK 13:00-13:30),"RUNNING 13:26-13:50, overlap 4 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3k351pyvu7x,2026-08-21,Variovac 2,time,no overlap with rmt3kjgcvznpak (WAITING 09:24-10:30),"BREAK 10:00-10:30, overlap 30 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3klmvxpyi3r,2026-08-21,Variovac 2,time,no overlap with rmt3k8nh11c4hu (BREAK 12:30-13:00),"WAITING 12:30-13:20, overlap 30 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3kc6cp7e5li,2026-08-21,Variovac 3,time,no overlap with rmt3l9kpvteikq (RUNNING 11:49-13:15),"BREAK 13:00-13:30, overlap 15 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmt3la678d2l7k,2026-08-21,Variovac 3,time,no overlap with rmt3kc6cp7e5li (BREAK 13:00-13:30),"WAITING 13:16-13:50, overlap 14 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmtk9r3klt10ss,2026-09-01,Variovac 1,time,no overlap with rmtk9qjwhte22y (RUNNING 14:35-15:20),"WAITING 14:35-15:20, overlap 45 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmu3chul6xkto2,2026-09-15,Variovac 3,time,no overlap with rmu3c2yi9ucl2c (WAITING 15:10-15:25),"WAITING 15:10-15:25, overlap 15 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmunczuu2080b3,2026-09-29,Variovac 1,time,no overlap with rmun962e9fxde0 (RUNNING 11:38-15:33),"RUNNING 11:38-16:45, overlap 82 min",Same machine counted in two states at the same time - minutes double-counted in totals
+RED,overlap,rmunczuu2ytv4f,2026-09-29,Variovac 1,time,no overlap with rmun962e9ze5sw (BREAK 13:00-13:30),"BREAK 13:00-13:30, overlap 30 min",Same machine counted in two states at the same time - minutes double-counted in totals
+YELLOW,downtime,rmu4mvclokiyux,2026-09-16,Variovac 3,downtimeSegments,a BREAK record 12:54-13:31,none,"Stop inside a run has no matching status record (missing from downtime totals, or record later edited)"
+YELLOW,attribution,rmumz2tpj8hiyg,2026-09-29,Variovac 3,plh.product,PORK CUTLET 6oz,,PLH product differs from record product
+YELLOW,PLH,rmuwv72e8s8vpb,2026-10-06,Variovac 2,plh.grossPLH,20-2000 plausible,11.0,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmuyg6v2xw75p5,2026-10-07,Variovac 2,plh.grossPLH,20-2000 plausible,2.3,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmuzq8lk4zeg24,2026-10-08,Variovac 2,plh.grossPLH,20-2000 plausible,11.4,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmv019c9t19gjp,2026-10-08,Variovac 2,plh.grossPLH,20-2000 plausible,5.9,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmv1982p7v6m2a,2026-10-09,Variovac 2,plh.grossPLH,20-2000 plausible,8.1,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvflp20gq8ry1,2026-10-19,Variovac 1,plh.grossPLH,20-2000 plausible,18.6,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvgz3q4du7xil,2026-10-20,Variovac 1,plh.grossPLH,20-2000 plausible,3.6,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvh894ubdkjuz,2026-10-20,Variovac 1,plh.grossPLH,20-2000 plausible,11.5,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvigu661mp9yi,2026-10-21,Variovac 1,plh.grossPLH,20-2000 plausible,7.1,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvr0p7k49uf6q,2026-10-27,Variovac 1,plh.grossPLH,20-2000 plausible,5.5,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvspv56b04wrv,2026-10-28,Manual Pack,plh.grossPLH,20-2000 plausible,4117.5,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvzfx5ogae6f8,2026-11-02,Variovac 2,plh.grossPLH,20-2000 plausible,16.2,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvzjqnwo9zjb7,2026-11-02,Variovac 3,plh.grossPLH,20-2000 plausible,8.5,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmvzsb7yssnzqy,2026-11-02,Variovac 1,plh.grossPLH,20-2000 plausible,12.9,Implausible PLH magnitude - check weight or labour
+YELLOW,weight,rmw11idt9rbrai,2026-11-03,Manual Pack,plh.weightLbs,~1.0 lb x n per unit (name says 1lb),10.00 lb per unit (350 lbs / 35),Weight per unit inconsistent with product pack size - check units/quantity
+YELLOW,PLH,rmw17bw7kwcste,2026-11-03,Variovac 1,plh.grossPLH,20-2000 plausible,17.4,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmw18nmjimuhw9,2026-11-03,Variovac 3,plh.grossPLH,20-2000 plausible,9.1,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmw2f49ovn8c5r,2026-11-04,Manual Pack,plh.grossPLH,20-2000 plausible,3300.0,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmw3vn3gl2pr5a,2026-11-05,Variovac 2,plh.grossPLH,20-2000 plausible,18.7,Implausible PLH magnitude - check weight or labour
+YELLOW,PLH,rmw47z8n6wlyt7,2026-11-05,Manual Pack,plh.grossPLH,20-2000 plausible,3300.0,Implausible PLH magnitude - check weight or labour
+YELLOW,segments,rmw59zpkfdbyrk,2026-11-06,Variovac 2,segments.employees,>=1,0,Running segment 09:26-09:27 with 0 employees counts 0 labour
+YELLOW,segments,rmw9uisu5p3tdz,2026-11-09,Variovac 3,segments.employees,>=1,0,Running segment 15:04-15:05 with 0 employees counts 0 labour
+YELLOW,segments,rmw9uisu5p3tdz,2026-11-09,Variovac 3,segments.names,3 names,2 names,Headcount used for labour (3) differs from named crew (2) on 15:05-15:07
+YELLOW,segments,rmw9wnu7vbwdmx,2026-11-09,Variovac 1,segments.employees,>=1,0,Running segment 13:33-13:37 with 0 employees counts 0 labour
+RED,daily-report,report,2026-09-28,,totals.RUNNING,,"totals.RUNNING: saved 596, records now 594",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-09-28,,totals.NO_WORK,,"totals.NO_WORK: saved 219, records now 483, as-of-generation 219",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-09-28,,perMachine.Variovac 1.RUNNING,,"perMachine.Variovac 1.RUNNING: saved 308, records now 306",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-09-28,,perMachine.Variovac 2.NO_WORK,,"perMachine.Variovac 2.NO_WORK: saved 0, records now 30",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-09-28,,perMachine.Variovac 3.NO_WORK,,"perMachine.Variovac 3.NO_WORK: saved 174, records now 326",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-09-28,,perMachine.Manual Pack.NO_WORK,,"perMachine.Manual Pack.NO_WORK: saved 45, records now 127",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-09-28,,recordCount,,"recordCount: saved 48, now 51 (as-of 48, added later 3)",Saved report snapshot does not match underlying records
+YELLOW,daily-report,report,2026-09-28,,shift window,,"shift window: saved 08:00-16:57, records now 08:00-16:55",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,totals.RUNNING,,"totals.RUNNING: saved 795, records now 613",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,totals.CHANGEOVER,,"totals.CHANGEOVER: saved 76, records now 26",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,totals.WAITING,,"totals.WAITING: saved 699, records now 444",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,totals.NO_WORK,,"totals.NO_WORK: saved 274, records now 54",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,totals.upstream,,"totals.upstream: saved 546, records now 293",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,totals.internal,,"totals.internal: saved 153, records now 151",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 1.RUNNING,,"perMachine.Variovac 1.RUNNING: saved 120, records now 34",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 1.CHANGEOVER,,"perMachine.Variovac 1.CHANGEOVER: saved 27, records now 4",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 1.WAITING,,"perMachine.Variovac 1.WAITING: saved 342, records now 246",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 1.upstream,,"perMachine.Variovac 1.upstream: saved 288, records now 192",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 2.RUNNING,,"perMachine.Variovac 2.RUNNING: saved 330, records now 284",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 2.CHANGEOVER,,"perMachine.Variovac 2.CHANGEOVER: saved 38, records now 11",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 2.WAITING,,"perMachine.Variovac 2.WAITING: saved 98, records now 94",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 2.NO_WORK,,"perMachine.Variovac 2.NO_WORK: saved 18, records now 0",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 2.upstream,,"perMachine.Variovac 2.upstream: saved 81, records now 79",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 2.internal,,"perMachine.Variovac 2.internal: saved 17, records now 15",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 3.RUNNING,,"perMachine.Variovac 3.RUNNING: saved 161, records now 111",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 3.WAITING,,"perMachine.Variovac 3.WAITING: saved 257, records now 102",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 3.NO_WORK,,"perMachine.Variovac 3.NO_WORK: saved 57, records now 0",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 3.BREAK,,"perMachine.Variovac 3.BREAK: saved 65, records now 32",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Variovac 3.upstream,,"perMachine.Variovac 3.upstream: saved 175, records now 20",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,perMachine.Manual Pack.NO_WORK,,"perMachine.Manual Pack.NO_WORK: saved 199, records now 54",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,recordCount,,"recordCount: saved 80, now 62 (as-of 62, added later 0)",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,bottlenecks differ,,"bottlenecks differ: saved [['MAREL - Meat Ready, but Cutting for Variovac 2', 150], ['Waiting for fajita ', 147], ['MAREL - Meat Being Cut, Not Ready Yet', 117]] now [('TRIMMERS - Not Started Yet', 102), ('MAREL - Meat Being Cut, Not Ready Yet', 93), ('Required Cleaning', 77)]",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-05,,machineMostAffected,,"machineMostAffected: saved {'machine': 'Variovac 1', 'minutes': 342}, now Variovac 1 246",Saved report snapshot does not match underlying records
+YELLOW,daily-report,report,2026-10-05,,shift window,,"shift window: saved 08:04-17:18, records now 08:04-15:40",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-29,,totals.RUNNING,,"totals.RUNNING: saved 1251, records now 1253, as-of-generation 1251",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-29,,perMachine.Variovac 1.RUNNING,,"perMachine.Variovac 1.RUNNING: saved 397, records now 399",Saved report snapshot does not match underlying records
+RED,daily-report,report,2026-10-29,,recordCount,,"recordCount: saved 63, now 64 (as-of 63, added later 1)",Saved report snapshot does not match underlying records
+YELLOW,daily-report,report,2026-10-29,,shift window,,"shift window: saved 08:02-17:12, records now 08:02-23:36",Saved report snapshot does not match underlying records

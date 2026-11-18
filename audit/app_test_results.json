@@ -1,0 +1,4063 @@
+{
+ "replay": {
+  "paidBreakRuleChangesStoredGross": false,
+  "reports": [
+   {
+    "date": "2026-09-10",
+    "totals": {
+     "RUNNING": 1085,
+     "CHANGEOVER": 110,
+     "WAITING": 290,
+     "NO_WORK": 35,
+     "BREAK": 60,
+     "PLANNED": 0,
+     "upstream": 95,
+     "internal": 195
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 480,
+      "CHANGEOVER": 25,
+      "WAITING": 55,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 15,
+      "internal": 40
+     },
+     "Variovac 2": {
+      "RUNNING": 405,
+      "CHANGEOVER": 65,
+      "WAITING": 40,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 40
+     },
+     "Variovac 3": {
+      "RUNNING": 200,
+      "CHANGEOVER": 20,
+      "WAITING": 195,
+      "NO_WORK": 35,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 80,
+      "internal": 115
+     },
+     "Manual Pack": {
+      "RUNNING": 0,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 41,
+    "bottlenecks": [
+     [
+      "Waiting for Product",
+      80
+     ],
+     [
+      "Machine Setup",
+      50
+     ],
+     [
+      "Plate Change",
+      35
+     ],
+     [
+      "Employee Reassigned",
+      35
+     ],
+     [
+      "CREW TALK",
+      30
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 3",
+     "minutes": 195
+    },
+    "observation": "Today's largest source of lost production time was waiting for product, accounting for 1h 20m of upstream delay. Variovac 3 experienced the highest waiting time at 3h 15m.",
+    "shift": [
+     "07:00",
+     "17:30"
+    ]
+   },
+   {
+    "date": "2026-09-14",
+    "totals": {
+     "RUNNING": 538,
+     "CHANGEOVER": 75,
+     "WAITING": 472,
+     "NO_WORK": 375,
+     "BREAK": 60,
+     "PLANNED": 0,
+     "upstream": 284,
+     "internal": 188
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 66,
+      "CHANGEOVER": 15,
+      "WAITING": 314,
+      "NO_WORK": 130,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 199,
+      "internal": 115
+     },
+     "Variovac 2": {
+      "RUNNING": 390,
+      "CHANGEOVER": 25,
+      "WAITING": 65,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 55,
+      "internal": 10
+     },
+     "Variovac 3": {
+      "RUNNING": 82,
+      "CHANGEOVER": 35,
+      "WAITING": 93,
+      "NO_WORK": 245,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 30,
+      "internal": 63
+     },
+     "Manual Pack": {
+      "RUNNING": 0,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 47,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      254
+     ],
+     [
+      "Employee Reassigned",
+      105
+     ],
+     [
+      "Machine Setup",
+      50
+     ],
+     [
+      "Crew Talk",
+      30
+     ],
+     [
+      "Waiting for Product",
+      30
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 314
+    },
+    "observation": "Today's largest source of lost production time was marel - meat being cut, not ready yet, accounting for 4h 14m of upstream delay. Variovac 1 experienced the highest waiting time at 5h 14m.",
+    "shift": [
+     "07:00",
+     "16:50"
+    ]
+   },
+   {
+    "date": "2026-09-15",
+    "totals": {
+     "RUNNING": 762,
+     "CHANGEOVER": 96,
+     "WAITING": 523,
+     "NO_WORK": 0,
+     "BREAK": 64,
+     "PLANNED": 0,
+     "upstream": 362,
+     "internal": 161
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 175,
+      "CHANGEOVER": 30,
+      "WAITING": 285,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 275,
+      "internal": 10
+     },
+     "Variovac 2": {
+      "RUNNING": 340,
+      "CHANGEOVER": 50,
+      "WAITING": 75,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 40,
+      "internal": 35
+     },
+     "Variovac 3": {
+      "RUNNING": 247,
+      "CHANGEOVER": 16,
+      "WAITING": 163,
+      "NO_WORK": 0,
+      "BREAK": 64,
+      "PLANNED": 0,
+      "upstream": 47,
+      "internal": 116
+     },
+     "Manual Pack": {
+      "RUNNING": 0,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 55,
+    "bottlenecks": [
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      319
+     ],
+     [
+      "Employee Shortage",
+      55
+     ],
+     [
+      "Machine Setup",
+      45
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      40
+     ],
+     [
+      "Crew Talk",
+      30
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 285
+    },
+    "observation": "Today's largest source of lost production time was marel - waiting for trimmed meat, accounting for 5h 19m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 45m.",
+    "shift": [
+     "07:00",
+     "16:20"
+    ]
+   },
+   {
+    "date": "2026-09-16",
+    "totals": {
+     "RUNNING": 434,
+     "CHANGEOVER": 45,
+     "WAITING": 609,
+     "NO_WORK": 247,
+     "BREAK": 61,
+     "PLANNED": 0,
+     "upstream": 579,
+     "internal": 30
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 15,
+      "CHANGEOVER": 15,
+      "WAITING": 318,
+      "NO_WORK": 104,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 318,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 227,
+      "CHANGEOVER": 15,
+      "WAITING": 203,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 185,
+      "internal": 18
+     },
+     "Variovac 3": {
+      "RUNNING": 192,
+      "CHANGEOVER": 15,
+      "WAITING": 88,
+      "NO_WORK": 143,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 76,
+      "internal": 12
+     },
+     "Manual Pack": {
+      "RUNNING": 0,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 59,
+    "bottlenecks": [
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      362
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      141
+     ],
+     [
+      "Waiting for Slicer",
+      62
+     ],
+     [
+      "Machine Setup",
+      45
+     ],
+     [
+      "Crew Talk",
+      16
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 318
+    },
+    "observation": "Today's largest source of lost production time was marel - waiting for trimmed meat, accounting for 6h 2m of upstream delay. Variovac 1 experienced the highest waiting time at 5h 18m.",
+    "shift": [
+     "07:00",
+     "16:17"
+    ]
+   },
+   {
+    "date": "2026-09-17",
+    "totals": {
+     "RUNNING": 529,
+     "CHANGEOVER": 44,
+     "WAITING": 437,
+     "NO_WORK": 396,
+     "BREAK": 60,
+     "PLANNED": 0,
+     "upstream": 218,
+     "internal": 219
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 181,
+      "CHANGEOVER": 15,
+      "WAITING": 171,
+      "NO_WORK": 125,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 86,
+      "internal": 85
+     },
+     "Variovac 2": {
+      "RUNNING": 206,
+      "CHANGEOVER": 15,
+      "WAITING": 165,
+      "NO_WORK": 85,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 132,
+      "internal": 33
+     },
+     "Variovac 3": {
+      "RUNNING": 142,
+      "CHANGEOVER": 14,
+      "WAITING": 101,
+      "NO_WORK": 186,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 101
+     },
+     "Manual Pack": {
+      "RUNNING": 0,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 47,
+    "bottlenecks": [
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      151
+     ],
+     [
+      "Employee Shortage",
+      78
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      67
+     ],
+     [
+      "Film/Feed Problem",
+      52
+     ],
+     [
+      "Machine Setup",
+      44
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 171
+    },
+    "observation": "Today's largest source of lost production time was marel - waiting for trimmed meat, accounting for 2h 31m of upstream delay. Variovac 1 experienced the highest waiting time at 2h 51m.",
+    "shift": [
+     "07:00",
+     "16:37"
+    ]
+   },
+   {
+    "date": "2026-09-23",
+    "totals": {
+     "RUNNING": 815,
+     "CHANGEOVER": 49,
+     "WAITING": 678,
+     "NO_WORK": 148,
+     "BREAK": 61,
+     "PLANNED": 0,
+     "upstream": 501,
+     "internal": 177
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 195,
+      "CHANGEOVER": 19,
+      "WAITING": 298,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 238,
+      "internal": 60
+     },
+     "Variovac 2": {
+      "RUNNING": 262,
+      "CHANGEOVER": 15,
+      "WAITING": 233,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 200,
+      "internal": 33
+     },
+     "Variovac 3": {
+      "RUNNING": 115,
+      "CHANGEOVER": 15,
+      "WAITING": 147,
+      "NO_WORK": 148,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 63,
+      "internal": 84
+     },
+     "Manual Pack": {
+      "RUNNING": 243,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 61,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 60,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      322
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      175
+     ],
+     [
+      "Crew Talk",
+      60
+     ],
+     [
+      "Machine Setup",
+      45
+     ],
+     [
+      "Required Cleaning",
+      37
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 298
+    },
+    "observation": "Today's largest source of lost production time was marel - meat being cut, not ready yet, accounting for 5h 22m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 58m.",
+    "shift": [
+     "07:00",
+     "17:00"
+    ]
+   },
+   {
+    "date": "2026-09-24",
+    "totals": {
+     "RUNNING": 795,
+     "CHANGEOVER": 99,
+     "WAITING": 612,
+     "NO_WORK": 32,
+     "BREAK": 60,
+     "PLANNED": 0,
+     "upstream": 432,
+     "internal": 180
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 186,
+      "CHANGEOVER": 21,
+      "WAITING": 227,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 217,
+      "internal": 10
+     },
+     "Variovac 2": {
+      "RUNNING": 274,
+      "CHANGEOVER": 31,
+      "WAITING": 208,
+      "NO_WORK": 0,
+      "BREAK": 29,
+      "PLANNED": 0,
+      "upstream": 98,
+      "internal": 110
+     },
+     "Variovac 3": {
+      "RUNNING": 188,
+      "CHANGEOVER": 47,
+      "WAITING": 177,
+      "NO_WORK": 32,
+      "BREAK": 29,
+      "PLANNED": 0,
+      "upstream": 117,
+      "internal": 60
+     },
+     "Manual Pack": {
+      "RUNNING": 147,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 52,
+    "bottlenecks": [
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      262
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      159
+     ],
+     [
+      "Employee Shortage",
+      57
+     ],
+     [
+      "Machine Setup",
+      48
+     ],
+     [
+      "Required Cleaning",
+      43
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 227
+    },
+    "observation": "Today's largest source of lost production time was marel - waiting for trimmed meat, accounting for 4h 22m of upstream delay. Variovac 1 experienced the highest waiting time at 3h 47m.",
+    "shift": [
+     "07:00",
+     "17:05"
+    ]
+   },
+   {
+    "date": "2026-09-25",
+    "totals": {
+     "RUNNING": 1017,
+     "CHANGEOVER": 97,
+     "WAITING": 317,
+     "NO_WORK": 538,
+     "BREAK": 60,
+     "PLANNED": 0,
+     "upstream": 134,
+     "internal": 183
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 346,
+      "CHANGEOVER": 26,
+      "WAITING": 110,
+      "NO_WORK": 0,
+      "BREAK": 59,
+      "PLANNED": 0,
+      "upstream": 61,
+      "internal": 49
+     },
+     "Variovac 2": {
+      "RUNNING": 390,
+      "CHANGEOVER": 43,
+      "WAITING": 113,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 15,
+      "internal": 98
+     },
+     "Variovac 3": {
+      "RUNNING": 0,
+      "CHANGEOVER": 28,
+      "WAITING": 25,
+      "NO_WORK": 447,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 25
+     },
+     "Manual Pack": {
+      "RUNNING": 281,
+      "CHANGEOVER": 0,
+      "WAITING": 69,
+      "NO_WORK": 91,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 58,
+      "internal": 11
+     }
+    },
+    "recordCount": 50,
+    "bottlenecks": [
+     [
+      "Machine Setup",
+      58
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      48
+     ],
+     [
+      "Crew Talk",
+      45
+     ],
+     [
+      "Waiting for Warehouse to Scan In Product",
+      40
+     ],
+     [
+      "Waiting for management to decide on what to do with pork chop for Meatbox leftover",
+      28
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 113
+    },
+    "observation": "Today's largest source of lost production time was machine setup, accounting for 58m. Variovac 2 experienced the highest waiting time at 1h 53m.",
+    "shift": [
+     "07:00",
+     "17:39"
+    ]
+   },
+   {
+    "date": "2026-09-28",
+    "totals": {
+     "RUNNING": 594,
+     "CHANGEOVER": 46,
+     "WAITING": 553,
+     "NO_WORK": 483,
+     "BREAK": 62,
+     "PLANNED": 0,
+     "upstream": 184,
+     "internal": 369
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 306,
+      "CHANGEOVER": 21,
+      "WAITING": 146,
+      "NO_WORK": 0,
+      "BREAK": 61,
+      "PLANNED": 0,
+      "upstream": 116,
+      "internal": 30
+     },
+     "Variovac 2": {
+      "RUNNING": 30,
+      "CHANGEOVER": 0,
+      "WAITING": 366,
+      "NO_WORK": 30,
+      "BREAK": 61,
+      "PLANNED": 0,
+      "upstream": 68,
+      "internal": 298
+     },
+     "Variovac 3": {
+      "RUNNING": 50,
+      "CHANGEOVER": 25,
+      "WAITING": 41,
+      "NO_WORK": 326,
+      "BREAK": 61,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 41
+     },
+     "Manual Pack": {
+      "RUNNING": 208,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 127,
+      "BREAK": 61,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 51,
+    "bottlenecks": [
+     [
+      "Electrical/Control Issue",
+      298
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      116
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 1",
+      51
+     ],
+     [
+      "Crew Talk",
+      34
+     ],
+     [
+      "Machine Setup",
+      25
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 366
+    },
+    "observation": "Today's largest source of lost production time was electrical/control issue, accounting for 4h 58m. Variovac 2 experienced the highest waiting time at 6h 6m.",
+    "shift": [
+     "08:00",
+     "16:55"
+    ]
+   },
+   {
+    "date": "2026-09-29",
+    "totals": {
+     "RUNNING": 1291,
+     "CHANGEOVER": 135,
+     "WAITING": 282,
+     "NO_WORK": 748,
+     "BREAK": 60,
+     "PLANNED": 0,
+     "upstream": 151,
+     "internal": 131
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 636,
+      "CHANGEOVER": 29,
+      "WAITING": 98,
+      "NO_WORK": 34,
+      "BREAK": 90,
+      "PLANNED": 0,
+      "upstream": 79,
+      "internal": 19
+     },
+     "Variovac 2": {
+      "RUNNING": 374,
+      "CHANGEOVER": 67,
+      "WAITING": 94,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 33,
+      "internal": 61
+     },
+     "Variovac 3": {
+      "RUNNING": 228,
+      "CHANGEOVER": 39,
+      "WAITING": 90,
+      "NO_WORK": 204,
+      "BREAK": 60,
+      "PLANNED": 0,
+      "upstream": 39,
+      "internal": 51
+     },
+     "Manual Pack": {
+      "RUNNING": 53,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 510,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 57,
+    "bottlenecks": [
+     [
+      "Machine Setup",
+      56
+     ],
+     [
+      "Crew Talk",
+      45
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      44
+     ],
+     [
+      "Film Change",
+      41
+     ],
+     [
+      "Plate Change",
+      38
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 98
+    },
+    "observation": "Today's largest source of lost production time was machine setup, accounting for 56m. Variovac 1 experienced the highest waiting time at 1h 38m.",
+    "shift": [
+     "07:00",
+     "17:57"
+    ]
+   },
+   {
+    "date": "2026-10-02",
+    "totals": {
+     "RUNNING": 1123,
+     "CHANGEOVER": 25,
+     "WAITING": 550,
+     "NO_WORK": 155,
+     "BREAK": 63,
+     "PLANNED": 0,
+     "upstream": 327,
+     "internal": 223
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 186,
+      "CHANGEOVER": 0,
+      "WAITING": 266,
+      "NO_WORK": 42,
+      "BREAK": 63,
+      "PLANNED": 0,
+      "upstream": 237,
+      "internal": 29
+     },
+     "Variovac 2": {
+      "RUNNING": 281,
+      "CHANGEOVER": 5,
+      "WAITING": 116,
+      "NO_WORK": 93,
+      "BREAK": 63,
+      "PLANNED": 0,
+      "upstream": 46,
+      "internal": 70
+     },
+     "Variovac 3": {
+      "RUNNING": 353,
+      "CHANGEOVER": 20,
+      "WAITING": 125,
+      "NO_WORK": 0,
+      "BREAK": 62,
+      "PLANNED": 0,
+      "upstream": 25,
+      "internal": 100
+     },
+     "Manual Pack": {
+      "RUNNING": 303,
+      "CHANGEOVER": 0,
+      "WAITING": 43,
+      "NO_WORK": 20,
+      "BREAK": 31,
+      "PLANNED": 0,
+      "upstream": 19,
+      "internal": 24
+     }
+    },
+    "recordCount": 62,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      125
+     ],
+     [
+      "Employee Shortage",
+      92
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      64
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      57
+     ],
+     [
+      "Crew Talk",
+      51
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 266
+    },
+    "observation": "Today's largest source of lost production time was marel - meat being cut, not ready yet, accounting for 2h 5m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 26m.",
+    "shift": [
+     "08:00",
+     "17:20"
+    ]
+   },
+   {
+    "date": "2026-10-05",
+    "totals": {
+     "RUNNING": 613,
+     "CHANGEOVER": 26,
+     "WAITING": 444,
+     "NO_WORK": 54,
+     "BREAK": 68,
+     "PLANNED": 0,
+     "upstream": 293,
+     "internal": 151
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 34,
+      "CHANGEOVER": 4,
+      "WAITING": 246,
+      "NO_WORK": 0,
+      "BREAK": 65,
+      "PLANNED": 0,
+      "upstream": 192,
+      "internal": 54
+     },
+     "Variovac 2": {
+      "RUNNING": 284,
+      "CHANGEOVER": 11,
+      "WAITING": 94,
+      "NO_WORK": 0,
+      "BREAK": 65,
+      "PLANNED": 0,
+      "upstream": 79,
+      "internal": 15
+     },
+     "Variovac 3": {
+      "RUNNING": 111,
+      "CHANGEOVER": 11,
+      "WAITING": 102,
+      "NO_WORK": 0,
+      "BREAK": 32,
+      "PLANNED": 0,
+      "upstream": 20,
+      "internal": 82
+     },
+     "Manual Pack": {
+      "RUNNING": 184,
+      "CHANGEOVER": 0,
+      "WAITING": 2,
+      "NO_WORK": 54,
+      "BREAK": 67,
+      "PLANNED": 0,
+      "upstream": 2,
+      "internal": 0
+     }
+    },
+    "recordCount": 62,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      102
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      93
+     ],
+     [
+      "Required Cleaning",
+      77
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      76
+     ],
+     [
+      "Crew Talk",
+      42
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 246
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 1h 42m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 6m.",
+    "shift": [
+     "08:04",
+     "15:40"
+    ]
+   },
+   {
+    "date": "2026-10-06",
+    "totals": {
+     "RUNNING": 811,
+     "CHANGEOVER": 38,
+     "WAITING": 456,
+     "NO_WORK": 223,
+     "BREAK": 81,
+     "PLANNED": 0,
+     "upstream": 291,
+     "internal": 165
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 205,
+      "CHANGEOVER": 0,
+      "WAITING": 243,
+      "NO_WORK": 0,
+      "BREAK": 81,
+      "PLANNED": 0,
+      "upstream": 223,
+      "internal": 20
+     },
+     "Variovac 2": {
+      "RUNNING": 316,
+      "CHANGEOVER": 13,
+      "WAITING": 121,
+      "NO_WORK": 0,
+      "BREAK": 80,
+      "PLANNED": 0,
+      "upstream": 41,
+      "internal": 80
+     },
+     "Variovac 3": {
+      "RUNNING": 114,
+      "CHANGEOVER": 25,
+      "WAITING": 92,
+      "NO_WORK": 198,
+      "BREAK": 79,
+      "PLANNED": 0,
+      "upstream": 27,
+      "internal": 65
+     },
+     "Manual Pack": {
+      "RUNNING": 176,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 25,
+      "BREAK": 79,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 62,
+    "bottlenecks": [
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      106
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      86
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      67
+     ],
+     [
+      "Employee Shortage",
+      60
+     ],
+     [
+      "Required Cleaning",
+      28
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 243
+    },
+    "observation": "Today's largest source of lost production time was marel - waiting for trimmed meat, accounting for 1h 46m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 3m.",
+    "shift": [
+     "08:01",
+     "16:53"
+    ]
+   },
+   {
+    "date": "2026-10-07",
+    "totals": {
+     "RUNNING": 968,
+     "CHANGEOVER": 27,
+     "WAITING": 490,
+     "NO_WORK": 405,
+     "BREAK": 71,
+     "PLANNED": 52,
+     "upstream": 245,
+     "internal": 245
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 272,
+      "CHANGEOVER": 0,
+      "WAITING": 190,
+      "NO_WORK": 16,
+      "BREAK": 70,
+      "PLANNED": 13,
+      "upstream": 159,
+      "internal": 31
+     },
+     "Variovac 2": {
+      "RUNNING": 307,
+      "CHANGEOVER": 7,
+      "WAITING": 153,
+      "NO_WORK": 0,
+      "BREAK": 70,
+      "PLANNED": 13,
+      "upstream": 20,
+      "internal": 133
+     },
+     "Variovac 3": {
+      "RUNNING": 179,
+      "CHANGEOVER": 20,
+      "WAITING": 112,
+      "NO_WORK": 170,
+      "BREAK": 69,
+      "PLANNED": 13,
+      "upstream": 66,
+      "internal": 46
+     },
+     "Manual Pack": {
+      "RUNNING": 210,
+      "CHANGEOVER": 0,
+      "WAITING": 35,
+      "NO_WORK": 219,
+      "BREAK": 70,
+      "PLANNED": 13,
+      "upstream": 0,
+      "internal": 35
+     }
+    },
+    "recordCount": 77,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      144
+     ],
+     [
+      "Employee Shortage",
+      141
+     ],
+     [
+      "Employee Reassigned",
+      51
+     ],
+     [
+      "TRIMMERS - Cutting Chicken Muscle by Hand",
+      45
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      35
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 190
+    },
+    "observation": "Today's largest source of lost production time was marel - meat ready, but cutting for variovac 2, accounting for 2h 24m of upstream delay. Variovac 1 experienced the highest waiting time at 3h 10m.",
+    "shift": [
+     "07:58",
+     "17:24"
+    ]
+   },
+   {
+    "date": "2026-10-08",
+    "totals": {
+     "RUNNING": 1002,
+     "CHANGEOVER": 60,
+     "WAITING": 423,
+     "NO_WORK": 387,
+     "BREAK": 68,
+     "PLANNED": 60,
+     "upstream": 337,
+     "internal": 86
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 328,
+      "CHANGEOVER": 9,
+      "WAITING": 140,
+      "NO_WORK": 0,
+      "BREAK": 68,
+      "PLANNED": 15,
+      "upstream": 133,
+      "internal": 7
+     },
+     "Variovac 2": {
+      "RUNNING": 318,
+      "CHANGEOVER": 16,
+      "WAITING": 99,
+      "NO_WORK": 0,
+      "BREAK": 68,
+      "PLANNED": 15,
+      "upstream": 69,
+      "internal": 30
+     },
+     "Variovac 3": {
+      "RUNNING": 155,
+      "CHANGEOVER": 35,
+      "WAITING": 184,
+      "NO_WORK": 69,
+      "BREAK": 67,
+      "PLANNED": 15,
+      "upstream": 135,
+      "internal": 49
+     },
+     "Manual Pack": {
+      "RUNNING": 201,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 318,
+      "BREAK": 33,
+      "PLANNED": 15,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 75,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      99
+     ],
+     [
+      "Waiting for Slicer",
+      80
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      70
+     ],
+     [
+      "Waiting for Band Saw Cut Meat (for Slicer)",
+      55
+     ],
+     [
+      "Machine Breakdown",
+      39
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 3",
+     "minutes": 184
+    },
+    "observation": "Today's largest source of lost production time was marel - meat ready, but cutting for variovac 2, accounting for 1h 39m of upstream delay. Variovac 3 experienced the highest waiting time at 3h 4m.",
+    "shift": [
+     "07:59",
+     "17:27"
+    ]
+   },
+   {
+    "date": "2026-10-09",
+    "totals": {
+     "RUNNING": 904,
+     "CHANGEOVER": 26,
+     "WAITING": 345,
+     "NO_WORK": 290,
+     "BREAK": 60,
+     "PLANNED": 82,
+     "upstream": 287,
+     "internal": 58
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 265,
+      "CHANGEOVER": 0,
+      "WAITING": 126,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 19,
+      "upstream": 126,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 247,
+      "CHANGEOVER": 8,
+      "WAITING": 132,
+      "NO_WORK": 0,
+      "BREAK": 60,
+      "PLANNED": 21,
+      "upstream": 106,
+      "internal": 26
+     },
+     "Variovac 3": {
+      "RUNNING": 172,
+      "CHANGEOVER": 18,
+      "WAITING": 58,
+      "NO_WORK": 143,
+      "BREAK": 59,
+      "PLANNED": 21,
+      "upstream": 26,
+      "internal": 32
+     },
+     "Manual Pack": {
+      "RUNNING": 220,
+      "CHANGEOVER": 0,
+      "WAITING": 29,
+      "NO_WORK": 147,
+      "BREAK": 29,
+      "PLANNED": 21,
+      "upstream": 29,
+      "internal": 0
+     }
+    },
+    "recordCount": 78,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 1",
+      77
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      72
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      45
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      38
+     ],
+     [
+      "Waiting for Warehouse to Scan In Product",
+      29
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 132
+    },
+    "observation": "Today's largest source of lost production time was marel - meat ready, but cutting for variovac 1, accounting for 1h 17m of upstream delay. Variovac 2 experienced the highest waiting time at 2h 12m.",
+    "shift": [
+     "08:00",
+     "15:53"
+    ]
+   },
+   {
+    "date": "2026-10-13",
+    "totals": {
+     "RUNNING": 731,
+     "CHANGEOVER": 13,
+     "WAITING": 810,
+     "NO_WORK": 358,
+     "BREAK": 63,
+     "PLANNED": 88,
+     "upstream": 530,
+     "internal": 280
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 90,
+      "CHANGEOVER": 0,
+      "WAITING": 375,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 26,
+      "upstream": 375,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 299,
+      "CHANGEOVER": 4,
+      "WAITING": 56,
+      "NO_WORK": 106,
+      "BREAK": 62,
+      "PLANNED": 27,
+      "upstream": 56,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 191,
+      "CHANGEOVER": 9,
+      "WAITING": 174,
+      "NO_WORK": 80,
+      "BREAK": 61,
+      "PLANNED": 35,
+      "upstream": 99,
+      "internal": 75
+     },
+     "Manual Pack": {
+      "RUNNING": 151,
+      "CHANGEOVER": 0,
+      "WAITING": 205,
+      "NO_WORK": 172,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 205
+     }
+    },
+    "recordCount": 59,
+    "bottlenecks": [
+     [
+      "Scale Problem",
+      239
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      184
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      174
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      61
+     ],
+     [
+      "Waiting for Slicer",
+      48
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 375
+    },
+    "observation": "Today's largest source of lost production time was scale problem, accounting for 3h 59m. Variovac 1 experienced the highest waiting time at 6h 15m.",
+    "shift": [
+     "07:58",
+     "17:12"
+    ]
+   },
+   {
+    "date": "2026-10-14",
+    "totals": {
+     "RUNNING": 1175,
+     "CHANGEOVER": 50,
+     "WAITING": 424,
+     "NO_WORK": 168,
+     "BREAK": 62,
+     "PLANNED": 50,
+     "upstream": 344,
+     "internal": 80
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 158,
+      "CHANGEOVER": 17,
+      "WAITING": 286,
+      "NO_WORK": 0,
+      "BREAK": 62,
+      "PLANNED": 15,
+      "upstream": 254,
+      "internal": 32
+     },
+     "Variovac 2": {
+      "RUNNING": 335,
+      "CHANGEOVER": 12,
+      "WAITING": 100,
+      "NO_WORK": 0,
+      "BREAK": 62,
+      "PLANNED": 15,
+      "upstream": 63,
+      "internal": 37
+     },
+     "Variovac 3": {
+      "RUNNING": 317,
+      "CHANGEOVER": 21,
+      "WAITING": 32,
+      "NO_WORK": 71,
+      "BREAK": 62,
+      "PLANNED": 20,
+      "upstream": 27,
+      "internal": 5
+     },
+     "Manual Pack": {
+      "RUNNING": 365,
+      "CHANGEOVER": 0,
+      "WAITING": 6,
+      "NO_WORK": 97,
+      "BREAK": 32,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 6
+     }
+    },
+    "recordCount": 68,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      144
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      110
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      50
+     ],
+     [
+      "Employee Reassigned",
+      42
+     ],
+     [
+      "Employee Shortage",
+      32
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 286
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 2h 24m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 46m.",
+    "shift": [
+     "08:00",
+     "17:07"
+    ]
+   },
+   {
+    "date": "2026-10-15",
+    "totals": {
+     "RUNNING": 952,
+     "CHANGEOVER": 32,
+     "WAITING": 441,
+     "NO_WORK": 225,
+     "BREAK": 60,
+     "PLANNED": 35,
+     "upstream": 289,
+     "internal": 152
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 284,
+      "CHANGEOVER": 0,
+      "WAITING": 80,
+      "NO_WORK": 40,
+      "BREAK": 60,
+      "PLANNED": 11,
+      "upstream": 0,
+      "internal": 80
+     },
+     "Variovac 2": {
+      "RUNNING": 193,
+      "CHANGEOVER": 0,
+      "WAITING": 116,
+      "NO_WORK": 81,
+      "BREAK": 60,
+      "PLANNED": 10,
+      "upstream": 116,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 180,
+      "CHANGEOVER": 32,
+      "WAITING": 200,
+      "NO_WORK": 4,
+      "BREAK": 60,
+      "PLANNED": 14,
+      "upstream": 149,
+      "internal": 51
+     },
+     "Manual Pack": {
+      "RUNNING": 295,
+      "CHANGEOVER": 0,
+      "WAITING": 45,
+      "NO_WORK": 100,
+      "BREAK": 29,
+      "PLANNED": 0,
+      "upstream": 24,
+      "internal": 21
+     }
+    },
+    "recordCount": 57,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      116
+     ],
+     [
+      "Waiting for fajita ",
+      45
+     ],
+     [
+      "Employee Reassigned",
+      41
+     ],
+     [
+      "Machine Breakdown",
+      39
+     ],
+     [
+      "Waiting for cutlet",
+      39
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 3",
+     "minutes": 200
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 1h 56m of upstream delay. Variovac 3 experienced the highest waiting time at 3h 20m.",
+    "shift": [
+     "08:01",
+     "16:22"
+    ]
+   },
+   {
+    "date": "2026-10-16",
+    "totals": {
+     "RUNNING": 1484,
+     "CHANGEOVER": 77,
+     "WAITING": 457,
+     "NO_WORK": 0,
+     "BREAK": 61,
+     "PLANNED": 30,
+     "upstream": 206,
+     "internal": 251
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 349,
+      "CHANGEOVER": 16,
+      "WAITING": 221,
+      "NO_WORK": 0,
+      "BREAK": 61,
+      "PLANNED": 8,
+      "upstream": 163,
+      "internal": 58
+     },
+     "Variovac 2": {
+      "RUNNING": 402,
+      "CHANGEOVER": 35,
+      "WAITING": 148,
+      "NO_WORK": 0,
+      "BREAK": 61,
+      "PLANNED": 8,
+      "upstream": 43,
+      "internal": 105
+     },
+     "Variovac 3": {
+      "RUNNING": 397,
+      "CHANGEOVER": 26,
+      "WAITING": 6,
+      "NO_WORK": 0,
+      "BREAK": 61,
+      "PLANNED": 14,
+      "upstream": 0,
+      "internal": 6
+     },
+     "Manual Pack": {
+      "RUNNING": 336,
+      "CHANGEOVER": 0,
+      "WAITING": 82,
+      "NO_WORK": 0,
+      "BREAK": 30,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 82
+     }
+    },
+    "recordCount": 47,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      102
+     ],
+     [
+      "QA Approval Pending",
+      82
+     ],
+     [
+      "Machine Breakdown",
+      79
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      61
+     ],
+     [
+      "Employee Shortage",
+      58
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 221
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 1h 42m of upstream delay. Variovac 1 experienced the highest waiting time at 3h 41m.",
+    "shift": [
+     "08:02",
+     "19:10"
+    ]
+   },
+   {
+    "date": "2026-10-19",
+    "totals": {
+     "RUNNING": 899,
+     "CHANGEOVER": 22,
+     "WAITING": 650,
+     "NO_WORK": 187,
+     "BREAK": 65,
+     "PLANNED": 36,
+     "upstream": 586,
+     "internal": 64
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 79,
+      "CHANGEOVER": 0,
+      "WAITING": 380,
+      "NO_WORK": 0,
+      "BREAK": 65,
+      "PLANNED": 12,
+      "upstream": 380,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 298,
+      "CHANGEOVER": 0,
+      "WAITING": 119,
+      "NO_WORK": 0,
+      "BREAK": 64,
+      "PLANNED": 9,
+      "upstream": 119,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 182,
+      "CHANGEOVER": 22,
+      "WAITING": 151,
+      "NO_WORK": 69,
+      "BREAK": 64,
+      "PLANNED": 15,
+      "upstream": 87,
+      "internal": 64
+     },
+     "Manual Pack": {
+      "RUNNING": 340,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 118,
+      "BREAK": 30,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 61,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      238
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      126
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      92
+     ],
+     [
+      "TRIMMERS - Cutting Chicken Muscle by Hand",
+      54
+     ],
+     [
+      "Required Cleaning",
+      50
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 380
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 3h 58m of upstream delay. Variovac 1 experienced the highest waiting time at 6h 20m.",
+    "shift": [
+     "08:02",
+     "17:09"
+    ]
+   },
+   {
+    "date": "2026-10-20",
+    "totals": {
+     "RUNNING": 850,
+     "CHANGEOVER": 16,
+     "WAITING": 553,
+     "NO_WORK": 312,
+     "BREAK": 62,
+     "PLANNED": 44,
+     "upstream": 470,
+     "internal": 83
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 277,
+      "CHANGEOVER": 0,
+      "WAITING": 165,
+      "NO_WORK": 0,
+      "BREAK": 61,
+      "PLANNED": 14,
+      "upstream": 165,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 288,
+      "CHANGEOVER": 0,
+      "WAITING": 104,
+      "NO_WORK": 34,
+      "BREAK": 60,
+      "PLANNED": 14,
+      "upstream": 89,
+      "internal": 15
+     },
+     "Variovac 3": {
+      "RUNNING": 99,
+      "CHANGEOVER": 16,
+      "WAITING": 274,
+      "NO_WORK": 32,
+      "BREAK": 60,
+      "PLANNED": 16,
+      "upstream": 216,
+      "internal": 58
+     },
+     "Manual Pack": {
+      "RUNNING": 186,
+      "CHANGEOVER": 0,
+      "WAITING": 10,
+      "NO_WORK": 246,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 10
+     }
+    },
+    "recordCount": 71,
+    "bottlenecks": [
+     [
+      "Waiting for Fajita",
+      163
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      95
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      70
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      62
+     ],
+     [
+      "TRIMMERS - Cutting Chicken Muscle by Hand",
+      53
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 3",
+     "minutes": 274
+    },
+    "observation": "Today's largest source of lost production time was waiting for fajita, accounting for 2h 43m of upstream delay. Variovac 3 experienced the highest waiting time at 4h 34m.",
+    "shift": [
+     "07:59",
+     "16:49"
+    ]
+   },
+   {
+    "date": "2026-10-21",
+    "totals": {
+     "RUNNING": 1012,
+     "CHANGEOVER": 34,
+     "WAITING": 486,
+     "NO_WORK": 195,
+     "BREAK": 69,
+     "PLANNED": 48,
+     "upstream": 394,
+     "internal": 92
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 248,
+      "CHANGEOVER": 13,
+      "WAITING": 210,
+      "NO_WORK": 0,
+      "BREAK": 69,
+      "PLANNED": 15,
+      "upstream": 210,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 251,
+      "CHANGEOVER": 0,
+      "WAITING": 136,
+      "NO_WORK": 81,
+      "BREAK": 67,
+      "PLANNED": 17,
+      "upstream": 95,
+      "internal": 41
+     },
+     "Variovac 3": {
+      "RUNNING": 280,
+      "CHANGEOVER": 21,
+      "WAITING": 139,
+      "NO_WORK": 25,
+      "BREAK": 67,
+      "PLANNED": 16,
+      "upstream": 88,
+      "internal": 51
+     },
+     "Manual Pack": {
+      "RUNNING": 233,
+      "CHANGEOVER": 0,
+      "WAITING": 1,
+      "NO_WORK": 89,
+      "BREAK": 33,
+      "PLANNED": 0,
+      "upstream": 1,
+      "internal": 0
+     }
+    },
+    "recordCount": 53,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      133
+     ],
+     [
+      "Waiting for Cutlet",
+      72
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      45
+     ],
+     [
+      "Required Cleaning",
+      40
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      38
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 210
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 2h 13m of upstream delay. Variovac 1 experienced the highest waiting time at 3h 30m.",
+    "shift": [
+     "07:59",
+     "17:16"
+    ]
+   },
+   {
+    "date": "2026-10-22",
+    "totals": {
+     "RUNNING": 1227,
+     "CHANGEOVER": 123,
+     "WAITING": 210,
+     "NO_WORK": 188,
+     "BREAK": 61,
+     "PLANNED": 36,
+     "upstream": 141,
+     "internal": 69
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 365,
+      "CHANGEOVER": 0,
+      "WAITING": 17,
+      "NO_WORK": 64,
+      "BREAK": 61,
+      "PLANNED": 9,
+      "upstream": 17,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 164,
+      "CHANGEOVER": 84,
+      "WAITING": 97,
+      "NO_WORK": 100,
+      "BREAK": 61,
+      "PLANNED": 9,
+      "upstream": 65,
+      "internal": 32
+     },
+     "Variovac 3": {
+      "RUNNING": 265,
+      "CHANGEOVER": 39,
+      "WAITING": 96,
+      "NO_WORK": 13,
+      "BREAK": 61,
+      "PLANNED": 18,
+      "upstream": 59,
+      "internal": 37
+     },
+     "Manual Pack": {
+      "RUNNING": 433,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 11,
+      "BREAK": 61,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 65,
+    "bottlenecks": [
+     [
+      "Plate Change",
+      65
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      58
+     ],
+     [
+      "Waiting for Fajita",
+      49
+     ],
+     [
+      "MAREL - Operator on Break",
+      34
+     ],
+     [
+      "Maintenance",
+      29
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 97
+    },
+    "observation": "Today's largest source of lost production time was plate change, accounting for 1h 5m. Variovac 2 experienced the highest waiting time at 1h 37m.",
+    "shift": [
+     "08:02",
+     "16:48"
+    ]
+   },
+   {
+    "date": "2026-10-23",
+    "totals": {
+     "RUNNING": 844,
+     "CHANGEOVER": 44,
+     "WAITING": 204,
+     "NO_WORK": 498,
+     "BREAK": 65,
+     "PLANNED": 45,
+     "upstream": 184,
+     "internal": 20
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 201,
+      "CHANGEOVER": 8,
+      "WAITING": 103,
+      "NO_WORK": 0,
+      "BREAK": 33,
+      "PLANNED": 13,
+      "upstream": 103,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 276,
+      "CHANGEOVER": 0,
+      "WAITING": 42,
+      "NO_WORK": 100,
+      "BREAK": 65,
+      "PLANNED": 14,
+      "upstream": 41,
+      "internal": 1
+     },
+     "Variovac 3": {
+      "RUNNING": 207,
+      "CHANGEOVER": 36,
+      "WAITING": 59,
+      "NO_WORK": 73,
+      "BREAK": 65,
+      "PLANNED": 18,
+      "upstream": 40,
+      "internal": 19
+     },
+     "Manual Pack": {
+      "RUNNING": 160,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 325,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 49,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      103
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      39
+     ],
+     [
+      "Production Department Behind Schedule",
+      37
+     ],
+     [
+      "Film Change",
+      26
+     ],
+     [
+      "Machine Breakdown",
+      19
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 103
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 1h 43m of upstream delay. Variovac 1 experienced the highest waiting time at 1h 43m.",
+    "shift": [
+     "07:59",
+     "16:28"
+    ]
+   },
+   {
+    "date": "2026-10-26",
+    "totals": {
+     "RUNNING": 980,
+     "CHANGEOVER": 24,
+     "WAITING": 390,
+     "NO_WORK": 252,
+     "BREAK": 69,
+     "PLANNED": 74,
+     "upstream": 381,
+     "internal": 9
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 141,
+      "CHANGEOVER": 0,
+      "WAITING": 313,
+      "NO_WORK": 0,
+      "BREAK": 69,
+      "PLANNED": 21,
+      "upstream": 307,
+      "internal": 6
+     },
+     "Variovac 2": {
+      "RUNNING": 347,
+      "CHANGEOVER": 0,
+      "WAITING": 64,
+      "NO_WORK": 53,
+      "BREAK": 68,
+      "PLANNED": 22,
+      "upstream": 61,
+      "internal": 3
+     },
+     "Variovac 3": {
+      "RUNNING": 290,
+      "CHANGEOVER": 24,
+      "WAITING": 13,
+      "NO_WORK": 130,
+      "BREAK": 68,
+      "PLANNED": 31,
+      "upstream": 13,
+      "internal": 0
+     },
+     "Manual Pack": {
+      "RUNNING": 202,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 69,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 53,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      218
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      89
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      36
+     ],
+     [
+      "Machine Setup",
+      24
+     ],
+     [
+      "MAREL - Operator on Break",
+      24
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 313
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 3h 38m of upstream delay. Variovac 1 experienced the highest waiting time at 5h 13m.",
+    "shift": [
+     "08:00",
+     "17:20"
+    ]
+   },
+   {
+    "date": "2026-10-27",
+    "totals": {
+     "RUNNING": 1047,
+     "CHANGEOVER": 37,
+     "WAITING": 416,
+     "NO_WORK": 64,
+     "BREAK": 67,
+     "PLANNED": 55,
+     "upstream": 308,
+     "internal": 108
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 163,
+      "CHANGEOVER": 0,
+      "WAITING": 241,
+      "NO_WORK": 0,
+      "BREAK": 67,
+      "PLANNED": 19,
+      "upstream": 213,
+      "internal": 28
+     },
+     "Variovac 2": {
+      "RUNNING": 227,
+      "CHANGEOVER": 16,
+      "WAITING": 100,
+      "NO_WORK": 64,
+      "BREAK": 65,
+      "PLANNED": 15,
+      "upstream": 70,
+      "internal": 30
+     },
+     "Variovac 3": {
+      "RUNNING": 309,
+      "CHANGEOVER": 21,
+      "WAITING": 75,
+      "NO_WORK": 0,
+      "BREAK": 64,
+      "PLANNED": 21,
+      "upstream": 25,
+      "internal": 50
+     },
+     "Manual Pack": {
+      "RUNNING": 348,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 33,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 72,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      153
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      82
+     ],
+     [
+      "Employee Shortage",
+      58
+     ],
+     [
+      "Required Cleaning",
+      32
+     ],
+     [
+      "MAREL - Chicken Muscle Being Cut, Not Ready Yet",
+      25
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 241
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 2h 33m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 1m.",
+    "shift": [
+     "08:01",
+     "17:06"
+    ]
+   },
+   {
+    "date": "2026-10-28",
+    "totals": {
+     "RUNNING": 499,
+     "CHANGEOVER": 49,
+     "WAITING": 611,
+     "NO_WORK": 114,
+     "BREAK": 39,
+     "PLANNED": 33,
+     "upstream": 491,
+     "internal": 120
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 73,
+      "CHANGEOVER": 0,
+      "WAITING": 367,
+      "NO_WORK": 0,
+      "BREAK": 38,
+      "PLANNED": 11,
+      "upstream": 355,
+      "internal": 12
+     },
+     "Variovac 2": {
+      "RUNNING": 147,
+      "CHANGEOVER": 0,
+      "WAITING": 103,
+      "NO_WORK": 24,
+      "BREAK": 37,
+      "PLANNED": 11,
+      "upstream": 97,
+      "internal": 6
+     },
+     "Variovac 3": {
+      "RUNNING": 118,
+      "CHANGEOVER": 49,
+      "WAITING": 80,
+      "NO_WORK": 68,
+      "BREAK": 35,
+      "PLANNED": 11,
+      "upstream": 39,
+      "internal": 41
+     },
+     "Manual Pack": {
+      "RUNNING": 161,
+      "CHANGEOVER": 0,
+      "WAITING": 61,
+      "NO_WORK": 22,
+      "BREAK": 36,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 61
+     }
+    },
+    "recordCount": 56,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      271
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      78
+     ],
+     [
+      "Employee Reassigned",
+      61
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 1",
+      52
+     ],
+     [
+      "Machine Setup",
+      39
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 367
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 4h 31m of upstream delay. Variovac 1 experienced the highest waiting time at 6h 7m.",
+    "shift": [
+     "08:01",
+     "16:21"
+    ]
+   },
+   {
+    "date": "2026-10-29",
+    "totals": {
+     "RUNNING": 1253,
+     "CHANGEOVER": 29,
+     "WAITING": 368,
+     "NO_WORK": 78,
+     "BREAK": 64,
+     "PLANNED": 68,
+     "upstream": 160,
+     "internal": 208
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 399,
+      "CHANGEOVER": 11,
+      "WAITING": 40,
+      "NO_WORK": 0,
+      "BREAK": 64,
+      "PLANNED": 31,
+      "upstream": 28,
+      "internal": 12
+     },
+     "Variovac 2": {
+      "RUNNING": 128,
+      "CHANGEOVER": 0,
+      "WAITING": 191,
+      "NO_WORK": 78,
+      "BREAK": 64,
+      "PLANNED": 15,
+      "upstream": 108,
+      "internal": 83
+     },
+     "Variovac 3": {
+      "RUNNING": 325,
+      "CHANGEOVER": 18,
+      "WAITING": 110,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 22,
+      "upstream": 0,
+      "internal": 110
+     },
+     "Manual Pack": {
+      "RUNNING": 401,
+      "CHANGEOVER": 0,
+      "WAITING": 27,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 0,
+      "upstream": 24,
+      "internal": 3
+     }
+    },
+    "recordCount": 64,
+    "bottlenecks": [
+     [
+      "Employee Shortage",
+      98
+     ],
+     [
+      "Waiting for Fajita",
+      68
+     ],
+     [
+      "Required Cleaning",
+      41
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      40
+     ],
+     [
+      "All scales are occupied ",
+      32
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 191
+    },
+    "observation": "Today's largest source of lost production time was employee shortage, accounting for 1h 38m. Variovac 2 experienced the highest waiting time at 3h 11m.",
+    "shift": [
+     "08:02",
+     "23:36"
+    ]
+   },
+   {
+    "date": "2026-10-30",
+    "totals": {
+     "RUNNING": 927,
+     "CHANGEOVER": 63,
+     "WAITING": 319,
+     "NO_WORK": 458,
+     "BREAK": 69,
+     "PLANNED": 36,
+     "upstream": 234,
+     "internal": 85
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 228,
+      "CHANGEOVER": 13,
+      "WAITING": 164,
+      "NO_WORK": 0,
+      "BREAK": 69,
+      "PLANNED": 12,
+      "upstream": 164,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 316,
+      "CHANGEOVER": 22,
+      "WAITING": 70,
+      "NO_WORK": 11,
+      "BREAK": 69,
+      "PLANNED": 8,
+      "upstream": 70,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 150,
+      "CHANGEOVER": 28,
+      "WAITING": 85,
+      "NO_WORK": 217,
+      "BREAK": 33,
+      "PLANNED": 16,
+      "upstream": 0,
+      "internal": 85
+     },
+     "Manual Pack": {
+      "RUNNING": 233,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 230,
+      "BREAK": 33,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 74,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      100
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      73
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      47
+     ],
+     [
+      "Required Cleaning",
+      45
+     ],
+     [
+      "Waiting for QA",
+      32
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 164
+    },
+    "observation": "Today's largest source of lost production time was marel - meat ready, but cutting for variovac 2, accounting for 1h 40m of upstream delay. Variovac 1 experienced the highest waiting time at 2h 44m.",
+    "shift": [
+     "08:03",
+     "16:57"
+    ]
+   },
+   {
+    "date": "2026-11-02",
+    "totals": {
+     "RUNNING": 909,
+     "CHANGEOVER": 19,
+     "WAITING": 506,
+     "NO_WORK": 137,
+     "BREAK": 63,
+     "PLANNED": 247,
+     "upstream": 401,
+     "internal": 105
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 170,
+      "CHANGEOVER": 0,
+      "WAITING": 280,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 78,
+      "upstream": 280,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 271,
+      "CHANGEOVER": 0,
+      "WAITING": 46,
+      "NO_WORK": 122,
+      "BREAK": 60,
+      "PLANNED": 78,
+      "upstream": 46,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 251,
+      "CHANGEOVER": 19,
+      "WAITING": 150,
+      "NO_WORK": 11,
+      "BREAK": 63,
+      "PLANNED": 91,
+      "upstream": 75,
+      "internal": 75
+     },
+     "Manual Pack": {
+      "RUNNING": 217,
+      "CHANGEOVER": 0,
+      "WAITING": 30,
+      "NO_WORK": 4,
+      "BREAK": 62,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 30
+     }
+    },
+    "recordCount": 69,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      237
+     ],
+     [
+      "Required Cleaning",
+      62
+     ],
+     [
+      "Waiting for Fajita",
+      60
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      38
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      35
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 280
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 3h 57m of upstream delay. Variovac 1 experienced the highest waiting time at 4h 40m.",
+    "shift": [
+     "07:02",
+     "17:10"
+    ]
+   },
+   {
+    "date": "2026-11-03",
+    "totals": {
+     "RUNNING": 793,
+     "CHANGEOVER": 21,
+     "WAITING": 213,
+     "NO_WORK": 558,
+     "BREAK": 63,
+     "PLANNED": 40,
+     "upstream": 152,
+     "internal": 61
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 81,
+      "CHANGEOVER": 15,
+      "WAITING": 51,
+      "NO_WORK": 326,
+      "BREAK": 0,
+      "PLANNED": 11,
+      "upstream": 51,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 314,
+      "CHANGEOVER": 6,
+      "WAITING": 82,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 11,
+      "upstream": 82,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 259,
+      "CHANGEOVER": 0,
+      "WAITING": 80,
+      "NO_WORK": 48,
+      "BREAK": 63,
+      "PLANNED": 18,
+      "upstream": 19,
+      "internal": 61
+     },
+     "Manual Pack": {
+      "RUNNING": 139,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 184,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 69,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      82
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      51
+     ],
+     [
+      "Required Cleaning",
+      45
+     ],
+     [
+      "Film Change",
+      21
+     ],
+     [
+      "TRIMMERS - Cutting Chicken Muscle by Hand",
+      19
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 82
+    },
+    "observation": "Today's largest source of lost production time was marel - meat being cut, not ready yet, accounting for 1h 22m of upstream delay. Variovac 2 experienced the highest waiting time at 1h 22m.",
+    "shift": [
+     "08:03",
+     "16:18"
+    ]
+   },
+   {
+    "date": "2026-11-04",
+    "totals": {
+     "RUNNING": 791,
+     "CHANGEOVER": 50,
+     "WAITING": 355,
+     "NO_WORK": 321,
+     "BREAK": 69,
+     "PLANNED": 61,
+     "upstream": 317,
+     "internal": 38
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 213,
+      "CHANGEOVER": 11,
+      "WAITING": 190,
+      "NO_WORK": 34,
+      "BREAK": 69,
+      "PLANNED": 17,
+      "upstream": 190,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 266,
+      "CHANGEOVER": 29,
+      "WAITING": 109,
+      "NO_WORK": 28,
+      "BREAK": 69,
+      "PLANNED": 17,
+      "upstream": 96,
+      "internal": 13
+     },
+     "Variovac 3": {
+      "RUNNING": 183,
+      "CHANGEOVER": 10,
+      "WAITING": 56,
+      "NO_WORK": 84,
+      "BREAK": 0,
+      "PLANNED": 27,
+      "upstream": 31,
+      "internal": 25
+     },
+     "Manual Pack": {
+      "RUNNING": 129,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 175,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 78,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      101
+     ],
+     [
+      "TRIMMERS - Not Started Yet",
+      83
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      76
+     ],
+     [
+      "Plate Change",
+      29
+     ],
+     [
+      "Waiting for Slicer",
+      23
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 190
+    },
+    "observation": "Today's largest source of lost production time was marel - meat ready, but cutting for variovac 2, accounting for 1h 41m of upstream delay. Variovac 1 experienced the highest waiting time at 3h 10m.",
+    "shift": [
+     "08:01",
+     "17:22"
+    ]
+   },
+   {
+    "date": "2026-11-05",
+    "totals": {
+     "RUNNING": 1151,
+     "CHANGEOVER": 31,
+     "WAITING": 123,
+     "NO_WORK": 0,
+     "BREAK": 64,
+     "PLANNED": 185,
+     "upstream": 113,
+     "internal": 10
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 391,
+      "CHANGEOVER": 0,
+      "WAITING": 33,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 52,
+      "upstream": 33,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 347,
+      "CHANGEOVER": 14,
+      "WAITING": 61,
+      "NO_WORK": 0,
+      "BREAK": 64,
+      "PLANNED": 52,
+      "upstream": 61,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 343,
+      "CHANGEOVER": 17,
+      "WAITING": 19,
+      "NO_WORK": 0,
+      "BREAK": 64,
+      "PLANNED": 81,
+      "upstream": 19,
+      "internal": 0
+     },
+     "Manual Pack": {
+      "RUNNING": 70,
+      "CHANGEOVER": 0,
+      "WAITING": 10,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 10
+     }
+    },
+    "recordCount": 60,
+    "bottlenecks": [
+     [
+      "MAREL - Operator on Break",
+      28
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      25
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      24
+     ],
+     [
+      "Waiting for Diced Meat",
+      19
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 1",
+      17
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 61
+    },
+    "observation": "Today's largest source of lost production time was marel - operator on break, accounting for 28m of upstream delay. Variovac 2 experienced the highest waiting time at 1h 1m.",
+    "shift": [
+     "08:00",
+     "17:26"
+    ]
+   },
+   {
+    "date": "2026-11-06",
+    "totals": {
+     "RUNNING": 1045,
+     "CHANGEOVER": 85,
+     "WAITING": 210,
+     "NO_WORK": 0,
+     "BREAK": 65,
+     "PLANNED": 77,
+     "upstream": 135,
+     "internal": 75
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 332,
+      "CHANGEOVER": 18,
+      "WAITING": 47,
+      "NO_WORK": 0,
+      "BREAK": 65,
+      "PLANNED": 23,
+      "upstream": 47,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 266,
+      "CHANGEOVER": 42,
+      "WAITING": 74,
+      "NO_WORK": 0,
+      "BREAK": 65,
+      "PLANNED": 23,
+      "upstream": 74,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 290,
+      "CHANGEOVER": 25,
+      "WAITING": 89,
+      "NO_WORK": 0,
+      "BREAK": 65,
+      "PLANNED": 31,
+      "upstream": 14,
+      "internal": 75
+     },
+     "Manual Pack": {
+      "RUNNING": 157,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 0,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 52,
+    "bottlenecks": [
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      72
+     ],
+     [
+      "Required Cleaning",
+      64
+     ],
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      49
+     ],
+     [
+      "Plate Change",
+      37
+     ],
+     [
+      "Machine Setup",
+      25
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 3",
+     "minutes": 89
+    },
+    "observation": "Today's largest source of lost production time was marel - waiting for trimmed meat, accounting for 1h 12m of upstream delay. Variovac 3 experienced the highest waiting time at 1h 29m.",
+    "shift": [
+     "07:57",
+     "17:02"
+    ]
+   },
+   {
+    "date": "2026-11-09",
+    "totals": {
+     "RUNNING": 846,
+     "CHANGEOVER": 18,
+     "WAITING": 273,
+     "NO_WORK": 202,
+     "BREAK": 67,
+     "PLANNED": 70,
+     "upstream": 273,
+     "internal": 0
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 283,
+      "CHANGEOVER": 0,
+      "WAITING": 144,
+      "NO_WORK": 0,
+      "BREAK": 66,
+      "PLANNED": 24,
+      "upstream": 144,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 282,
+      "CHANGEOVER": 0,
+      "WAITING": 73,
+      "NO_WORK": 35,
+      "BREAK": 67,
+      "PLANNED": 24,
+      "upstream": 73,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 149,
+      "CHANGEOVER": 18,
+      "WAITING": 56,
+      "NO_WORK": 16,
+      "BREAK": 30,
+      "PLANNED": 22,
+      "upstream": 56,
+      "internal": 0
+     },
+     "Manual Pack": {
+      "RUNNING": 132,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 151,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 64,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      138
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 1",
+      32
+     ],
+     [
+      "Product Not Thawed/Ready",
+      28
+     ],
+     [
+      "Waiting for Fajita",
+      28
+     ],
+     [
+      "MAREL - Operator on Break",
+      27
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 144
+    },
+    "observation": "Today's largest source of lost production time was marel - meat ready, but cutting for variovac 2, accounting for 2h 18m of upstream delay. Variovac 1 experienced the highest waiting time at 2h 24m.",
+    "shift": [
+     "08:01",
+     "16:41"
+    ]
+   },
+   {
+    "date": "2026-11-12",
+    "totals": {
+     "RUNNING": 1068,
+     "CHANGEOVER": 59,
+     "WAITING": 221,
+     "NO_WORK": 632,
+     "BREAK": 69,
+     "PLANNED": 13,
+     "upstream": 116,
+     "internal": 105
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 407,
+      "CHANGEOVER": 23,
+      "WAITING": 52,
+      "NO_WORK": 0,
+      "BREAK": 69,
+      "PLANNED": 13,
+      "upstream": 52,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 256,
+      "CHANGEOVER": 18,
+      "WAITING": 128,
+      "NO_WORK": 126,
+      "BREAK": 35,
+      "PLANNED": 0,
+      "upstream": 64,
+      "internal": 64
+     },
+     "Variovac 3": {
+      "RUNNING": 170,
+      "CHANGEOVER": 18,
+      "WAITING": 41,
+      "NO_WORK": 341,
+      "BREAK": 0,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 41
+     },
+     "Manual Pack": {
+      "RUNNING": 235,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 165,
+      "BREAK": 35,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 62,
+    "bottlenecks": [
+     [
+      "Employee Shortage",
+      52
+     ],
+     [
+      "Employee Reassigned",
+      50
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      39
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 2",
+      39
+     ],
+     [
+      "Waiting for Band Saw Product",
+      25
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 128
+    },
+    "observation": "Today's largest source of lost production time was employee shortage, accounting for 52m. Variovac 2 experienced the highest waiting time at 2h 8m.",
+    "shift": [
+     "07:56",
+     "17:47"
+    ]
+   },
+   {
+    "date": "2026-11-13",
+    "totals": {
+     "RUNNING": 1174,
+     "CHANGEOVER": 51,
+     "WAITING": 339,
+     "NO_WORK": 104,
+     "BREAK": 62,
+     "PLANNED": 5,
+     "upstream": 65,
+     "internal": 274
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 238,
+      "CHANGEOVER": 0,
+      "WAITING": 198,
+      "NO_WORK": 0,
+      "BREAK": 62,
+      "PLANNED": 0,
+      "upstream": 28,
+      "internal": 170
+     },
+     "Variovac 2": {
+      "RUNNING": 285,
+      "CHANGEOVER": 22,
+      "WAITING": 98,
+      "NO_WORK": 89,
+      "BREAK": 62,
+      "PLANNED": 0,
+      "upstream": 37,
+      "internal": 61
+     },
+     "Variovac 3": {
+      "RUNNING": 386,
+      "CHANGEOVER": 29,
+      "WAITING": 43,
+      "NO_WORK": 0,
+      "BREAK": 62,
+      "PLANNED": 5,
+      "upstream": 0,
+      "internal": 43
+     },
+     "Manual Pack": {
+      "RUNNING": 265,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 15,
+      "BREAK": 62,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 57,
+    "bottlenecks": [
+     [
+      "Employee Shortage",
+      231
+     ],
+     [
+      "MAREL - Meat Ready, but Cutting for Variovac 1",
+      37
+     ],
+     [
+      "Required Cleaning",
+      32
+     ],
+     [
+      "MAREL - Waiting for Trimmed Meat",
+      28
+     ],
+     [
+      "Machine Setup",
+      22
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 198
+    },
+    "observation": "Today's largest source of lost production time was employee shortage, accounting for 3h 51m. Variovac 1 experienced the highest waiting time at 3h 18m.",
+    "shift": [
+     "08:19",
+     "17:52"
+    ]
+   },
+   {
+    "date": "2026-11-16",
+    "totals": {
+     "RUNNING": 1195,
+     "CHANGEOVER": 20,
+     "WAITING": 64,
+     "NO_WORK": 264,
+     "BREAK": 63,
+     "PLANNED": 22,
+     "upstream": 33,
+     "internal": 31
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 187,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 249,
+      "BREAK": 0,
+      "PLANNED": 22,
+      "upstream": 0,
+      "internal": 0
+     },
+     "Variovac 2": {
+      "RUNNING": 242,
+      "CHANGEOVER": 0,
+      "WAITING": 45,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 0,
+      "upstream": 33,
+      "internal": 12
+     },
+     "Variovac 3": {
+      "RUNNING": 383,
+      "CHANGEOVER": 20,
+      "WAITING": 19,
+      "NO_WORK": 0,
+      "BREAK": 63,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 19
+     },
+     "Manual Pack": {
+      "RUNNING": 383,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 15,
+      "BREAK": 63,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 45,
+    "bottlenecks": [
+     [
+      "MAREL - Meat Being Cut, Not Ready Yet",
+      27
+     ],
+     [
+      "Machine Setup",
+      20
+     ],
+     [
+      "Employee Shortage",
+      12
+     ],
+     [
+      "Required Cleaning",
+      11
+     ],
+     [
+      "Pre-Op Inspection",
+      8
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 2",
+     "minutes": 45
+    },
+    "observation": "Today's largest source of lost production time was marel - meat being cut, not ready yet, accounting for 27m of upstream delay. Variovac 2 experienced the highest waiting time at 45m.",
+    "shift": [
+     "07:57",
+     "16:28"
+    ]
+   },
+   {
+    "date": "2026-11-17",
+    "totals": {
+     "RUNNING": 949,
+     "CHANGEOVER": 63,
+     "WAITING": 243,
+     "NO_WORK": 329,
+     "BREAK": 66,
+     "PLANNED": 4,
+     "upstream": 165,
+     "internal": 78
+    },
+    "perMachine": {
+     "Variovac 1": {
+      "RUNNING": 103,
+      "CHANGEOVER": 0,
+      "WAITING": 143,
+      "NO_WORK": 201,
+      "BREAK": 33,
+      "PLANNED": 0,
+      "upstream": 118,
+      "internal": 25
+     },
+     "Variovac 2": {
+      "RUNNING": 300,
+      "CHANGEOVER": 33,
+      "WAITING": 8,
+      "NO_WORK": 73,
+      "BREAK": 66,
+      "PLANNED": 0,
+      "upstream": 8,
+      "internal": 0
+     },
+     "Variovac 3": {
+      "RUNNING": 256,
+      "CHANGEOVER": 30,
+      "WAITING": 92,
+      "NO_WORK": 39,
+      "BREAK": 66,
+      "PLANNED": 4,
+      "upstream": 39,
+      "internal": 53
+     },
+     "Manual Pack": {
+      "RUNNING": 290,
+      "CHANGEOVER": 0,
+      "WAITING": 0,
+      "NO_WORK": 16,
+      "BREAK": 33,
+      "PLANNED": 0,
+      "upstream": 0,
+      "internal": 0
+     }
+    },
+    "recordCount": 56,
+    "bottlenecks": [
+     [
+      "TRIMMERS - Not Started Yet",
+      80
+     ],
+     [
+      "Required Cleaning",
+      41
+     ],
+     [
+      "Waiting for Fajita",
+      39
+     ],
+     [
+      "Film Change",
+      33
+     ],
+     [
+      "Machine Setup",
+      30
+     ]
+    ],
+    "mma": {
+     "machine": "Variovac 1",
+     "minutes": 143
+    },
+    "observation": "Today's largest source of lost production time was trimmers - not started yet, accounting for 1h 20m of upstream delay. Variovac 1 experienced the highest waiting time at 2h 23m.",
+    "shift": [
+     "08:15",
+     "16:25"
+    ]
+   }
+  ],
+  "plh": {
+   "lines": {
+    "lbs": 174549.24799999988,
+    "qty": 15016,
+    "gH": 979.7999999999997,
+    "nH": 721.4166666666664,
+    "gPLH": 178.14783425188807,
+    "nPLH": 241.95344530437788,
+    "jobs": 471,
+    "runs": 505,
+    "best": [
+     "601129 BEEF STROGI",
+     4117.5
+    ],
+    "worst": [
+     "603700 STEAK SIRLOIN CI PRIME RTC 9oz EARLS",
+     2.341040462427746
+    ]
+   },
+   "side": {
+    "lbs": 4377.083,
+    "qty": 493,
+    "gH": 45.46666666666666,
+    "nH": 40.400000000000006,
+    "gPLH": 96.27015395894428,
+    "nPLH": 108.34363861386136,
+    "jobs": 13,
+    "runs": 13,
+    "best": [
+     "Slicer",
+     226.55263157894737
+    ],
+    "worst": [
+     "Tomahawk",
+     22.66082474226804
+    ]
+   },
+   "byMachine": {
+    "Variovac 1": {
+     "lbs": 29993.101999999995,
+     "qty": 3758,
+     "gH": 240.79999999999993,
+     "nH": 165.2833333333333,
+     "gPLH": 124.55607142857144,
+     "nPLH": 181.46476958757688,
+     "jobs": 93,
+     "runs": 96,
+     "best": [
+      "603699 STEAK RIBEYE 1/2 TL AAA RTC 14oz EARLS",
+      840
+     ],
+     "worst": [
+      "603641 RIBEYE CAP 10oz",
+      5.5005494505494505
+     ]
+    },
+    "Variovac 2": {
+     "lbs": 17591.297999999995,
+     "qty": 1782,
+     "gH": 155.88333333333333,
+     "nH": 101.0833333333333,
+     "gPLH": 112.84912648348121,
+     "nPLH": 174.0276801319044,
+     "jobs": 113,
+     "runs": 117,
+     "best": [
+      "603631 STEAK SIRLOIN CI PRIME 6oz EARLS",
+      945
+     ],
+     "worst": [
+      "603700 STEAK SIRLOIN CI PRIME RTC 9oz EARLS",
+      2.341040462427746
+     ]
+    },
+    "Variovac 3": {
+     "lbs": 69734.82900000001,
+     "qty": 6292,
+     "gH": 369.7500000000001,
+     "nH": 269.4833333333333,
+     "gPLH": 188.59994320486814,
+     "nPLH": 258.77232605603325,
+     "jobs": 150,
+     "runs": 154,
+     "best": [
+      "602954 BEEF TENDERLOIN EE WHL PLD 5LB 1PPX2/CS",
+      1054.8999999999999
+     ],
+     "worst": [
+      "701161 PORK CUTLET DELICATED 4oz 10lbs/CS",
+      8.543478260869565
+     ]
+    },
+    "Manual Pack": {
+     "lbs": 57230.01900000002,
+     "qty": 3184,
+     "gH": 213.36666666666673,
+     "nH": 185.56666666666672,
+     "gPLH": 268.22380409311046,
+     "nPLH": 308.40678462367526,
+     "jobs": 115,
+     "runs": 138,
+     "best": [
+      "601129 BEEF STROGI",
+      4117.5
+     ],
+     "worst": [
+      "601057 BEEF RIBEYE IMP RBX",
+      52.199999999999996
+     ]
+    }
+   },
+   "byMonth": {
+    "2026-09": {
+     "lbs": 21310.099000000002,
+     "qty": 2106,
+     "gH": 98.26666666666664,
+     "nH": 76.65,
+     "gPLH": 216.85989484396208,
+     "nPLH": 278.0182517938682,
+     "jobs": 31,
+     "runs": 32,
+     "best": [
+      "601781 BEEF BRISKET AA RBX FZ-CMPS",
+      494.6094674556213
+     ],
+     "worst": [
+      "695641 SIRLOIN PLD AAA RTC-6oz SAMPLE",
+      22.999999999999996
+     ]
+    },
+    "2026-10": {
+     "lbs": 101306.22,
+     "qty": 8268,
+     "gH": 561.116666666667,
+     "nH": 402.98333333333335,
+     "gPLH": 180.5439510499895,
+     "nPLH": 251.39059514454692,
+     "jobs": 280,
+     "runs": 295,
+     "best": [
+      "601129 BEEF STROGI",
+      4117.5
+     ],
+     "worst": [
+      "603700 STEAK SIRLOIN CI PRIME RTC 9oz EARLS",
+      2.341040462427746
+     ]
+    },
+    "2026-11": {
+     "lbs": 51932.929000000026,
+     "qty": 4642,
+     "gH": 320.4166666666666,
+     "nH": 241.78333333333327,
+     "gPLH": 162.07936228868672,
+     "nPLH": 214.79118632384382,
+     "jobs": 160,
+     "runs": 178,
+     "best": [
+      "601467 BEEF TENDON BYPRODUCT 50lb",
+      1239.0857142857142
+     ],
+     "worst": [
+      "701161 PORK CUTLET DELICATED 4oz 10lbs/CS",
+      8.543478260869565
+     ]
+    }
+   },
+   "incomplete": 256
+  },
+  "range": {
+   "startDate": "2026-11-11",
+   "endDate": "2026-11-17",
+   "totals": {
+    "RUNNING": 4386,
+    "CHANGEOVER": 193,
+    "WAITING": 867,
+    "NO_WORK": 1329,
+    "BREAK": 260,
+    "PLANNED": 44,
+    "upstream": 379,
+    "internal": 488
+   },
+   "perMachine": {
+    "Variovac 1": {
+     "RUNNING": 935,
+     "CHANGEOVER": 23,
+     "WAITING": 393,
+     "NO_WORK": 450,
+     "BREAK": 164,
+     "PLANNED": 35,
+     "upstream": 198,
+     "internal": 195
+    },
+    "Variovac 2": {
+     "RUNNING": 1083,
+     "CHANGEOVER": 73,
+     "WAITING": 279,
+     "NO_WORK": 288,
+     "BREAK": 226,
+     "PLANNED": 0,
+     "upstream": 142,
+     "internal": 137
+    },
+    "Variovac 3": {
+     "RUNNING": 1195,
+     "CHANGEOVER": 97,
+     "WAITING": 195,
+     "NO_WORK": 380,
+     "BREAK": 191,
+     "PLANNED": 9,
+     "upstream": 39,
+     "internal": 156
+    },
+    "Manual Pack": {
+     "RUNNING": 1173,
+     "CHANGEOVER": 0,
+     "WAITING": 0,
+     "NO_WORK": 211,
+     "BREAK": 193,
+     "PLANNED": 0,
+     "upstream": 0,
+     "internal": 0
+    }
+   },
+   "bottlenecks": [
+    [
+     "Employee Shortage",
+     320
+    ],
+    [
+     "Machine Setup",
+     90
+    ],
+    [
+     "Required Cleaning",
+     84
+    ],
+    [
+     "TRIMMERS - Not Started Yet",
+     80
+    ],
+    [
+     "Film Change",
+     78
+    ]
+   ],
+   "bottleneckMeta": {
+    "Employee Shortage": "Labour / Operational",
+    "Machine Setup": "Changeover",
+    "Required Cleaning": "Cleaning / Sanitation",
+    "TRIMMERS - Not Started Yet": "Upstream / Product",
+    "Film Change": "Changeover"
+   },
+   "bottleneckNotes": {
+    "Employee Shortage": [
+     "(2 packaging staff on Fajita/Slicer)",
+     "(3 packaging staff on Fajita/Slicer/Vacuum Sealer)"
+    ],
+    "Machine Setup": [],
+    "Required Cleaning": [],
+    "TRIMMERS - Not Started Yet": [
+     "602958,604328,604236,650062"
+    ],
+    "Film Change": []
+   },
+   "machineMostAffected": {
+    "machine": "Variovac 1",
+    "minutes": 393
+   },
+   "dayTrend": [
+    {
+     "date": "2026-11-12",
+     "waiting": 221,
+     "running": 1068
+    },
+    {
+     "date": "2026-11-13",
+     "waiting": 339,
+     "running": 1174
+    },
+    {
+     "date": "2026-11-16",
+     "waiting": 64,
+     "running": 1195
+    },
+    {
+     "date": "2026-11-17",
+     "waiting": 243,
+     "running": 949
+    }
+   ],
+   "daysWithData": 4,
+   "observation": "Across 4 days, the largest recurring source of lost time was employee shortage, totaling 5h 20m. Variovac 1 accumulated the most waiting time overall at 6h 33m. Nov 13, 2026 was the worst single day for waiting time, at 5h 39m.",
+   "recordCount": 220
+  },
+  "rangePLH": {
+   "lbs": 23629.368000000002,
+   "qty": 2205,
+   "gH": 132.33333333333334,
+   "nH": 101.30000000000001,
+   "gPLH": 178.55945591939548,
+   "nPLH": 233.26128331688054,
+   "jobs": 63,
+   "runs": 68,
+   "best": [
+    "601143 BEEF TRIM",
+    766.0714285714286
+   ],
+   "worst": [
+    "602954 BEEF TENDERLOIN EE WHL PLD 5LB 1PPX2/CS",
+    22.476428571428574
+   ]
+  },
+  "series": [
+   {
+    "date": "2026-11-12",
+    "plh": 166.961640625
+   },
+   {
+    "date": "2026-11-13",
+    "plh": 180.88962437987243
+   },
+   {
+    "date": "2026-11-16",
+    "plh": 202.39195471698113
+   },
+   {
+    "date": "2026-11-17",
+    "plh": 170.88153122901275
+   }
+  ]
+ },
+ "tests": [
+  {
+   "n": 1,
+   "name": "One machine, one employee",
+   "input": "08:00-09:00 x1, 300 lb",
+   "expected": "net 1 h, gross 1 h, PLH 300/300",
+   "actual": "net 1 h, gross 1 h, PLH 300/300",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 2,
+   "name": "One machine, two employees",
+   "input": "08:00-09:00 x2, 300 lb",
+   "expected": "labour 2 h, PLH 150",
+   "actual": "gross 2 h, net 2 h, PLH 150",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 3,
+   "name": "One machine, three employees",
+   "input": "08:00-10:00 x3, 600 lb",
+   "expected": "labour 6 h, PLH 100",
+   "actual": "gross 6 h, PLH 100",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 4,
+   "name": "Three machines simultaneously (department PLH)",
+   "input": "V1 300lb/1h, V2 200lb/2h, V3 600lb/3h",
+   "expected": "pooled 1100/6 = 183.333 (NOT mean of 300,100,200 = 200)",
+   "actual": "lbs 1100, hours 6, PLH 183.33333333333334",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 5,
+   "name": "Multiple products on one machine",
+   "input": "V1: A 200lb/2h, B 400lb/2h, A again 100lb/2h",
+   "expected": "2 jobs; job A = 300/4 = 75 PLH; B = 200",
+   "actual": "2 jobs; A 75; B 200",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 6,
+   "name": "Employee changes machine",
+   "input": "Bob V1 08:00-08:30 then V2 08:30-09:00; Ann V1, Cy V2 all hour",
+   "expected": "3 people x 60 = 180 person-min; V1 90, V2 90",
+   "actual": "V1 90, V2 90, total 180",
+   "pass": true,
+   "note": "Headcount-driven; correct only if operators update the crew count at the moment of the move."
+  },
+  {
+   "n": 7,
+   "name": "Break during production (30 min paid)",
+   "input": "run 08-10 & 10:30-11 x2, BREAK 10:00-10:30",
+   "expected": "net 300 min (5 h); gross 360 min (6 h); durationMin 150; BREAK record 30",
+   "actual": "net 300, gross 360, durationMin 150, break rec 30",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 8,
+   "name": "Downtime during a production session",
+   "input": "run 08-09 & 09:30-10 x2, WAITING 09:00-09:30",
+   "expected": "net 180 min, gross 240 min; gross PLH 67.5, net 90; WAITING record 30 min",
+   "actual": "net 180, gross 240, PLH 67.5/90, wait rec 30",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 9,
+   "name": "Multiple downtime categories",
+   "input": "run 80 min x2; WAIT upstream 20, CHANGEOVER 15, PLANNED 10, NO_WORK 25",
+   "expected": "net 160; gross 160+(20+15+10)x2 = 250 (NO_WORK unpaid); report RUN 80, WAIT 20 (upstream 20), CHG 15, PLANNED 10, NO_WORK 25",
+   "actual": "net 160, gross 250.00000000000003; report {\"RUNNING\":80,\"CHANGEOVER\":15,\"WAITING\":20,\"NO_WORK\":25,\"BREAK\":0,\"PLANNED\":10,\"upstream\":20,\"internal\":0}",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 10,
+   "name": "Zero production",
+   "input": "run 1 h x2, weight 0",
+   "expected": "PLH NOT CALCULABLE (null); excluded from PLH totals; listed as incomplete",
+   "actual": "grossPLH null, netPLH null, in PLH 0, incomplete 1",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 11,
+   "name": "Missing production weight",
+   "input": "weight left blank",
+   "expected": "weight stays missing (not 0 production); summary PLH NOT CALCULABLE",
+   "actual": "stored weightLbs 0; summary grossPLH 0, netPLH 0",
+   "pass": false,
+   "note": "App stores blank weight as 0 (flag via grossPLH null only). computePLHSummary returns 0, not null, when there are no hours; the card hides it when there are 0 jobs, but the number itself is 0 rather than NOT CALCULABLE."
+  },
+  {
+   "n": 12,
+   "name": "Missing labour information (0-minute run with weight)",
+   "input": "one 0-min segment, weight 250 lb",
+   "expected": "record kept and flagged NOT CALCULABLE (weight must not be lost)",
+   "actual": "records saved 0; return {\"count\":0,\"grossPLH\":null}",
+   "pass": false,
+   "note": "closeOutLiveRun drops the RUNNING record when every segment is 0 min, so the entered weight is silently discarded."
+  },
+  {
+   "n": "12b",
+   "name": "Combined job with 0 labour hours",
+   "input": "two runs same job, 100 lb each, 0 h",
+   "expected": "grossPLH NOT CALCULABLE (null)",
+   "actual": "grossPLH 0, netPLH null",
+   "pass": false,
+   "note": "groupPLHJobs sets grossPLH 0 (invented) but netPLH null - inconsistent; a 0 shows as the \"Lowest Product\"."
+  },
+  {
+   "n": 13,
+   "name": "Duplicate production record",
+   "input": "same V1 run 08-09, 300 lb saved twice",
+   "expected": "counted once (300 lb) or flagged",
+   "actual": "total lbs 600, hours 4, report RUNNING 120 min",
+   "pass": false,
+   "note": "No duplicate detection in PLH, reports or Live close-out; only manual entry warns about overlaps (confirmNoOverlap)."
+  },
+  {
+   "n": "13b",
+   "name": "Same live run finished from two devices",
+   "input": "device 2 still holds the open run",
+   "expected": "1 RUNNING record",
+   "actual": "2 RUNNING records, 400 lb",
+   "pass": false,
+   "note": "Matches real pair rmun962e9fxde0 / rmunczuu2080b3 (2026-09-29 V1)."
+  },
+  {
+   "n": 14,
+   "name": "Edited production record (finish 12:00 -> 11:00)",
+   "input": "run 08-10 & 10:30-12 x2, break 30; new end 11:00",
+   "expected": "durationMin 150; net 300 min; gross 360 min; PLH 700/6 = 116.67",
+   "actual": "durationMin 150, net 300, gross 360, PLH 116.66666666666667",
+   "pass": true,
+   "note": "Weight is kept unchanged after shortening the run - correct only if the weight really belongs to the shorter window."
+  },
+  {
+   "n": "14b",
+   "name": "Edit recalculation uses same paid-break rule",
+   "input": "two runs, each with a 30-min break (only 30 paid per line per day); edit run 2",
+   "expected": "run 2 gross after edit = 160 (no paid break left)",
+   "actual": "before edit 180; after edit 220",
+   "pass": false,
+   "note": "recalcLiveRunRecord gives the edited run a fresh 30 paid minutes; render() later re-applies the rule in memory, so the stored and shown gross can differ."
+  },
+  {
+   "n": 15,
+   "name": "Deleted production record",
+   "input": "report saved with 2 runs, then one deleted",
+   "expected": "saved and viewed report agree, or the change is flagged",
+   "actual": "saved RUNNING 120, viewed 60; no warning",
+   "pass": false,
+   "note": "Report view silently recomputes from current records; the saved snapshot (possibly already sent) is never compared. Real case: 2026-10-05 (18 records gone)."
+  },
+  {
+   "n": 16,
+   "name": "Daily aggregation",
+   "input": "V1 RUN 120 + BREAK 30; V2 BREAK 30 + WAIT up 30; MP WAIT int 20; Fajita side RUN 60",
+   "expected": "RUN 120, WAIT 50 (up 30 / int 20), recordCount 5 (side excluded), most waiting V2 30",
+   "actual": "{\"RUNNING\":120,\"CHANGEOVER\":0,\"WAITING\":50,\"NO_WORK\":0,\"BREAK\":30,\"PLANNED\":0,\"upstream\":30,\"internal\":20}, records 5, mma {\"machine\":\"Variovac 2\",\"minutes\":30}, sum machine BREAK 60",
+   "pass": true,
+   "note": "Department BREAK 30 = clock minutes (overlapping breaks merged) while machine BREAK totals add to 60: the two are not additive. Fajita (side) is omitted from the daily report without any note."
+  },
+  {
+   "n": 17,
+   "name": "Weekly aggregation",
+   "input": "Mon 500lb/1h (500 PLH), Tue 800lb/8h (100 PLH)",
+   "expected": "weekly = 1300/9 = 144.44 (not mean 300)",
+   "actual": "weekly 144.44444444444446; daily series 500, 100",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 18,
+   "name": "Monthly aggregation",
+   "input": "calendar month report",
+   "expected": "a calendar-month (1st to last day) report",
+   "actual": "no monthly report in app; presets: 30days 2026-10-20..2026-11-18, thisWeek 2026-11-16..2026-11-18",
+   "pass": false,
+   "note": "Only rolling \"Last 30 days\" and custom ranges exist. A calendar month can be entered manually as a custom range in Weekly Summary; the PLH maths there is pooled (correct)."
+  },
+  {
+   "n": 19,
+   "name": "Department-wide aggregation",
+   "input": "V1 400lb/2h, MP 200lb/2h, Vacuum Sealer 150lb/1h (side)",
+   "expected": "lines dept = 600/4 = 150 PLH; side reported separately (150 lb, 1 h)",
+   "actual": "lines 600 lb / 4 h = 150; side 150 lb / 1 h",
+   "pass": true,
+   "note": ""
+  },
+  {
+   "n": 20,
+   "name": "Manual Pack and side-machine production in Daily Report",
+   "input": "same 3 runs",
+   "expected": "Manual Pack in report; side machine shown or explicitly noted as excluded",
+   "actual": "perMachine keys Variovac 1, Variovac 2, Variovac 3, Manual Pack; RUNNING 120",
+   "pass": false,
+   "note": "Manual Pack is included. Side machines are excluded from daily/weekly reports by design (v157) with no note on the report itself."
+  },
+  {
+   "n": 21,
+   "name": "Record crossing midnight",
+   "input": "start 23:00 end 01:00",
+   "expected": "flagged / handled as 120 min",
+   "actual": "duration() = 0; overnight repair end = 23:00",
+   "pass": false,
+   "note": "App assumes a day shift: crossing midnight gives 0 min; the repair sets the end equal to the start (0 min). Acceptable for a single day shift only."
+  },
+  {
+   "n": 22,
+   "name": "Downtime overlapping another state",
+   "input": "WAITING 10:00-10:55 and BREAK 10:00-10:30 on V1",
+   "expected": "55 clock minutes on V1, overlap flagged",
+   "actual": "V1 WAITING 55 + BREAK 30 = 85; no flag",
+   "pass": false,
+   "note": "Reports never check overlaps; 30 min counted twice. Real cases on 2026-08-19, 08-21, 09-01, 09-15, 09-29."
+  },
+  {
+   "n": 23,
+   "name": "Planned stop entered as Waiting \"Other\"",
+   "input": "WAITING / Other / note \"Crew talk\"",
+   "expected": "counted as planned (excluded from bottlenecks/efficiency)",
+   "actual": "bottlenecks [[\"Crew talk\",55]]; V1 efficiency 0",
+   "pass": false,
+   "note": "Free text under Waiting is ranked as a bottleneck; 77 real records (797 min) of Crew Talk / Metal Detector / Town Hall / Stretching are WAITING."
+  },
+  {
+   "n": 24,
+   "name": "Rounding: no early rounding",
+   "input": "PLH 257.136 lb / 1.25 h",
+   "expected": "205.7088 stored unrounded",
+   "actual": "205.70880000000002",
+   "pass": true,
+   "note": "Stored hours and PLH are full-precision; rounding happens only in display (toFixed)."
+  }
+ ]
+}
