@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.63 - 2026-11-17 (Audit: a stop edited or deleted in History now updates its run labour and PLH; negative weight / quantity refused; Report check GREEN / YELLOW / RED on Daily, Crew Hours and Staffing screens; Reports list totals always live)';
+const APP_VERSION = 'v205.64 - 2026-11-17 (Data audit: report check finds overlaps, planned stops saved as Waiting, unusual PLH, no product, after-hours entries and reports changed after End Shift; planned-stop warning; same run never saved twice; weight never dropped; PLH coverage on every PLH figure; Best/Lowest from runs 15 min+; Most Waiting label; side machines and calendar months in Weekly; edit history; delete-range backup)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4477,7 +4477,7 @@ function renderDashboard(){
       ${bnList}
       ${mmw.minutes>0 ? `<div class="statrow" style="margin-top:8px;border-top:1px solid var(--line);padding-top:10px;"><span class="lbl">Machine Most Affected</span><span class="val">${mmw.machine}</span></div>` : ''}
     </div>
-    ${renderPLHCard(computePLHSummary(plhRecordsInRange(todayStr(),todayStr())), 'PLH Today')}
+    ${renderPLHCard(computePLHSummary(plhRecordsInRange(todayStr(),todayStr())), 'PLH Today', plhCoverage(todayStr(),todayStr()))}
     <button class="btn btn-secondary" onclick="Router.go('endShift')">End Shift →</button>
   `;
 }
@@ -4527,6 +4527,16 @@ function groupPLHJobs(recs){
     };
   });
 }
+/* v205.64 (audit): how much of the labour a PLH figure covers — runs with a weight vs all finished runs with labour (same kind: lines or side machines) */
+function plhCoverage(start, end, kind, machine){
+  const all = Store.records.filter(r=>r.plh && r.status==='RUNNING' && r.date>=start && r.date<=end && plhKindOk(r, kind) && (!machine || r.machine===machine) && (r.plh.grossLaborHours||0)>0);
+  const w = all.filter(r=>r.plh.grossPLH!=null), hA = all.reduce((t,r)=>t+r.plh.grossLaborHours,0), hW = w.reduce((t,r)=>t+r.plh.grossLaborHours,0);
+  const pct = hA>0 ? hW/hA*100 : 0, awaiting = all.length - w.length;
+  return {w: w.length, n: all.length, pct, awaiting, hA, hW, text: all.length ? `Based on ${w.length} of ${all.length} run${all.length===1?'':'s'} · ${(Math.round(pct*10)/10)%1===0 ? (Math.round(pct*10)/10).toFixed(0) : (Math.round(pct*10)/10).toFixed(1)}% of labour hours${awaiting?` · ${awaiting} awaiting weight`:''}` : ''}; }
+/* Best / Lowest product: only runs long enough to mean something (15 min+ and 0.25 labour hours+) with a believable PLH (20–2,000) */
+const PLH_BEST_MIN_MIN = 15, PLH_SANE_LO = 20, PLH_SANE_HI = 2000;
+function plhJobEligible(j){ const mins = (j.runs||[j]).reduce((t,r)=>t+(r.durationMin||0),0); const g = j.plh.grossPLH; return mins>=PLH_BEST_MIN_MIN && (j.plh.grossLaborHours||0)>=0.25 && g!=null && g>=PLH_SANE_LO && g<=PLH_SANE_HI; }
+function plhJobName(j){ return (j.plh && j.plh.product) || j.product || `${shortM(j.machine)} ${fmtDate(j.date)}`; }
 function computePLHSummary(recs){
   const totalWeight = recs.reduce((a,r)=>a+(r.plh.weightLbs||0),0);
   const totalQty = recs.reduce((a,r)=>a+(r.plh.quantity||0),0);
@@ -4536,7 +4546,7 @@ function computePLHSummary(recs){
   const netPLH = totalNetHours>0 ? totalWeight/totalNetHours : 0;
   const jobs = groupPLHJobs(recs);
   let best=null, worst=null;
-  jobs.forEach(r=>{ if(!best || r.plh.grossPLH>best.plh.grossPLH) best=r; if(!worst || r.plh.grossPLH<worst.plh.grossPLH) worst=r; });
+  jobs.filter(plhJobEligible).forEach(r=>{ if(!best || r.plh.grossPLH>best.plh.grossPLH) best=r; if(!worst || r.plh.grossPLH<worst.plh.grossPLH) worst=r; }); // v205.64: short runs and outliers left out
   const withTarget = jobs.filter(r=>r.plh.targetPLH);
   const avgTarget = withTarget.length ? withTarget.reduce((a,r)=>a+r.plh.targetPLH,0)/withTarget.length : null;
   return {totalWeight, totalQty, totalGrossHours, totalNetHours, grossPLH, netPLH, best, worst, avgTarget, runCount:jobs.length, rawRunCount:recs.length}; // runCount = jobs (same product combined)
@@ -4550,8 +4560,8 @@ function pdfSafe(t){ return String(t==null?'':t)
   .replace(/[—–]/g,'-').replace(/→/g,'->').replace(/×/g,'x').replace(/≈/g,'~').replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/…/g,'...').replace(/•/g,'·')
   .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g,''); }
 const PLH_DISCLAIMER = 'PLH figures are based only on jobs that were directly monitored and recorded during this period. They show measured production activity, not a complete productivity assessment of all machines or job orders.'; // v205.36
-function renderPLHCard(summary, title){
-  if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">No finished runs with weight recorded yet.</div></div>`;
+function renderPLHCard(summary, title, cov){
+  if(summary.runCount===0) return `<div class="card"><h3>${title}</h3><div class="empty">PLH: n/a — no finished runs with weight recorded yet.${cov && cov.awaiting ? ` ${cov.awaiting} run${cov.awaiting===1?'':'s'} awaiting weight.` : ''}</div></div>`;
   const varianceLine = summary.avgTarget!=null ? (()=>{
     const variance = summary.grossPLH - summary.avgTarget;
     const pct = variance/summary.avgTarget*100;
@@ -4568,12 +4578,13 @@ function renderPLHCard(summary, title){
       </div>
       ${varianceLine}
     </div>
+    ${cov && cov.text ? `<div style="font-size:12px;text-align:center;margin:-4px 0 8px;color:${cov.awaiting?'var(--change)':'var(--muted)'};">${cov.text}</div>` : ''}
     <div class="statrow"><span class="lbl">Total Pounds</span><span class="val">${Math.round(summary.totalWeight)}</span></div>
     <div class="statrow"><span class="lbl">Total Quantity</span><span class="val">${Math.round(summary.totalQty)}</span></div>
     <div class="statrow"><span class="lbl">Labour Hours (gross)</span><span class="val">${summary.totalGrossHours.toFixed(1)} <span style="font-size:12px;font-weight:400;color:var(--muted);">· ${labMin(summary.totalGrossHours)}</span></span></div>
     <div class="statrow"><span class="lbl">Jobs</span><span class="val">${summary.runCount}${summary.rawRunCount>summary.runCount?` <span style="color:var(--muted);font-size:11px;">(${summary.rawRunCount} runs)</span>`:''}</span></div>
-    ${summary.best ? `<div class="statrow"><span class="lbl">Best Product</span><span class="val" style="color:var(--run);font-size:12px;">${escapeHtml(summary.best.plh.product||summary.best.product||'')} — ${summary.best.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
-    ${summary.worst && summary.worst!==summary.best ? `<div class="statrow"><span class="lbl">Lowest Product</span><span class="val" style="color:var(--wait);font-size:12px;">${escapeHtml(summary.worst.plh.product||summary.worst.product||'')} — ${summary.worst.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
+    ${summary.best ? `<div class="statrow"><span class="lbl">Best Product <span style="font-size:10.5px;">(runs 15 min+)</span></span><span class="val" style="color:var(--run);font-size:12px;">${escapeHtml(plhJobName(summary.best))} — ${summary.best.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
+    ${summary.worst && summary.worst!==summary.best ? `<div class="statrow"><span class="lbl">Lowest Product <span style="font-size:10.5px;">(runs 15 min+)</span></span><span class="val" style="color:var(--wait);font-size:12px;">${escapeHtml(plhJobName(summary.worst))} — ${summary.worst.plh.grossPLH.toFixed(0)} PLH</span></div>` : ''}
     <div class="cb-mut" style="font-size:10.5px;line-height:1.4;margin-top:8px;font-style:italic;">ⓘ ${PLH_DISCLAIMER}</div>
   </div>`;
 }
@@ -4797,7 +4808,7 @@ function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
     <div style="page-break-inside:avoid;break-inside:avoid;">
       <div style="margin-top:8px;margin-bottom:6px;">
         <div style="font-size:17px;font-weight:700;color:#1a1a2e;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin-bottom:4px;">${m}</div>
-        <div style="font-size:11.5px;color:#666;margin-bottom:10px;">${list.length} job${list.length===1?'':'s'} · ${Math.round(mSummary.totalWeight)} lbs total · avg ${mSummary.grossPLH.toFixed(1)} lbs/hr Gross</div>
+        <div style="font-size:11.5px;color:#666;margin-bottom:10px;">${list.length} job${list.length===1?'':'s'} · ${Math.round(mSummary.totalWeight)} lbs total · ${mSummary.grossPLH.toFixed(1)} lbs/hr gross (total lbs ÷ total hrs)${(()=>{ const c = plhCoverage(startDate, endDate, kind, m); return c.awaiting ? ` · <span style="color:#9a6200;">${c.text}</span>` : ''; })()}</div>
       </div>
       ${plhJobBlockHTML(list[0])}
     </div>
@@ -4812,16 +4823,16 @@ function renderPLHReportHTML(startDate, endDate, machineFilter, kind){
     </div>
     <div style="padding:26px 36px;">
       <div style="border-left:5px solid #2980b9;background:#f7f7f7;padding:18px 20px;margin-bottom:18px;">
-        <div style="font-size:38px;font-weight:700;">${summary.grossPLH.toFixed(1)} <span style="font-size:16px;font-weight:400;color:#555;">lbs/hr</span></div>
-        <div style="font-size:12px;color:#666;margin-top:4px;">Overall Gross PLH &nbsp;=&nbsp; ${Math.round(summary.totalWeight).toLocaleString('en-US')} lbs ÷ ${summary.totalGrossHours.toFixed(1)} gross labour hours <span style="color:#999;">(people on V1–V3 &amp; Manual · side machines, support and lent hours not included)</span></div>
+        <div style="font-size:38px;font-weight:700;">${summary.runCount ? summary.grossPLH.toFixed(1) : 'n/a'} <span style="font-size:16px;font-weight:400;color:#555;">lbs/hr</span></div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">Overall Gross PLH &nbsp;=&nbsp; ${Math.round(summary.totalWeight).toLocaleString('en-US')} lbs ÷ ${summary.totalGrossHours.toFixed(1)} gross labour hours <span style="color:#999;">(people on V1–V3 &amp; Manual · side machines, support and lent hours not included)</span>${(()=>{ const c = plhCoverage(startDate, endDate, kind, machineFilter); return c.text ? `<div style="margin-top:4px;color:${c.awaiting?'#9a6200':'#666'};font-weight:${c.awaiting?600:400};">${c.text}</div>` : ''; })()}<span></span></div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
         ${statCard('Total Lbs Produced', Math.round(summary.totalWeight))}
         ${statCard('Total Labour Hrs (Gross)', `${summary.totalGrossHours.toFixed(1)} <span style="font-size:12px;font-weight:400;color:#666;">${labMin(summary.totalGrossHours)}</span>`)}
-        ${statCard('Avg Gross PLH', summary.grossPLH.toFixed(1))}
+        ${statCard('Gross PLH', summary.runCount ? summary.grossPLH.toFixed(1) : 'n/a', 'total lbs ÷ total hrs')}
       </div>
       <div style="display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap;">
-        ${statCard('Avg Net PLH', summary.netPLH.toFixed(1))}
+        ${statCard('Net PLH', summary.runCount ? summary.netPLH.toFixed(1) : 'n/a', 'total lbs ÷ running hrs')}
         ${statCard('Jobs Recorded', summary.runCount)}
         ${statCard('Machines', Object.keys(byMachine).length)}
       </div>
@@ -5825,9 +5836,17 @@ function stuckNudge(){ try{ if(!Store.ready || !namesOn()) return; const now = t
     if(stuckNudgeAt[m]!=null && now - stuckNudgeAt[m] < STUCK_CREW_EVERY) return; stuckNudgeAt[m] = now;
     toast(`⚠ ${shortM(m)} stopped ${fmtDur(st.mins)} · ${st.n} crew still on it — Move crew on Live?`); if(Router.current==='live') render(); }); }catch(e){} }
 setInterval(stuckNudge, 60000);
+/* v205.64 (audit): a planned stop picked or typed under Waiting is counted as packaging delay and lowers efficiency — offer to save it as a Planned Stop */
+function plannedLike(text){ const t = String(text||'').toLowerCase(); if(!t) return null;
+  if(/\bqa\b.*talk/.test(t)) return 'QA Crew Talk'; if(/stretch/.test(t)) return 'Scheduled Stretching'; if(/town ?hall/.test(t)) return 'Town Hall Meeting';
+  if(/metal ?detector.*(test|check)|(test|check).*metal ?detector/.test(t)) return 'Metal Detector Test'; if(/crew talk|huddle|safety talk|toolbox talk|pre-?shift meeting/.test(t)) return 'Crew Talk'; return null; }
+function plannedFix(o){ if(!o || o.status!=='WAITING') return; const txt = o.waitReason==='Other' ? o.waitReasonOther : o.waitReason; const pr = plannedLike(txt); if(!pr) return;
+  if(!confirm(`"${txt}" is a planned stop, not waiting.\n\nSave it as a Planned Stop? (Waiting counts as packaging delay and lowers efficiency.)`)) return;
+  o.status = 'PLANNED'; o.plannedReason = PLANNED_REASONS.includes(pr) ? pr : 'Other'; o.plannedReasonOther = PLANNED_REASONS.includes(pr) ? '' : txt; }
 async function confirmDowntime(){
   const s = liveDowntimeSetup;
   if(!dtReady(s)){ toast('Pick a reason first'); return; } // v149
+  plannedFix(s); // v205.64
   const now = nowHHMM();
   let live = Store.liveRuns[s.machine];
   let reasonCategory='', reason='', classification='';
@@ -6032,8 +6051,10 @@ async function closeOutLiveRun(m, opts){
   // v116: a run still open from an earlier day closes at the finish time the user confirmed (opts.endAt), never "now" the next morning
   const now = opts.endAt || (live.date && live.date!==todayStr() ? '16:30' : nowHHMM());
   const lastSeg = live.segments.length ? live.segments[live.segments.length-1] : null;
+  const segWasOpen = !!(lastSeg && !lastSeg.end);
   if(lastSeg && !lastSeg.end) lastSeg.end = now;
   const lastDt = live.downtimeSegments[live.downtimeSegments.length-1];
+  const dtWasOpen = !!(lastDt && !lastDt.end);
   if(lastDt && !lastDt.end) lastDt.end = now;
 
   const runFrom = (live.segments[0]||{}).start || live.startedAt;
@@ -6073,6 +6094,7 @@ async function closeOutLiveRun(m, opts){
 
   const toSave = [];
   const validSegments = live.segments.filter(seg=>duration(seg.start, seg.end)>0);
+  if(weightNum>0 && !validSegments.length){ toast('This run has no running time, so PLH can\'t be worked out — finish it without a weight and add the run in History'); if(segWasOpen) lastSeg.end = null; if(dtWasOpen) lastDt.end = null; return null; } // v205.64 (audit): never drop a typed weight
   if(validSegments.length){
     const totalSegMin = validSegments.reduce((a,seg)=>a+duration(seg.start,seg.end),0);
     const empCounts = [...new Set(validSegments.map(s=>s.employees))];
@@ -6091,6 +6113,13 @@ async function closeOutLiveRun(m, opts){
   if(toSave.length===0) return {count:0, grossPLH:null};
 
   await Store.refreshRecords();
+  { // v205.64 (audit): the same live run finished twice (two devices) is saved once
+    const dupOf = x=>Store.records.some(r=>r.date===x.date && r.machine===x.machine && r.status===x.status && r.startTime===x.startTime && r.endTime===x.endTime);
+    const runDup = toSave.some(x=>x.status==='RUNNING' && dupOf(x));
+    const fresh = toSave.filter(x=>!dupOf(x));
+    if(runDup) toast(`${m} — this run was already saved (another device?) — not saved twice`);
+    toSave.length = 0; fresh.forEach(x=>toSave.push(x));
+    if(!toSave.length) return {count:0, grossPLH, dup:true}; }
   Store.records = Store.records.concat(toSave);
   const okR = await Store.saveRecords();
   if(!okR) return null;
@@ -6291,6 +6320,7 @@ async function saveRecord(){
   }
 }
 async function _saveRecordInner(){
+  plannedFix(draft); // v205.64
   const dur = duration(draft.startTime, draft.endTime);
   const base = {
     date: draft.date || todayStr(), startTime: draft.startTime, endTime: draft.endTime, durationMin: dur,
@@ -6524,12 +6554,19 @@ async function confirmAddPLHData(){
   // Strip any previously-generated summary (the placeholder text, or a prior real Qty/Weight/Labour/PLH block from an earlier edit) so correcting a value replaces it cleanly instead of stacking a second, conflicting summary alongside the old one
   const notes = refreshPlhNote(r.notes, updatedPLH);
   Store.records[idx] = {...r, plh: updatedPLH, notes};
-  const ok = await Store.saveRecords();
+  logChange(r.date, 'weight', r, Store.records[idx]);
+  const ok = await Store.saveRecords(); await Store.saveDayLog();
   if(!ok) return;
   plhDataFormId = null;
   toast(`PLH saved — ${grossPLH.toFixed(0)} PLH`);
   Router.go('history');
 }
+/* v205.64 (audit): edit / delete history — every change made in History is logged on that day (who changed what, before → after). Shown on the Daily Report screen only. */
+function recSnap(r){ return r ? {status:r.status, machine:r.machine, start:r.startTime, end:r.endTime, min:r.durationMin, reason:r.reason||'', lbs: r.plh ? (r.plh.weightLbs||0) : null, qty: r.plh ? (r.plh.quantity||0) : null} : null; }
+function logChange(date, act, before, after){ try{ const d = ensureDayLog(date); d.changes = d.changes || []; d.changes.push({at: new Date().toISOString(), act, before: recSnap(before), after: recSnap(after)}); if(d.changes.length>300) d.changes = d.changes.slice(-300); }catch(e){} }
+function changeLogHTML(date){ const L = ((dayLogFor(date)||{}).changes)||[]; if(!L.length) return '';
+  const f = x=>x ? `${escapeHtml((statusInfo(x.status)||{label:x.status}).label)} ${escapeHtml(x.machine||'')} ${fmtTime12(x.start)}–${fmtTime12(x.end)} (${fmtDur(x.min||0)})${x.lbs!=null && x.lbs ? ` · ${x.lbs} lbs` : ''}` : '';
+  return `<div class="card"><div onclick="const x=this.nextElementSibling; x.style.display = x.style.display==='none' ? 'block' : 'none';" style="cursor:pointer;"><b>✎ Edit history · ${L.length} change${L.length===1?'':'s'} made in History</b><div style="font-size:12px;color:var(--muted);">tap to see · only you see this</div></div><div style="display:none;margin-top:6px;">${L.slice().reverse().map(c=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid var(--line);"><span style="color:var(--muted);">${new Date(c.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span> · <b>${{edit:'Edited',delete:'Deleted',weight:'Weight entered'}[c.act]||escapeHtml(c.act)}</b> ${c.act==='delete' ? f(c.before) : c.act==='weight' ? `${f(c.after)}` : `${f(c.before)} → ${f(c.after)}`}</div>`).join('')}</div></div>`; }
 /* v205.63 (audit): a stop (waiting / changeover / break / planned) saved from a Live Floor run is also inside that run's labour (plh.downtimeSegments).
    When the stop is edited or deleted in History, the run's copy follows and its gross labour + PLH are worked out again — so History, PLH and the reports never disagree. */
 function syncStopIntoRun(oldRec, newRec){
@@ -6549,8 +6586,8 @@ async function deleteRecord(id){
   { const r = Store.records.find(x=>x.id===id); if(r && r.side && String(id).startsWith('side-')){ await cancelSideJob(id.slice(5), r.date); return; } } // v205.22: a side job goes with its time and crew hours
   if(!confirm('Delete this record?')) return;
   await Store.refreshRecords();
-  { const gone = Store.records.find(r=>r.id===id); Store.records = Store.records.filter(r=>r.id!==id); if(gone) syncStopIntoRun(gone, null); }
-  await Store.saveRecords();
+  { const gone = Store.records.find(r=>r.id===id); Store.records = Store.records.filter(r=>r.id!==id); if(gone){ syncStopIntoRun(gone, null); logChange(gone.date, 'delete', gone, null); } }
+  await Store.saveRecords(); await Store.saveDayLog();
   toast('Record deleted');
   render();
 }
@@ -6577,6 +6614,7 @@ saveRecord = async function(){
     const btn = document.getElementById('saveRecordBtn');
     if(btn){ btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Saving…'; }
     try{
+      plannedFix(draft); // v205.64
       await Store.refreshRecords();
       const idx = Store.records.findIndex(r=>r.id===draft._editId);
       if(idx>-1){
@@ -6606,7 +6644,9 @@ saveRecord = async function(){
         if(!confirmNoOverlap([upd], draft._editId)) return;
         Store.records[idx] = upd;
         if(old.status!=='RUNNING') syncStopIntoRun(old, upd); // v205.63
-        await Store.saveRecords();
+        else [[old.date, old.machine], [upd.date, upd.machine]].forEach(([dt, m])=>applyPaidBreakRule(Store.records.filter(r=>r.date===dt && r.machine===m))); // v205.64: an edited run shares the 30 paid break minutes with the day's other runs, same as when it was saved
+        logChange(old.date, 'edit', old, Store.records[idx]);
+        await Store.saveRecords(); await Store.saveDayLog();
         toast('Record Updated');
       }
       draft = freshDraft();
@@ -6648,6 +6688,22 @@ function reportCheck(T){
     if(lost.length) add('red', `${lab}: labour still counts a stop that was changed or deleted in History (${lost.map(d=>fmtTime12(d.start)+'–'+fmtTime12(d.end)).join(', ')})`, 'stale', 'matches History'); }); // v205.63: edits made before this version
   MACHINES.forEach(m=>{ const rs = runs.filter(r=>r.machine===m); for(let i=0;i<rs.length;i++) for(let j=i+1;j<rs.length;j++){ if(busySpans(rs[i]).some(([a,b])=>busySpans(rs[j]).some(([c,d])=>rangesOverlap(a,b,c,d)))) add('red', `${shortM(m)}: two runs overlap (${fmtTime12(rs[i].startTime)} and ${fmtTime12(rs[j].startTime)}) — possible duplicate`, 'overlap', 'none'); } });
   recs.forEach(r=>{ if(r.durationMin<0 || (r.startTime && r.endTime && toMin(r.endTime) < toMin(r.startTime))) add('red', `${r.machine} ${fmtTime12(r.startTime)}: finish earlier than start`, r.endTime, 'after '+r.startTime); });
+  /* v205.64 (audit, Nov 18 export): rules from the data audit */
+  { const lineRecs = recs.filter(r=>!r.side && r.startTime && r.endTime); const seen = new Set(); // a machine in two states at the same time = counted twice
+    MACHINES.forEach(m=>{ const rs = lineRecs.filter(r=>r.machine===m); for(let i=0;i<rs.length;i++) for(let j=i+1;j<rs.length;j++){ if(rs[i].status==='RUNNING' && rs[j].status==='RUNNING') continue; // run vs run checked above
+      if(busySpans(rs[i]).some(([a,b])=>busySpans(rs[j]).some(([c,d])=>rangesOverlap(a,b,c,d)))){ const k = [rs[i].id, rs[j].id].sort().join('|'); if(seen.has(k)) continue; seen.add(k);
+        add('red', `${shortM(m)}: ${(statusInfo(rs[i].status)||{label:rs[i].status}).label} ${fmtTime12(rs[i].startTime)}–${fmtTime12(rs[i].endTime)} overlaps ${(statusInfo(rs[j].status)||{label:rs[j].status}).label} ${fmtTime12(rs[j].startTime)}–${fmtTime12(rs[j].endTime)} — time counted twice`, 'overlap', 'fix one in History'); } } }); }
+  recs.filter(r=>r.status==='WAITING' && plannedLike(r.reason)).forEach(r=>add('red', `${r.machine} ${fmtTime12(r.startTime)}: "${r.reason}" is a planned stop saved as Waiting — counts as packaging delay`, 'Waiting', 'edit to Planned Stop in History'));
+  runs.forEach(r=>{ const p = r.plh, lab = `${r.machine} ${fmtTime12(r.startTime)}`;
+    if(p.grossPLH!=null && (p.grossPLH<20 || p.grossPLH>2000)) add('yellow', `${lab}: unusual PLH ${Math.round(p.grossPLH)} (${Math.round(p.weightLbs)} lbs over ${fmtDur(Math.round(p.grossLaborHours*60))} labour) — confirm the weight and times`, Math.round(p.grossPLH), '20–2,000');
+    if(!String(r.product||p.product||'').trim()) add('yellow', `${lab}: no product`, 'blank', 'product');
+    if((p.segments||[]).some(sg=>duration(sg.start, sg.end)>0 && !(Number(sg.employees)>0))) add('yellow', `${lab}: running time with 0 people on the line`, '0 people', '1 or more'); });
+  recs.filter(r=>r.startTime && (toMin(r.startTime) < 5*60 || toMin(r.endTime||r.startTime) > 20*60)).forEach(r=>add('yellow', `${r.machine}: entry at ${fmtTime12(r.startTime)}–${fmtTime12(r.endTime)} is outside 5 AM – 8 PM — confirm it`, 'after hours', 'confirm'));
+  { const all = runs.filter(r=>r.plh.grossLaborHours>0), w = all.filter(r=>r.plh.grossPLH!=null), hA = all.reduce((t,r)=>t+r.plh.grossLaborHours,0), hW = w.reduce((t,r)=>t+r.plh.grossLaborHours,0);
+    if(all.length) add(w.length===all.length ? 'ok' : 'yellow', `PLH covers ${w.length} of ${all.length} line runs · ${Math.round(hA ? hW/hA*100 : 0)}% of line labour hours`, `${w.length}/${all.length}`, 'all runs weighed'); }
+  { const sv = (Store.dailyReports||[]).find(x=>x.date===T); if(sv && sv.totals){ const lv = buildReport(T).totals, keys = ['RUNNING','WAITING','CHANGEOVER','PLANNED','NO_WORK','BREAK'], lab = {RUNNING:'Running',WAITING:'Waiting',CHANGEOVER:'Changeover',PLANNED:'Planned',NO_WORK:'No work',BREAK:'Break'};
+      const ch = keys.filter(k=>Math.round(sv.totals[k]||0)!==Math.round(lv[k]||0)).map(k=>`${lab[k]} ${fmtDur(sv.totals[k]||0)} → ${fmtDur(lv[k]||0)}`);
+      if(ch.length) add('yellow', `Records changed after End Shift saved this report${sv.generatedAt?` (${new Date(sv.generatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})})`:''}: ${ch.join(' · ')} — the report shows the current records; re-send it if the earlier one was already sent`, 'changed', 'same as saved'); } }
   { const all = plhRecordsInRange(T,T), s0 = computePLHSummary(all), lbs = MACHINES.reduce((t,m)=>t+computePLHSummary(all.filter(r=>r.machine===m)).totalWeight,0); if(s0.totalWeight || lbs) rec('Department lbs = sum of each machine', s0.totalWeight, lbs); }
   if(pd){ const P = pd.people.filter(p=>!p.away);
     P.forEach(p=>{ const seg = p.segs.reduce((t,x)=>t+x.b-x.a,0), grp = Object.values(p.grp).reduce((a,b)=>a+b,0); if(seg!==p.total || grp!==p.total) add('red', `${p.name}: hours don't add up to their shift`, seg, p.total); });
@@ -6764,7 +6820,7 @@ function craftWeeklySuggestions(rep){
     const [name2,min2] = rep.bottlenecks[1];
     ideas.push(`"${name2}" was the second-largest driver at ${fmtDur(min2)} — track whether it's a separate issue or connected to the top one before committing resources to just one fix.`);
   } else if(rep.machineMostAffected.machine && rep.machineMostAffected.minutes>0){
-    ideas.push(`${rep.machineMostAffected.machine} carried the most downtime this period (${fmtDur(rep.machineMostAffected.minutes)}) — review its staffing and scheduling pattern for recurring gaps.`);
+    ideas.push(`${rep.machineMostAffected.machine} had the most waiting time this period (${fmtDur(rep.machineMostAffected.minutes)}) — review its staffing and scheduling pattern for recurring gaps.`);
   }
   return ideas.slice(0,3);
 }
@@ -6838,6 +6894,10 @@ function renderWeeklyView(){
       <button class="btn btn-ghost" onclick="setWeeklyPreset(7)">Last 7 Days</button>
       <button class="btn btn-ghost" onclick="setWeeklyPreset(30)">Last 30 Days</button>
     </div>
+    <div class="btnrow" style="margin-top:6px;">
+      <button class="btn btn-ghost" onclick="setWeeklyMonth(0)">This Month</button>
+      <button class="btn btn-ghost" onclick="setWeeklyMonth(-1)">Last Month</button>
+    </div>
   </div>
   <div class="reporthead">
     <div class="eyebrow">Packaging Continuous Improvement</div>
@@ -6850,7 +6910,7 @@ function renderWeeklyView(){
     <div class="statrow"><span class="lbl">Running</span><span class="val">${fmtDur(t.RUNNING)}</span></div>
     <div class="statrow"><span class="lbl">Waiting / Downtime</span><span class="val" style="color:var(--wait)">${fmtDur(t.WAITING)}</span></div>
     <div class="statrow"><span class="lbl">Changeover</span><span class="val">${fmtDur(t.CHANGEOVER)}</span></div>
-    <div class="statrow"><span class="lbl">Break</span><span class="val">${fmtDur(t.BREAK)}</span></div>
+    <div class="statrow"><span class="lbl">Break <span style="font-size:11px;color:var(--muted);">(floor clock time — breaks on several lines at once count once)</span></span><span class="val">${fmtDur(t.BREAK)}</span></div>
     <div class="statrow"><span class="lbl">Planned Stops</span><span class="val">${fmtDur(t.PLANNED||0)}</span></div>
     <div class="statrow"><span class="lbl">No Work Scheduled</span><span class="val">${fmtDur(t.NO_WORK)}</span></div>
   </div>
@@ -6866,7 +6926,7 @@ function renderWeeklyView(){
     <h3>Top Bottlenecks This Period</h3>${bnList}
   </div>
   <div class="card">
-    <h3>Machine With Most Downtime</h3>
+    <h3>Machine With Most Waiting</h3>
     <div class="bignum">${rep.machineMostAffected.machine||'--'}</div>
     <div style="color:var(--muted);font-size:13px;margin-top:2px;">${fmtDur(rep.machineMostAffected.minutes||0)} waiting</div>
   </div>
@@ -6879,7 +6939,8 @@ function renderWeeklyView(){
     return `<div class="card" style="border-color:${tot?'var(--wait)':'var(--line)'};"><h3>⚠ Short-Staffed This Period</h3>${xs.map(x=>`<div class="statrow"><span class="lbl">${new Date(x.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span><span class="val" style="${x.total?'color:var(--wait);':''}">${x.total?fmtDur(x.total):'none'}</span></div>`).join('')}<div class="statrow"><span class="lbl"><b>Total</b></span><span class="val" style="color:var(--wait);">${fmtDur(tot)}</span></div><div class="statrow"><span class="lbl">Lead Hand / Yield on a machine</span><span class="val">${fmtDur(lead)}</span></div><div class="cb-mut" style="font-size:11px;margin-top:6px;">Each day's timeline is in Reports → Staffing Report.</div></div>`; })()}
   ${(()=>{ return ''; const sx = staffingSum(weeklyRange.start, weeklyRange.end); if(!sx) return ''; /* v205.38 — replaced by Short-Staffed (v205.40) */
     return `<div class="card" style="border-color:${sx.short>0.2?'var(--wait)':'var(--line)'};"><h3>👥 Staffing This Period · ${sx.days} day${sx.days===1?'':'s'}</h3>${staffingRows(sx,true).map(r=> r.sub ? `<div class="cb-mut" style="font-size:10.5px;font-style:italic;margin-top:8px;">${escapeHtml(r.v)}</div>` : `<div class="statrow"><span class="lbl">${escapeHtml(r.k)}</span><span class="val" style="text-align:right;${r.red?'color:var(--wait);':''}${r.big?'font-size:15px;':''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}</div>`; })()}
-  ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period')}
+  ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period', plhCoverage(weeklyRange.start,weeklyRange.end))}
+  ${sideWeekHTML(weeklyRange.start, weeklyRange.end)}
   <div class="card">
     <h3>Daily PLH Trend</h3>
     ${renderPLHTrendChart(dailyPLHSeries(weeklyRange.start,weeklyRange.end))}
@@ -6896,6 +6957,9 @@ function renderWeeklyView(){
   <button class="btn btn-danger" style="margin-top:10px;" onclick="deleteRangeRecords()">🗑 Delete Records in This Range</button>
   `;
 }
+/* v205.64 (audit): calendar months — 1st to the last day (this month: 1st to today) */
+function setWeeklyMonth(off){ const now = new Date(), a = new Date(now.getFullYear(), now.getMonth()+off, 1), b = off===0 ? now : new Date(now.getFullYear(), now.getMonth()+off+1, 0);
+  weeklyRange = {start: localDateStr(a), end: localDateStr(b)}; render(); }
 function setWeeklyPreset(days){
   const end = new Date();
   const start = new Date(); start.setDate(end.getDate()-(days-1));
@@ -6909,6 +6973,8 @@ async function deleteRangeRecords(){
   const label = weeklyRange.start===weeklyRange.end ? fmtDate(weeklyRange.start) : `${fmtDate(weeklyRange.start)} – ${fmtDate(weeklyRange.end)}`;
   if(!confirm(`Delete all ${count} record(s) from ${label}? This also removes any saved Daily Reports${dayKeys.length?` and Crew Board entries (crew, MAREL, side machines, lead hand / yield) for ${dayKeys.length} day${dayKeys.length===1?'':'s'}`:''} in that range. This cannot be undone.`)) return;
   if(!confirm('Are you sure? This is permanent.')) return;
+  { const t = window.prompt('Type DELETE to confirm. A full backup file is downloaded first.'); if(String(t||'').trim().toUpperCase()!=='DELETE'){ toast('Not deleted'); return; } } // v205.64 (audit)
+  try{ exportJSON(); }catch(e){ toast('Backup could not be made — not deleted'); return; }
   await Store.refreshRecords();
   Store.records = Store.records.filter(r=> !(r.date>=weeklyRange.start && r.date<=weeklyRange.end));
   Store.dailyReports = Store.dailyReports.filter(r=> !(r.date>=weeklyRange.start && r.date<=weeklyRange.end));
@@ -6918,6 +6984,15 @@ async function deleteRangeRecords(){
   toast(`Deleted ${count} record(s)${dayKeys.length?` + Crew Board entries for ${dayKeys.length} day${dayKeys.length===1?'':'s'}`:''}`);
   render();
 }
+/* v205.64 (audit): side machines in the Weekly Summary — reported on their own, never added into line PLH */
+function sideWeekRows(start, end){ let sl; try{ sl = computeSideLabour(start, end); }catch(e){ return []; }
+  return SIDE_MACHINES.map(m=>{ const pm = sl.perMachine[m.name] || {}; const recs = plhRecordsInRange(start, end, 'side').filter(r=>r.machine===m.name); const sm = computePLHSummary(recs), c = plhCoverage(start, end, 'side', m.name);
+    if(!pm.runMin && !c.n) return null;
+    return {name:m.name, run: pm.runMin||0, labour: pm.packMin||0, lbs: sm.totalWeight, plh: sm.runCount ? sm.grossPLH : null, cov: c}; }).filter(Boolean); }
+function sideWeekHTML(start, end){ const rows = sideWeekRows(start, end);
+  return `<div class="card"><h3>Side Machines This Period</h3><div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Reported separately — not part of line PLH above.</div>${rows.length ? rows.map(x=>`<div class="statrow"><span class="lbl">${escapeHtml(x.name)}</span><span class="val" style="font-size:12.5px;text-align:right;">${fmtDur(x.run)} on · ${fmtDur(x.labour)} labour<br>${x.plh!=null ? `${Math.round(x.lbs).toLocaleString('en-US')} lbs · ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting ? ` <span style="color:var(--change);">· ${x.cov.awaiting} awaiting weight</span>` : ''}</span></div>`).join('') : '<div class="empty">No side machines used.</div>'}</div>`; }
+function sideWeekText(start, end){ const rows = sideWeekRows(start, end); if(!rows.length) return '';
+  return `\nSIDE MACHINES (reported separately, not in line PLH):\n` + rows.map(x=>`${x.name}: ${fmtDur(x.run)} on · ${fmtDur(x.labour)} labour · ${x.plh!=null ? `${Math.round(x.lbs)} lbs · ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting?` · ${x.cov.awaiting} awaiting weight`:''}`).join('\n') + '\n'; }
 function weeklySummaryText(){
   const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
   const t = rep.totals;
@@ -6926,8 +7001,10 @@ function weeklySummaryText(){
 PLH This Period:
 Gross ${plh.grossPLH.toFixed(0)} / Net ${plh.netPLH.toFixed(0)} lbs per labour-hr
 Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
-${plh.best ? 'Best: '+(plh.best.plh.product||'')+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}
+${plhCoverage(weeklyRange.start, weeklyRange.end).text}
+${plh.best ? 'Best (runs 15 min+): '+plhJobName(plh.best)+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}
 Note: ${PLH_DISCLAIMER}` : '';
+  const sideBlock = sideWeekText(weeklyRange.start, weeklyRange.end);
   const sdays = []; for(let dt=weeklyRange.start; dt<=weeklyRange.end; dt=shiftDate(dt,1)) sdays.push(dt); const sxs = sdays.map(shortStaffFor).filter(Boolean), stot = sxs.reduce((t,x)=>t+x.total,0); // v205.40
   const staffBlock = sxs.length ? `
 SHORT-STAFFED: ${fmtDur(stot)} this period
@@ -6954,9 +7031,9 @@ Packaging/Internal Delay: ${fmtDur(t.internal)}
 Top Bottleneck:
 ${rep.bottlenecks.length ? rep.bottlenecks[0][0]+' — '+fmtDur(rep.bottlenecks[0][1]) : 'None'}
 
-Machine with Most Downtime:
+Machine with Most Waiting:
 ${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}
-${plhBlock}
+${plhBlock}${sideBlock}
 Observation:
 ${rep.observation}
 
@@ -7013,7 +7090,7 @@ function exportWeeklyPDF(){
   rowC('Total Running Time', fmtDur(t.RUNNING), PDF_COLOR.run);
   rowC('Total Waiting/Downtime', fmtDur(t.WAITING), PDF_COLOR.wait);
   rowC('Total Changeover', fmtDur(t.CHANGEOVER), PDF_COLOR.change);
-  rowC('Total Break Time', fmtDur(t.BREAK), PDF_COLOR.brk);
+  rowC('Total Break Time (floor clock time)', fmtDur(t.BREAK), PDF_COLOR.brk);
   rowC('Total Planned Stops', fmtDur(t.PLANNED||0), PDF_COLOR.planned);
   rowC('Total No Work Scheduled', fmtDur(t.NO_WORK), PDF_COLOR.nowork);
 
@@ -7060,7 +7137,7 @@ function exportWeeklyPDF(){
   }
   else { doc.text('No bottlenecks recorded.',46,y); y+=15; }
 
-  ensure(60); y+=6; section('MACHINE WITH MOST DOWNTIME');
+  ensure(60); y+=6; section('MACHINE WITH MOST WAITING');
   doc.setTextColor(0); doc.text(`${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}`, 46, y); y+=20;
 
   ensure(90); section('OBSERVATION');
@@ -7078,13 +7155,15 @@ function exportWeeklyPDF(){
       row('Total Quantity', Math.round(plhSummary.totalQty));
       row('Labour Hours (gross)', `${plhSummary.totalGrossHours.toFixed(1)} · ${labMin(plhSummary.totalGrossHours)}`);
       row('Jobs', plhSummary.runCount);
+      { const c = plhCoverage(rep.startDate, rep.endDate); if(c.text) row('Coverage', c.text.replace(/^Based on /,'')); }
       if(plhSummary.avgTarget!=null){ const variance=plhSummary.grossPLH-plhSummary.avgTarget; const pct=variance/plhSummary.avgTarget*100; row('vs Target', `${variance>=0?'+':''}${variance.toFixed(0)} PLH (${pct>=0?'+':''}${pct.toFixed(0)}%)`); }
-      if(plhSummary.best) row('Best Product', `${plhSummary.best.plh.product||''} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
-      if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product', `${plhSummary.worst.plh.product||''} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
+      if(plhSummary.best) row('Best Product (15 min+)', `${plhJobName(plhSummary.best)} — ${plhSummary.best.plh.grossPLH.toFixed(0)} PLH`);
+      if(plhSummary.worst && plhSummary.worst!==plhSummary.best) row('Lowest Product (15 min+)', `${plhJobName(plhSummary.worst)} — ${plhSummary.worst.plh.grossPLH.toFixed(0)} PLH`);
       { ensure(40); doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(90); const nl = doc.splitTextToSize('Note: '+PLH_DISCLAIMER, 500); y+=4; doc.text(nl, 46, y); y += nl.length*11+4; doc.setFont('helvetica','normal'); doc.setTextColor(0); doc.setFontSize(10.5); } // v205.36
     }
   }
 
+  { const sr = sideWeekRows(rep.startDate, rep.endDate); if(sr.length){ ensure(40+sr.length*16); y+=6; section('SIDE MACHINES (REPORTED SEPARATELY, NOT IN LINE PLH)'); sr.forEach(x=>row(x.name, pdfSafe(`${fmtDur(x.run)} on - ${fmtDur(x.labour)} labour - ${x.plh!=null ? `${Math.round(x.lbs)} lbs - ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting?` - ${x.cov.awaiting} awaiting weight`:''}`))); } } // v205.64
   ensure(100); y+=6; section('RECOMMENDED ACTIONS (LEAN/CI)');
   craftWeeklySuggestions(rep).forEach((idea,i)=>{
     ensure(30);
@@ -7190,11 +7269,11 @@ function renderReportView(date){
   const bnList = renderBottleneckListWithNotes(rep);
 
   return `
-  ${reportCheckHTML(rep.date)}
+  ${reportCheckHTML(rep.date)}${changeLogHTML(rep.date)}
   <div class="reporthead">
     <div class="eyebrow">Packaging Continuous Improvement</div>
     <h2>Daily Production &amp; Bottleneck Report</h2>
-    <div class="sub">${fmtDate(rep.date)} · Shift ${fmtTime12(rep.shiftStart)} – ${fmtTime12(rep.shiftEnd)}</div>
+    <div class="sub">${fmtDate(rep.date)} · Entries ${fmtTime12(rep.shiftStart)} – ${fmtTime12(rep.shiftEnd)} (first to last record)</div>
   </div>
   ${machineRows}
   <div class="card">
@@ -7202,7 +7281,7 @@ function renderReportView(date){
     <div class="statrow"><span class="lbl">Running</span><span class="val">${fmtDur(t.RUNNING)}</span></div>
     <div class="statrow"><span class="lbl">Waiting / Downtime</span><span class="val">${fmtDur(t.WAITING)}</span></div>
     <div class="statrow"><span class="lbl">Changeover</span><span class="val">${fmtDur(t.CHANGEOVER)}</span></div>
-    <div class="statrow"><span class="lbl">Break</span><span class="val">${fmtDur(t.BREAK)}</span></div>
+    <div class="statrow"><span class="lbl">Break <span style="font-size:11px;color:var(--muted);">(floor clock time — breaks on several lines at once count once)</span></span><span class="val">${fmtDur(t.BREAK)}</span></div>
     <div class="statrow"><span class="lbl">Planned Stops</span><span class="val">${fmtDur(t.PLANNED||0)}</span></div>
     <div class="statrow"><span class="lbl">No Work Scheduled</span><span class="val">${fmtDur(t.NO_WORK)}</span></div>
   </div>
@@ -7215,7 +7294,7 @@ function renderReportView(date){
     <h3>Top Bottlenecks</h3>${bnList}
   </div>
   <div class="card">
-    <h3>Machine With Most Downtime</h3>
+    <h3>Machine With Most Waiting</h3>
     <div class="bignum">${rep.machineMostAffected.machine||'--'}</div>
     <div style="color:var(--muted);font-size:13px;margin-top:2px;">${fmtDur(rep.machineMostAffected.minutes||0)} waiting</div>
   </div>
@@ -7339,7 +7418,7 @@ function renderEndShiftConfirm(){
   <div class="card">
     <h3>Ready to End Shift?</h3>
     <p style="color:var(--muted);font-size:14px;line-height:1.5;">This will close today's production day (${recs.length} record${recs.length===1?'':'s'} logged) and generate the Daily CI Report. You can still edit records afterward from History.</p>
-  </div>${openList}${chk}${endShiftHomeHTML()}
+  </div>${openList}${reportCheckHTML(todayStr())}${chk}${endShiftHomeHTML()}
   <button class="btn btn-primary" id="endShiftBtn" onclick="confirmEndShift()">${o.n?`Close ${o.n} open item${o.n===1?'':'s'} &amp; End Shift`:'Confirm End Shift'}</button>
   <button class="btn btn-ghost" style="margin-top:10px;" onclick="Router.go('dashboard')">Cancel</button>
   `;
@@ -7348,9 +7427,10 @@ function renderEndShiftConfirm(){
 /* v101: the daily summary report carries only a one-line PLH headline — the full PLH breakdown lives in the separate PLH PDF that's attached alongside it. (Weekly Summary keeps its full PLH section + trend chart.) */
 function plhHeadline(date){
   const x = computePLHSummary(plhRecordsInRange(date, date));
-  if(!x.runCount) return {main:'PLH today: no finished runs with weight recorded.', note:''};
+  const c = plhCoverage(date, date);
+  if(!x.runCount) return {main:`PLH today: n/a — no finished runs with weight recorded.${c.awaiting?` ${c.awaiting} run${c.awaiting===1?'':'s'} awaiting weight.`:''}`, note:''};
   return {
-    main: `PLH today: ${x.grossPLH.toFixed(1)} lbs/hr gross (${Math.round(x.totalWeight).toLocaleString('en-US')} lbs ÷ ${x.totalGrossHours.toFixed(1)} labour hrs on the lines) · ${x.netPLH.toFixed(1)} net · ${x.runCount} job${x.runCount===1?'':'s'}.`,
+    main: `PLH today: ${x.grossPLH.toFixed(1)} lbs/hr gross (${Math.round(x.totalWeight).toLocaleString('en-US')} lbs ÷ ${x.totalGrossHours.toFixed(1)} labour hrs on the lines) · ${x.netPLH.toFixed(1)} net · ${x.runCount} job${x.runCount===1?'':'s'}. ${c.text}. Side machines are reported separately.`,
     note: 'Full breakdown in the attached PLH report.'
   };
 }
@@ -7372,7 +7452,7 @@ Packaging/Internal Delay: ${fmtDur(t.internal)}
 Top Bottleneck:
 ${rep.bottlenecks.length ? rep.bottlenecks[0][0]+' — '+fmtDur(rep.bottlenecks[0][1]) : 'None'}
 
-Machine with Most Downtime:
+Machine with Most Waiting:
 ${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}
 ${plhBlock}
 Main Observation:
@@ -7403,7 +7483,7 @@ function exportReportPDF(date){
   doc.setTextColor(0); doc.setFontSize(16);
   doc.text('DAILY PRODUCTION & BOTTLENECK REPORT', 40, y); y+=24;
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text(`Date: ${fmtDate(rep.date)}    Shift Start: ${fmtTime12(rep.shiftStart)}    Shift End: ${fmtTime12(rep.shiftEnd)}`, 40, y); y+=26;
+  doc.text(`Date: ${fmtDate(rep.date)}    First entry: ${fmtTime12(rep.shiftStart)}    Last entry: ${fmtTime12(rep.shiftEnd)}`, 40, y); y+=26;
 
   function section(title){ doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(title, 40, y); y+=6; doc.setDrawColor(...PDF_COLOR.amber); doc.setLineWidth(1.3); doc.line(40,y,570,y); doc.setLineWidth(0.5); y+=16; doc.setFont('helvetica','normal'); doc.setFontSize(10.5); }
   function row(label, val){ doc.setTextColor(0); doc.text(label, 46, y); doc.text(String(val), 400, y); y+=15; }
@@ -7429,7 +7509,7 @@ function exportReportPDF(date){
   rowC('Total Running Time', fmtDur(t.RUNNING), PDF_COLOR.run);
   rowC('Total Waiting/Downtime', fmtDur(t.WAITING), PDF_COLOR.wait);
   rowC('Total Changeover', fmtDur(t.CHANGEOVER), PDF_COLOR.change);
-  rowC('Total Break Time', fmtDur(t.BREAK), PDF_COLOR.brk);
+  rowC('Total Break Time (floor clock time)', fmtDur(t.BREAK), PDF_COLOR.brk);
   rowC('Total Planned Stops', fmtDur(t.PLANNED||0), PDF_COLOR.planned);
   rowC('Total No Work Scheduled', fmtDur(t.NO_WORK), PDF_COLOR.nowork);
 
@@ -7465,7 +7545,7 @@ function exportReportPDF(date){
   }
   else { doc.text('No bottlenecks recorded.',46,y); y+=15; }
 
-  ensure(60); y+=6; section('MACHINE WITH MOST DOWNTIME');
+  ensure(60); y+=6; section('MACHINE WITH MOST WAITING');
   doc.text(`${rep.machineMostAffected.machine||'--'} — ${fmtDur(rep.machineMostAffected.minutes||0)}`, 46, y); y+=20;
 
   ensure(90); section('CONTINUOUS IMPROVEMENT OBSERVATION');
