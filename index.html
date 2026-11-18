@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.69 - 2026-11-17 (Scale report: Effect on the lines — when a line ran on the backup scale or had no working scale, from-to)';
+const APP_VERSION = 'v205.70 - 2026-11-17 (Scale report: scale reference footnote — Scale 3 = V3, Scale 7 = V1 & V2, Scale 5 = Manual + backup)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4011,9 +4011,10 @@ function scaleReportHTML(start, end, forPdf){
   H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(R).sort((a,b)=>R[b].m-R[a].m).map(r=>`<tr><td style="${td}">${escapeHtml(r)}</td><td style="${td}text-align:right;">${R[r].n}×</td><td style="${td}text-align:right;${red}">${chDur(R[r].m)}</td></tr>`).join('')}</table>`);
   if(start!==end){ const D = {}; all.forEach(e=>{ D[e.date] = D[e.date] || {n:0,m:0}; D[e.date].n++; D[e.date].m += e.min; });
     H.push(hd('4 · By day')); H.push(`<table style="width:100%;border-collapse:collapse;">${Object.keys(D).sort().map(dt=>`<tr><td style="${td}">${fmtDate(dt)}</td><td style="${td}text-align:right;">${D[dt].n}×</td><td style="${td}text-align:right;${red}">${chDur(D[dt].m)}</td></tr>`).join('')}</table>`); }
-  H.push(hd(`${start!==end?'4':'3'} · Every incident`));
+  H.push(hd(`${start!==end?'5':'4'} · Every incident`));
   H.push(scroll(`<table style="width:100%;border-collapse:collapse;"><tr><th style="${th}">Day</th><th style="${th}">Scale</th><th style="${th}">Down</th><th style="${th}">Problem</th><th style="${th}">Reported</th><th style="${th}">Minutes</th></tr>${all.map(e=>`<tr><td style="${td}white-space:nowrap;">${fmtDate(e.date)}</td><td style="${td}font-weight:700;">${e.scale}</td><td style="${td}white-space:nowrap;">${fmtTime12(e.start)} – ${e.end?fmtTime12(e.end):'still down'}${e.endShift?' (end of shift)':''}</td><td style="${td}">${escapeHtml(e.reason)}</td><td style="${td}">${e.itAt?`${fmtTime12(e.itAt)} (+${chDur(Math.max(0,toMin(e.itAt)-toMin(e.start)))})`:'—'}</td><td style="${td}text-align:right;${red}">${chDur(e.min)}</td></tr>`).join('')}</table>`));
-  H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">Logged live on the packaging floor in the CI Tracker: the time a scale / label computer stopped working, why, when it was reported to the supervisor / manager, and when it worked again. Packaging lines share the scales, so a scale down means slower weighing and labelling for every line; lines that stopped completely are also logged as Waiting — Scale Problem.</div></div>`);
+  H.push(`<div style="margin-top:22px;font-size:10px;color:#888;line-height:1.5;">Logged live on the packaging floor in the CI Tracker: the time a scale / label computer stopped working, why, when it was reported to the supervisor / manager, and when it worked again. When a line's scale is down it has to use a backup scale or wait; lines that stopped completely are also logged as Waiting — Scale Problem.</div>
+  <div style="margin-top:12px;border:1px solid #d6dde6;border-radius:6px;padding:10px 12px;font-size:11.5px;color:#333;line-height:1.6;page-break-inside:avoid;"><div style="font-weight:700;color:#1e3a5f;margin-bottom:4px;">Scale reference — which scale serves which line</div><table style="border-collapse:collapse;font-size:11.5px;"><tr><td style="padding:2px 14px 2px 0;font-weight:700;">Scale 3</td><td style="padding:2px 0;">Variovac 3</td></tr><tr><td style="padding:2px 14px 2px 0;font-weight:700;">Scale 7</td><td style="padding:2px 0;">Variovac 1 and Variovac 2 (shared, nearest scale)</td></tr><tr><td style="padding:2px 14px 2px 0;font-weight:700;">Scale 5</td><td style="padding:2px 0;">Manual Pack · backup for Variovac 1 &amp; 2 when Scale 7 is down</td></tr></table></div></div>`);
   return H.join('');
 }
 function renderScaleReportView(){
