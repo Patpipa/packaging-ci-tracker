@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.60 - 2026-11-17 (Audit fixes: Lead Hand / Yield on-the-line time in Daily matches Crew Hours & Staffing; End Shift stops everyone\'s floor time; Daily side-machine short time from the Staffing Report; Staffing Report wording — who left a line, cross-dept help position, gone home vs not in)';
+const APP_VERSION = 'v205.61 - 2026-11-17 (Garbage runs sent from the Crew tab now count in the gross labour of the line the person came from, same as the Variovac card button)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1401,8 +1401,19 @@ function garbageEndOf(e, date){ return e.end || (date===todayStr() ? openEndToda
 function garbageMinFor(date, m, from, to){
   if(!from || !to) return 0; const a = toMin(from), b = toMin(to);
   return garbageEvents(date).filter(e=>e.machine===m).reduce((t,e)=>{ const ea = toMin(e.start), eb = e.end ? toMin(e.end) : b;
-    return t + Math.max(0, Math.min(eb,b) - Math.max(ea,a)); }, 0);
+    return t + Math.max(0, Math.min(eb,b) - Math.max(ea,a)); }, 0) + placeGarbageMinFor(date, m, a, b);
 }
+/* v205.61: a garbage run sent from the Crew tab counts toward the line the person came from (crew break minutes left out — they were on break) */
+function placeGarbageMinFor(date, m, a, b){
+  const d = dayLogFor(date); if(!d || !d.where) return 0;
+  const brk = (d.crewBreaks||[]).map(x=>[toMin(x.start), x.end ? toMin(x.end) : b]);
+  let t = 0;
+  Object.keys(d.where).forEach(n=>{ const lg = (d.where[n]||[]).slice().sort((p,q)=>toMin(p.at)-toMin(q.at));
+    lg.forEach((e,i)=>{ if(e.w!=='Garbage run' || e.gsrc==='line') return;
+      let k = i-1; while(k>=0 && lg[k].w==='Garbage run') k--; if(k<0 || lg[k].w!==m) return; // came from this line (back-to-back runs for other areas keep it)
+      const ea = Math.max(toMin(e.at), a), eb = Math.min(lg[i+1] ? toMin(lg[i+1].at) : b, b); if(eb<=ea) return;
+      let mm = eb-ea; brk.forEach(([x,y])=>{ mm -= Math.max(0, Math.min(y,eb)-Math.max(x,ea)); }); t += Math.max(0, mm); }); });
+  return t; }
 /* person back while the line is stopped: a 0-minute marker segment so the rest of the stop (and a paid break) counts the full crew in gross; resume uses that count */
 function garbageBackWhileStopped(live, at, who){
   const ls = live.segments[live.segments.length-1]; const e = ls ? Number(ls.employees)||0 : 0;
@@ -6002,7 +6013,7 @@ function recalcLiveRunRecord(rec, newStart, newEnd){
   const clip = x=>{ const a=Math.max(toMin(x.start),ns), b=Math.min(toMin(x.end),ne); if(b<=a) return null; const hh=v=>String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0'); return {...x, start:hh(a), end:hh(b)}; };
   segs = segs.map(clip).filter(Boolean);
   const dts = (p.downtimeSegments||[]).map(clip).filter(Boolean);
-  if(p.garbageMin) p.garbageMin = garbageMinFor(rec.date, rec.machine, newStart, newEnd);
+  p.garbageMin = garbageMinFor(rec.date, rec.machine, newStart, newEnd);
   const lab = runLabourMinutes(segs, dts, null, p.garbageMin);
   p.segments = segs; p.downtimeSegments = dts;
   p.netLaborHours = lab.net/60; p.grossLaborHours = lab.gross/60;
