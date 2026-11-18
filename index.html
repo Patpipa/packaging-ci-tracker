@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.71 - 2026-11-17 (Scale report timeline: shows when all scales are working again, or which scale is still down at the end)';
+const APP_VERSION = 'v205.72 - 2026-11-17 (Cancel run / delete a run in History also removes that run\'s crew time from Crew Hours)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -6231,8 +6231,22 @@ async function endStandaloneDowntime(m){
     isEndingDowntime = false;
   }
 }
+/* v205.72: an accidental run is taken out of the crew's hours too — every crew move logged during the run window is removed, so nobody gets time on that line */
+function hhmmOf(x){ return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'); }
+function removeRunCrewTime(date, names, from, to){ const d = dayLogFor(date); if(!d || !d.where) return 0; let n0 = 0;
+  [...new Set(names)].forEach(n=>{ const lg = (d.where[n]||[]).slice().sort((a,b)=>toMin(a.at)-toMin(b.at)); if(!lg.length) return;
+    const keep = lg.filter(e=>!(toMin(e.at)>=from && toMin(e.at)<=to)); n0 += lg.length-keep.length;
+    const out = []; keep.forEach(e=>{ if(!out.length || out[out.length-1].w!==e.w) out.push(e); });
+    const last = out[out.length-1];
+    if(last && last.w && toMin(last.at)<from && !(d.place && d.place[n] && d.place[n].w===last.w)){ const se = d.shiftEnd && toMin(d.shiftEnd)<=from ? toMin(d.shiftEnd) : from; out.push({at: hhmmOf(Math.max(se, toMin(last.at))), w:''}); }
+    if(d.place && d.place[n] && toMin(d.place[n].at)>=from) delete d.place[n];
+    if(out.length) d.where[n] = out; else delete d.where[n]; });
+  return n0; }
+function runCrewNames(segs, extra){ return [...new Set([...(segs||[]).flatMap(sg=>Array.isArray(sg.names)?sg.names:[]), ...(extra||[])])]; }
 async function cancelLiveRun(m){
-  if(!confirm(`Cancel this run for ${m}? Nothing will be saved to History.`)) return;
+  const live0 = Store.liveRuns[m]; const nm0 = live0 ? runCrewNames(live0.segments, live0.pendingNames) : [];
+  if(!confirm(`Cancel this run for ${m}? Nothing will be saved to History.${nm0.length?`\n\n${nm0.join(', ')}'s time on ${m} during this run is removed from their hours too.`:''}`)) return;
+  if(live0 && nm0.length){ const from = toMin(live0.startedAt || ((live0.segments||[])[0]||{}).start || nowHHMM()); removeRunCrewTime(live0.date||todayStr(), nm0, from, toMin(nowHHMM())); await Store.saveDayLog(); }
   delete Store.liveRuns[m];
   await Store.saveLiveRuns();
   toast('Run cancelled');
@@ -6645,7 +6659,11 @@ async function deleteRecord(id){
   { const r = Store.records.find(x=>x.id===id); if(r && r.side && String(id).startsWith('side-')){ await cancelSideJob(id.slice(5), r.date); return; } } // v205.22: a side job goes with its time and crew hours
   if(!confirm('Delete this record?')) return;
   await Store.refreshRecords();
-  { const gone = Store.records.find(r=>r.id===id); Store.records = Store.records.filter(r=>r.id!==id); if(gone){ syncStopIntoRun(gone, null); logChange(gone.date, 'delete', gone, null); } }
+  { const gone = Store.records.find(r=>r.id===id); Store.records = Store.records.filter(r=>r.id!==id); if(gone){ syncStopIntoRun(gone, null); logChange(gone.date, 'delete', gone, null);
+      const nm = gone.status==='RUNNING' && gone.plh ? runCrewNames(gone.plh.segments) : []; // v205.72: accidental run — take its crew time out too
+      if(nm.length && confirm(`Also remove ${nm.join(', ')}'s time on ${gone.machine} ${fmtTime12(gone.startTime)}–${fmtTime12(gone.endTime)} from their crew hours?\n\nChoose OK if this run never really happened.`)){
+        Store.records = Store.records.filter(r=>!(r.date===gone.date && r.machine===gone.machine && r.status!=='RUNNING' && !r.side && toMin(r.startTime)>=toMin(gone.startTime) && toMin(r.endTime)<=toMin(gone.endTime)+1 && (gone.plh.downtimeSegments||[]).some(dd=>dd.start===r.startTime && dd.status===r.status))); // its own stops go with it
+        removeRunCrewTime(gone.date, nm, toMin(gone.startTime), toMin(gone.endTime)); } } }
   await Store.saveRecords(); await Store.saveDayLog();
   toast('Record deleted');
   render();
