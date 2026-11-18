@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.59 - 2026-11-16 (Lent crew not back by end of shift show "– end of shift · not back to packaging" instead of returning at 4:30)';
+const APP_VERSION = 'v205.60 - 2026-11-17 (Audit fixes: Lead Hand / Yield on-the-line time in Daily matches Crew Hours & Staffing; End Shift stops everyone\'s floor time; Daily side-machine short time from the Staffing Report; Staffing Report wording — who left a line, cross-dept help position, gone home vs not in)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1118,6 +1118,12 @@ async function deleteOffline(id){ if(!confirm('Delete this entry?')) return; con
 function offlineMinutes(date){
   const d = dayLogFor(date); const out = {}; OFFLINE_ROLES.forEach(r=>out[r]={min:0, where:new Set()});
   if(!d) return out;
+  /* v205.60: when the Lead Hand / Yield were placed by name, count the minutes they were actually on a Variovac, Manual Pack or side machine — the same count as Crew Hours and the Staffing Report */
+  const byName = OFFLINE_ROLES.filter(r=>d.where && d.where[r] && d.where[r].length);
+  if(byName.length){ let pd = null; try{ pd = personDay(date); }catch(e){}
+    if(pd){ byName.forEach(r=>{ const p = pd.people.find(x=>x.name===r); if(!p) return; p.segs.forEach(sg=>{ if(['Lines running','Lines stopped','Side machines'].includes(sg.g)){ out[r].min += sg.b-sg.a; out[r].where.add(String(sg.w||'').replace(/^(Set-up|Dismantle) · /,'')); } }); });
+      (d.offline||[]).filter(o=>!byName.includes(o.role)).forEach(o=>{ let a=toMin(o.start), b=toMin(o.end || (date===todayStr()? openEndToday(o.start) : pastOpenEnd(o.start))); if(b<a) b=a; const t = out[o.role] || (out[o.role]={min:0, where:new Set()}); t.min += Math.max(0,b-a); if(o.where) t.where.add(o.where); });
+      return out; } }
   (d.offline||[]).forEach(o=>{ let a=toMin(o.start), b=toMin(o.end || (date===todayStr()? openEndToday(o.start) : pastOpenEnd(o.start))); if(b<a) b=a; const t = out[o.role] || (out[o.role]={min:0, where:new Set()}); t.min += Math.max(0,b-a); if(o.where) t.where.add(o.where); });
   return out;
 }
@@ -1522,7 +1528,7 @@ async function syncSideBreaks(){
     });
     (d.offline||[]).filter(x=>(d.breakPause.offIds||[]).includes(x.id)).forEach(x=>{
       if((d.offline||[]).some(y=>y.role===x.role && !y.end) || !roleIn(date, x.role)) return; // already back on by hand, or marked off today
-      d.offline.push({id: uid(), role: x.role, start: at, end: null, afterBreak: true});
+      d.offline.push({id: uid(), role: x.role, start: at, end: null, afterBreak: true, ...(x.auto ? {auto:true} : {})});
       back.push(x.role);
     });
     d.breakPause = null;
@@ -1850,11 +1856,15 @@ function dayLogSections(date, opts){
   });
   const unused = SIDE_MACHINES.filter(m=>!used.includes(m)).map(m=>m.name);
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
-  if(used.length) side.push({k:'Lines below required staff while packaging was on side machines', v: x.shortTotal ? fmtDur(x.shortTotal) : 'none', red: x.shortTotal>0});
+  if(used.length){ const sw = shortWhileSide(date); if(sw) side.push({k:'Short-staffed while side machines ran', v: sw.min ? `${fmtDur(sw.min)} (part of the ${fmtDur(sw.total)} short-staffed · see Staffing Report)` : 'none', red: sw.min>0}); } // v205.60: same count as the Staffing Report
   out.push({title:'SIDE MACHINES', rows:side});
   out.push({title:'SCALES', rows: scaleDayRows(date)}); // v174
   return out;
 }
+function shortWhileSide(date){ const x = shortStaffFor(date); if(!x) return null; const {sideRun, N} = x._m; const any = new Array(N).fill(false);
+  x.events.forEach(e=>{ for(let t=e.a;t<e.b;t++){ const i = t-DAY_FROM; if(i>=0&&i<N) any[i] = true; } });
+  let min = 0; for(let i=0;i<N;i++) if(any[i] && Object.keys(sideRun).some(m=>sideRun[m][i])) min++;
+  return {min, total: x.total}; }
 /* Upstream Impact: side-machine summary for the whole range */
 function sideLabourSections(x){
   /* v132: same layout and order as the Daily Report (CREW · MAREL · SIDE MACHINES), totalled for the range */
@@ -2124,7 +2134,8 @@ async function syncWhere(){
       if(w==='Garbage run'){ const L = log[log.length-1]; if(map[n]==='Garbage run'){ const ge = garbageEvents(T).find(e=>!e.end && e.who===n); if(ge && ge.kind){ L.gk = ge.kind; L.gsrc = 'line'; } } else if(d.place[n] && d.place[n].gk) L.gk = d.place[n].gk; } } // v205.57: garbage run from a line card keeps its area in the time log
     if(!log.length) delete d.where[n];
   });
-  OFFLINE_ROLES.forEach(r=>{ if(map[r] && !(d.offline||[]).some(o=>o.role===r && !o.end)){ d.offline = d.offline || []; d.offline.push({id: uid(), role: r, start: at, end: null}); ch = true; } }); // v167: picked on a machine = On line
+  OFFLINE_ROLES.forEach(r=>{ if(map[r] && !(d.offline||[]).some(o=>o.role===r && !o.end)){ d.offline = d.offline || []; d.offline.push({id: uid(), role: r, start: at, end: null, auto: true}); ch = true; } // v167: picked on a machine = On line
+    if(!map[r]) (d.offline||[]).forEach(o=>{ if(o.role===r && !o.end && o.auto){ o.end = at; ch = true; } }); }); // v205.60: moved off the machine = off the line again
   if(namesCrewActive(T)){ const tl = namesCrewTimeline(T).map(e=>({id:e.id, at:e.at, n:e.n, reason: e.note ? 'Other' : '', ...(e.note ? {note:e.note} : {})})); // v164: crew number from names also saved, so the 3D floor and older views see it
     if(JSON.stringify(tl)!==JSON.stringify(d.crewLog||[])){ d.crewLog = tl; syncCrewMirror(d); ch = true; } }
   if(!ch) return;
@@ -2440,6 +2451,7 @@ function staffTimeline(x){ if(!x || !x._m) return [];
   const {keysAt, st, cnt, sideRun, pd, N} = x._m, d = dayLogFor(x.date)||{};
   const L = keysAt.length, manual = new Array(N).fill(0), sideP = {}, crewIn = new Array(N).fill(0), helpIn = new Array(N).fill(0), onBreak = new Array(N).fill(0);
   const C = {}; ['V','M','S','G','R','O'].forEach(k=>{ C[k] = new Array(N).fill(0); }); // v205.43: where your own crew are, minute by minute
+  const helpAt = new Array(N).fill(null); // v205.60: where cross-dept help were
   const LAY = Array.from({length:N}, ()=>({})); // v205.52: every own-crew person, by exact place — always adds up to the crew on the floor
   const where1 = sg=>{ const w = String(sg.w||''), g = sg.g, onM = g==='Lines running'||g==='Lines stopped';
     if(onM && (VARIOVACS.includes(w) || w==='Manual Pack')) return w==='Manual Pack' ? 'Manual Pack' : shortM(w);
@@ -2462,12 +2474,18 @@ function staffTimeline(x){ if(!x || !x._m) return [];
       if(sg.g==='Lent to other dept') offAdd(i, String(sg.w||'').replace(/^Lent · /,'lent to '));
       else if(sg.g==='Not recorded') offAdd(i, 'in but not placed');
       else if(sg.g==='Not here') offAdd(i, /went home/i.test(sg.w||'') ? 'gone home' : 'not in yet'); } });
-    for(let i=0;i<N;i++) if(!covered[i]) offAdd(i, 'not in'); });
+    const cr = crewRowOf(x.date, p.name), lastSg = p.segs[p.segs.length-1]; // v205.60: after their day ended = went home / still lent, not "not in"
+    for(let i=0;i<N;i++) if(!covered[i]){ const t = i+DAY_FROM;
+      if(lastSg && t>=p.b && lastSg.notBack) offAdd(i, String(lastSg.w||'').replace(/^Lent · /,'lent to '));
+      else if(t>=p.b && p.b>p.a && cr && cr.end && t>=toMin(cr.end)) offAdd(i, 'gone home');
+      else if(t>=p.b && p.b>p.a) offAdd(i, 'off after shift');
+      else if(t<p.a) offAdd(i, 'not in yet');
+      else offAdd(i, 'not in'); } });
   const offTxt = i=>{ const o = OFF[i], ks = Object.keys(o); return ks.length ? ` · not on the floor: ${ks.map(k=>`${o[k]} ${k}`).join(', ')}` : ''; };
   pd.people.forEach(p=>{ if(p.away) return; const role = OFFLINE_ROLES.includes(p.name), hlp = !!helperDay(x.date, p.name);
     p.segs.forEach(sg=>{ const w = String(sg.w||''), g = sg.g; for(let t=sg.a;t<sg.b;t++){ const i = t-DAY_FROM; if(i<0||i>=N) continue;
       if(g==='Not here'||g==='Not recorded'||g==='Lent to other dept') continue; // v205.51: lent / not in = not on the floor
-      if(!role){ if(hlp) helpIn[i]++; else { crewIn[i]++; const onM = g==='Lines running'||g==='Lines stopped';
+      if(!role){ if(hlp){ helpIn[i]++; if(g!=='Break'){ const lb = where1(sg); (helpAt[i] = helpAt[i] || {})[lb] = (helpAt[i][lb]||0)+1; } } else { crewIn[i]++; const onM = g==='Lines running'||g==='Lines stopped';
         { const lb = where1(sg); LAY[i][lb] = (LAY[i][lb]||0)+1; }
         if(g==='Break'){} else if(onM && VARIOVACS.includes(w)) C.V[i]++; else if(onM && w==='Manual Pack') C.M[i]++; else if(g==='Side machines') C.S[i]++; else if(g==='Garbage run') C.G[i]++; else if(w==='Runner / Floater') C.R[i]++; else C.O[i]++; } }
       if(g==='Break' && !role) onBreak[i]++;
@@ -2475,16 +2493,21 @@ function staffTimeline(x){ if(!x || !x._m) return [];
       if(g==='Side machines' && !role){ const m = w.replace(/^(Set-up|Dismantle) · /,''); (sideP[m] = sideP[m] || new Array(N).fill(0))[i]++; } } }); }); // v205.51: Lead / Yield listed separately
   /* v205.42: when a Variovac drops to 1 person, say where the other one went (garbage run + area, side machine, break…) */
   const P = pd.people.filter(p=>!p.away);
-  const pulledTo = (m, i)=>{ const t = i+DAY_FROM; let best = null;
-    P.forEach(p=>{ const on = p.segs.find(sg=>sg.a<=t && t<sg.b); if(!on || on.w===m) return;
-      const prev = p.segs.filter(sg=>sg.b<=t && sg.w===m).slice(-1)[0]; if(!prev) return;
-      const between = p.segs.some(sg=>sg.a>=prev.b && sg.b<=t && sg.w===m); if(between) return;
-      if(!best || prev.b > best.at) best = {at:prev.b, sg:on}; });
-    if(!best) return ''; const sg = best.sg, w = String(sg.w||''), g = sg.g;
+  const pulledTo = (m, i)=>{ const t = i+DAY_FROM;
+    /* v205.60: find when this line last had 2 — the person whose time on the line ended right then is the one who left */
+    let j = i; while(j>=0 && (cnt[m][j]||0) < 2) j--; if(j<0) return ''; const leftAt = j+1+DAY_FROM;
+    let best = null;
+    P.forEach(p=>{ const prev = p.segs.find(sg=>sg.w===m && sg.b===leftAt && (sg.g==='Lines running'||sg.g==='Lines stopped')); if(!prev) return;
+      if(p.segs.some(sg=>sg.w===m && sg.a>=leftAt && sg.a<=t && (sg.g==='Lines running'||sg.g==='Lines stopped'))) return; // came back already
+      const on = p.segs.find(sg=>sg.a<=t && t<sg.b);
+      best = {p, sg: on || null}; });
+    if(!best) return '';
+    if(!best.sg){ const hd = helperDay(x.date, best.p.name); if(hd) return `— the cross-dept help went back to ${hd.dept||'their dept'}`; const cr = crewRowOf(x.date, best.p.name); return cr && cr.end ? '— the other went home' : ''; }
+    const sg = best.sg, w = String(sg.w||''), g = sg.g;
     if(g==='Garbage run'){ const a = (String(sg.k).match(/\((.+)\)/)||[])[1]; return `garbage run${a?` (${a})`:''}`; }
     if(g==='Side machines') return w.replace(/^(Set-up|Dismantle) · /,'');
     if(g==='Break') return 'own break'; if(g==='Lent to other dept') return w.replace(/^Lent · /,'lent to ');
-    if(g==='Not here') return 'went home'; if(w==='Runner / Floater') return 'runner';
+    if(g==='Not here') return /back to/i.test(String(sg.w||'')) ? `— the cross-dept help went ${String(sg.w).replace(/^Not here · /,'').toLowerCase()}` : '— the other went home'; if(w==='Runner / Floater') return 'runner';
     return placeLabel(w) || w; };
   /* v205.46: one block per stretch of the day — Fully staffed / Short / Stopped / Break / Planned — so a busy day stays readable */
   const evMask = new Array(N).fill(false); x.events.forEach(e=>{ for(let t=e.a;t<e.b;t++){ const i = t-DAY_FROM; if(i>=0&&i<N) evMask[i] = true; } });
@@ -2502,8 +2525,8 @@ function staffTimeline(x){ if(!x || !x._m) return [];
       K.filter(k=>k.startsWith('stop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'stop:'+m, t:'stop', s:`${shortM(m)} stopped — no staff available to run it`}); });
       K.filter(k=>k.startsWith('moved|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'moved:'+m, t:'stop', s:`${shortM(m)} stopped — its crew were needed ${sides.length?'on '+sides.join(' & '):'elsewhere'}`}); });
       K.filter(k=>k.startsWith('sstop|')).forEach(k=>{ const m = k.split('|')[1]; D.push({k:'sstop:'+m, t:'stop', s:`${m} stopped — no staff available to run it`}); });
-      K.filter(k=>k.startsWith('one|')).forEach(k=>{ const m = k.split('|')[1], to = pulledTo(m, i); D.push({k:'one:'+m, t:'short', s:`${shortM(m)} ran with only 1 person (needs 2)${to?` — the other was needed on ${to}`:''}`}); });
-      if(K.some(k=>k.startsWith('all|'))) D.push({k:'all', t:'short', s:`all 3 Variovacs + ${sides.join(' + ')} running at once — more machines than the crew can cover`});
+      K.filter(k=>k.startsWith('one|')).forEach(k=>{ const m = k.split('|')[1], to = pulledTo(m, i); D.push({k:'one:'+m, t:'short', s:`${shortM(m)} ran with only 1 person (needs 2)${to ? (to.startsWith('—') ? ' '+to : ` — the other was needed on ${to}`) : ''}`}); });
+      if(K.some(k=>k.startsWith('all|'))){ const cov = VARIOVACS.every(m=>cnt[m][i]>=2); D.push({k:'all', t:'short', s:`all 3 Variovacs + ${sides.join(' + ')} running at once — ${cov ? 'no floater left for relief, garbage runs or breaks' : 'more machines than the crew can cover'}`}); } // v205.60: say it right when every line still had 2
       K.filter(k=>k.startsWith('role|')).forEach(k=>{ const [,n,w] = k.split('|'); D.push({k:'role:'+n+':'+w, t:'short', s: C.R[i] ? `${n} worked on ${w} (a floater was on the floor)` : `${n} had to run ${w} — all crew were already on machines`}); });
     }
     const full = runL.length===3 && runL.every(m=>cnt[m][i]>=2), std = full && C.V[i]===6;
@@ -2511,7 +2534,7 @@ function staffTimeline(x){ if(!x || !x._m) return [];
     const Lm = {...LAY[i]}; stopL.forEach(m=>{ if(!Lm[shortM(m)]) Lm[shortM(m)] = 0; }); const ord = ['V1','V2','V3','Manual Pack'], vStd = ['V1','V2','V3'].every(v=>Lm[v]===2) && runL.length===3;
     const keysL = Object.keys(Lm).sort((p,q)=>{ const a = ord.indexOf(p), b = ord.indexOf(q); return (a<0?99:a)-(b<0?99:b) || Lm[q]-Lm[p]; });
     const partsL = vStd ? ['3 Variovacs × 2'].concat(keysL.filter(k=>!['V1','V2','V3'].includes(k)).map(k=>`${Lm[k]} ${k}`)) : keysL.map(k=>['V1','V2','V3'].includes(k) ? `${k} ${Lm[k]}` : `${Lm[k]} ${k}`);
-    const lay = partsL.join(' + ') + ` = ${crewIn[i]} crew` + (helpIn[i]?` (+ ${helpIn[i]} cross-dept help)`:'') + offTxt(i) + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
+    const lay = partsL.join(' + ') + ` = ${crewIn[i]} crew` + (helpIn[i]?` (+ ${helpIn[i]} cross-dept help${helpAt[i] ? ' on '+Object.keys(helpAt[i]).map(k=>helpAt[i][k]>1?`${k} (${helpAt[i][k]})`:k).join(', ') : ''})`:'') + offTxt(i) + (K.filter(k=>k.startsWith('role|')).map(k=>{ const [,n,w] = k.split('|'); return ` · ${n} on ${w}`; }).join(''));
     if(D.length) return {type: D.some(d0=>d0.t==='stop') ? 'stop' : 'short', D, sig: D.map(d0=>d0.k).sort().join(','), lay}; // v205.50: keep where everyone was
     const stops = stopL.map(m=>`${shortM(m)} ${st[m][i]==='CHANGEOVER'?'changeover':'waiting'}${st[m].reason[i]?` (${String(st[m].reason[i]).replace(/^MAREL - /,'MAREL: ')})`:''}`);
     return {type:'ok', lay, stops, sides};
@@ -2580,8 +2603,9 @@ function shiftWindow(date, n, log){
   let a = Math.min(REG_A, toMin(shiftOf(date, n).start));
   if(log && log.length && toMin(log[0].at) < a) a = Math.max(DAY_FROM, toMin(log[0].at));
   let b = REG_B;
+  const sEnd = ((dayLogFor(date)||{}).shiftEnd) || '';
   (log||[]).forEach((e,i)=>{ if(!isActiveW(e.w)) return;
-    const next = log[i+1]; const end = next ? toMin(next.at) : (isToday ? nowM : Math.max(REG_B, toMin(e.at)));
+    const next = log[i+1]; const end = next ? toMin(next.at) : (sEnd ? Math.max(toMin(sEnd), toMin(e.at)) : (isToday ? nowM : Math.max(REG_B, toMin(e.at)))); // v205.60: open-ended places stop at End Shift
     if(end > b) b = end; });
   b = Math.min(b, DAY_TO);
   if(isToday) b = Math.min(b, Math.max(a, nowM));
@@ -6766,7 +6790,7 @@ function renderWeeklyView(){
   </div>
   ${(()=>{ const ds = []; for(let dt=weeklyRange.start; dt<=weeklyRange.end; dt=shiftDate(dt,1)) ds.push(dt); const xs = ds.map(shortStaffFor).filter(Boolean); if(!xs.length) return ''; /* v205.40 */
     const tot = xs.reduce((t,x)=>t+x.total,0), lead = xs.reduce((t,x)=>t+x.roleMin,0);
-    return `<div class="card" style="border-color:${tot?'var(--wait)':'var(--line)'};"><h3>⚠ Short-Staffed This Period</h3>${xs.map(x=>`<div class="statrow"><span class="lbl">${new Date(x.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span><span class="val" style="${x.total?'color:var(--wait);':''}">${x.total?fmtDur(x.total):'none'}</span></div>`).join('')}<div class="statrow"><span class="lbl"><b>Total</b></span><span class="val" style="color:var(--wait);">${fmtDur(tot)}</span></div><div class="statrow"><span class="lbl">Lead Hand / Yield on a machine</span><span class="val">${fmtDur(lead)}</span></div><div class="cb-mut" style="font-size:11px;margin-top:6px;">Each day's moments are listed in its Daily Report.</div></div>`; })()}
+    return `<div class="card" style="border-color:${tot?'var(--wait)':'var(--line)'};"><h3>⚠ Short-Staffed This Period</h3>${xs.map(x=>`<div class="statrow"><span class="lbl">${new Date(x.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span><span class="val" style="${x.total?'color:var(--wait);':''}">${x.total?fmtDur(x.total):'none'}</span></div>`).join('')}<div class="statrow"><span class="lbl"><b>Total</b></span><span class="val" style="color:var(--wait);">${fmtDur(tot)}</span></div><div class="statrow"><span class="lbl">Lead Hand / Yield on a machine</span><span class="val">${fmtDur(lead)}</span></div><div class="cb-mut" style="font-size:11px;margin-top:6px;">Each day's timeline is in Reports → Staffing Report.</div></div>`; })()}
   ${(()=>{ return ''; const sx = staffingSum(weeklyRange.start, weeklyRange.end); if(!sx) return ''; /* v205.38 — replaced by Short-Staffed (v205.40) */
     return `<div class="card" style="border-color:${sx.short>0.2?'var(--wait)':'var(--line)'};"><h3>👥 Staffing This Period · ${sx.days} day${sx.days===1?'':'s'}</h3>${staffingRows(sx,true).map(r=> r.sub ? `<div class="cb-mut" style="font-size:10.5px;font-style:italic;margin-top:8px;">${escapeHtml(r.v)}</div>` : `<div class="statrow"><span class="lbl">${escapeHtml(r.k)}</span><span class="val" style="text-align:right;${r.red?'color:var(--wait);':''}${r.big?'font-size:15px;':''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}</div>`; })()}
   ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period')}
@@ -6992,6 +7016,7 @@ function exportWeeklyPDF(){
   }
 }
 async function closeAllOpenForEndShift(){
+  { const d0 = ensureDayLog(todayStr()); d0.shiftEnd = nowHHMM(); if(!(await Store.saveDayLog())) return false; } // v205.60: crew still on Runner / other places stop counting at End Shift
   const o = endShiftOpenItems();
   if(!o.n) return true;
   // 1) Variovac / line live runs → records (today: now, capped 4:30 PM; older day: 4:30 PM on that day)
