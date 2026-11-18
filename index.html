@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.65 - 2026-11-17 (Crew Hours: Lead Hand & Yield split into On a machine · Runner / Floater · Garbage · Lead / Yield duties · Other work)';
+const APP_VERSION = 'v205.66 - 2026-11-17 (Cross-dept help: one-tap Back to their department at the top of the Crew tab and in their name sheet)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -3596,6 +3596,11 @@ async function helperAdd(){ const el = document.getElementById('helperAddIn'), d
   Store.settings = {...Store.settings, helpers: [...helperList(), {n, dept: (dl && dl.value) || 'Burger Room'}]}; await Store.saveSettings(); toast(`${n} added to helpers`); render(); }
 async function helperRemove(n){ if(helperDay(todayStr(), n) && !helperDay(todayStr(), n).backAt){ toast(`${n} is with you today — tap Went back first`); return; } if(!confirm(`Remove ${n} from the helpers list?\n\nPast hours stay in the reports.`)) return; Store.settings = {...Store.settings, helpers: helperList().filter(h=>h.n!==n)}; await Store.saveSettings(); render(); }
 let helpersOpen = false;
+/* v205.66: helpers with us today — one tap sends them back to their department (top of the Crew tab) */
+function helpersNowStripHTML(){ const T = todayStr(), hs = helperList().filter(h=>{ const c = helperDay(T, h.n); return c && !c.backAt; }); if(!hs.length) return '';
+  const js = n=>n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<div class="card" style="border-color:var(--run);padding:10px 12px;"><div class="cb-lbl" style="margin:0 0 6px;">🤝 Cross-dept help with us</div>${hs.map(h=>{ const c = helperDay(T, h.n), dept = c.dept || h.dept || 'their dept', w = whereOf(h.n), at = w && !String(w).startsWith('Not here') ? placeLabel(w) || w : 'not placed';
+    return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--line);"><span style="flex:1;min-width:120px;"><b>${escapeHtml(h.n)}</b> <span class="cb-mut">· ${escapeHtml(dept)} · ${escapeHtml(at)}</span></span><button type="button" class="cb-btn" style="flex:0 0 auto;border-color:#6b4fb8;color:#b9a6f0;" onclick="helperBack('${js(h.n)}')">↩ Back to ${escapeHtml(dept)}</button></div>`; }).join('')}</div>`; }
 function helpersCardHTML(){
   const T = todayStr(), hs = helperList(), now = nowHHMM();
   const joined = hs.filter(h=>helperDay(T, h.n)), rest = hs.filter(h=>!helperDay(T, h.n));
@@ -4219,7 +4224,8 @@ function crewSheetHTML(){
       <div class="cb-lbl" style="margin:12px 0 6px;">Other</div><div style="display:flex;gap:6px;"><input type="text" maxlength="40" placeholder="What are they doing?" value="${escapeHtml(sh.text||'')}" oninput="crewSheet.text=this.value" style="padding:10px;flex:1;min-width:0;"><button type="button" class="cb-btn" style="flex:0 0 auto;padding:10px 14px;" onclick="crewSheetGo('__other')">Assign</button></div>
       ${recentOther().length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">${recentOther().map(t=>`<button type="button" class="cb-btn" style="flex:0 0 auto;font-size:12px;text-transform:none;font-family:inherit;" onclick="crewSheet.text='${cjs(t)}';crewSheetGo('__other')">${escapeHtml(t)}</button>`).join('')}</div>`:''}
       ${grid('Lent to another department', lent)}
-      ${role ? '' : `<button type="button" class="cb-btn" style="width:100%;margin-top:12px;padding:12px;border-color:#6b4fb8;color:#b9a6f0;" onclick="crewSheetGo('Not here · Went home')">⌂ Going home now</button>`}`}
+      ${role ? '' : (()=>{ const hd = helperDay(T, n); if(hd && !hd.backAt){ const dept = hd.dept || (helperOf(n)||{}).dept || 'their dept'; return `<button type="button" class="cb-btn" style="width:100%;margin-top:12px;padding:12px;border-color:#6b4fb8;color:#b9a6f0;" onclick="crewSheet=null;helperBack('${cjs(n)}')">↩ Back to ${escapeHtml(dept)}</button>`; } // v205.66: a helper goes back to their department, not home
+        return `<button type="button" class="cb-btn" style="width:100%;margin-top:12px;padding:12px;border-color:#6b4fb8;color:#b9a6f0;" onclick="crewSheetGo('Not here · Went home')">⌂ Going home now</button>`; })()}`}
       <div class="cb-lbl" style="margin:14px 0 6px;">Today's moves</div>
       ${moves.length ? moves.map(e=>`<div style="display:flex;gap:10px;font-size:13px;padding:3px 0;"><span class="mono cb-mut" style="min-width:64px;">${fmtTime12(e.at)}</span><span>→ ${escapeHtml(e.to)}</span></div>`).join('') : '<div class="cb-mut" style="font-size:12.5px;">No moves yet today.</div>'}
     </div></div>`;
@@ -4236,7 +4242,7 @@ function crewHistoryHTML(){
 function renderCrewTab(){
   const T = todayStr(), active = namesCrewActive(T) || todaysCrewActive();
   let body = '';
-  if(crewSec==='list') body = `${active ? `${shortBannerHTML()}${crewLineCards()}${crewSideCard()}${crewDowntimeAlerts()}${crewQuickActions()}${crewSupportCard()}` : `<div class="card"><div class="cb-mut">Today's crew isn't confirmed yet — open <b>Crew Setup</b> and tap ✓ Confirm today's crew.</div></div>`}<div class="cb-lbl" style="margin:4px 0 6px;">CREW LIST · tap a name to move them</div>${crewRowsHTML()}`;
+  if(crewSec==='list') body = `${active ? `${shortBannerHTML()}${helpersNowStripHTML()}${crewLineCards()}${crewSideCard()}${crewDowntimeAlerts()}${crewQuickActions()}${crewSupportCard()}` : `<div class="card"><div class="cb-mut">Today's crew isn't confirmed yet — open <b>Crew Setup</b> and tap ✓ Confirm today's crew.</div></div>`}<div class="cb-lbl" style="margin:4px 0 6px;">CREW LIST · tap a name to move them</div>${crewRowsHTML()}`;
   else if(crewSec==='history') body = crewHistoryHTML();
   else body = `${renderCrewList()}${helpersCardHTML()}${active ? `<div class="card cb"><div class="cb-lbl" style="margin-top:0;">PACKAGING LINES</div>${packagingLinesNowHTML()}<div class="cb-mut" style="font-size:11.5px;margin-top:8px;">${STAFF_RULES_NOTE}.</div></div>` : ''}`;
   return `${crewSummaryBar()}${body}${crewSheetHTML()}`;
