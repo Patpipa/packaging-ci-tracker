@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.64 - 2026-11-17 (Data audit: report check finds overlaps, planned stops saved as Waiting, unusual PLH, no product, after-hours entries and reports changed after End Shift; planned-stop warning; same run never saved twice; weight never dropped; PLH coverage on every PLH figure; Best/Lowest from runs 15 min+; Most Waiting label; side machines and calendar months in Weekly; edit history; delete-range backup)';
+const APP_VERSION = 'v205.65 - 2026-11-17 (Crew Hours: Lead Hand & Yield split into On a machine · Runner / Floater · Garbage · Lead / Yield duties · Other work)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -2993,7 +2993,9 @@ function awayAdd(st, date, pd){
         if(w.startsWith('Set-up · ')) o.setup += m; else if(w.startsWith('Dismantle · ') || w.startsWith('Clean-up · ')) o.clean += m; else o.run += m; }
       else if(g==='Garbage run'){ const a = (String(sg.k).match(/\((.+)\)/)||[])[1] || 'Area not picked'; st.garb[a] = (st.garb[a]||0)+m; }
       else if(g==='Lent to other dept') st.lent += m;
-      if(role){ const r = st.roles[p.name] || (st.roles[p.name] = {line:0, off:0}); if(g==='Lines running'||g==='Lines stopped'||g==='Side machines') r.line += m; else if(!['Break','Not here','Not recorded'].includes(g)) r.off += m; } });
+      if(role){ const r = st.roles[p.name] || (st.roles[p.name] = {line:0, off:0, run:0, garb:0, duty:0, other:0}); // v205.65: where the Lead Hand / Yield time went, piece by piece
+        if(g==='Lines running'||g==='Lines stopped'||g==='Side machines') r.line += m;
+        else if(!['Break','Not here','Not recorded'].includes(g)){ r.off += m; if(w==='Runner / Floater') r.run += m; else if(g==='Garbage run') r.garb += m; else if(g==='Lead / Yield duties') r.duty += m; else r.other += m; } } });
     if(hd0){ const h = st.help[p.name] || (st.help[p.name] = {dept: hd0.dept||(helperOf(p.name)||{}).dept||'', mins:0, days:0, spans:[]}); h.mins += chWorked(p); h.days++; h.spans.push(`${chFmt(p.a)} – ${chFmt(p.b)}`); }
   });
 }
@@ -3016,7 +3018,8 @@ function awaySectionsHTML(st, td, hd, n0, multi){
   // Lead Hand & Yield
   H.push(hd(`${n0+1} · Lead Hand & Yield`));
   const R = Object.keys(st.roles||{});
-  H.push(R.length ? `<table style="width:100%;border-collapse:collapse;">${R.map(n=>{ const r = st.roles[n]; return `<tr><td style="${td}font-weight:700;">${escapeHtml(n)}</td><td style="${td}">on the line <b style="${r.line?red:''}">${chDur(r.line)}</b></td><td style="${td}">off-line duties <b>${chDur(r.off)}</b></td></tr>`; }).join('')}</table><div style="${sub}margin-top:4px;">On the line = ticked onto a Variovac, Manual Pack or side machine. Off-line = Lead / Yield duties and other work off the lines.</div>` : `<div style="font-size:12.5px;color:#777;">Lead Hand / Yield not recorded.</div>`);
+  H.push(R.length ? (()=>{ const any = k=>R.some(n=>st.roles[n][k]); const cols = [['line','On a machine'], ['run','Runner / Floater'], ...(any('garb')?[['garb','Garbage runs']]:[]), ['duty','Lead / Yield duties'], ...(any('other')?[['other','Other work']]:[])];
+    return `<table style="width:100%;border-collapse:collapse;"><tr><td style="${td}"></td>${cols.map(([,l])=>`<td style="${td}font-size:10.5px;color:#666;text-transform:uppercase;text-align:right;">${l}</td>`).join('')}<td style="${td}font-size:10.5px;color:#666;text-transform:uppercase;text-align:right;">Total</td></tr>${R.map(n=>{ const r = st.roles[n]; return `<tr><td style="${td}font-weight:700;">${escapeHtml(n)}</td>${cols.map(([k])=>`<td style="${td}text-align:right;${k==='line'&&r.line?red:''}${k==='run'&&r.run?'color:#b9770e;':''}"><b>${chDur(r[k]||0)}</b></td>`).join('')}<td style="${td}text-align:right;">${chDur(r.line+r.off)}</td></tr>`; }).join('')}</table><div style="${sub}margin-top:4px;">On a machine = ticked onto a Variovac, Manual Pack or side machine. Runner / Floater = covering the floor as the floater. Lead / Yield duties = their own off-line work.${any('other')?' Other work = closing, cleaning, set-up places and other duties.':''} Breaks not included.</div>`; })() : `<div style="font-size:12.5px;color:#777;">Lead Hand / Yield not recorded.</div>`);
   // Cross-dept help
   H.push(hd(`${n0+2} · Cross-dept help`));
   const X = Object.keys(st.help||{});
