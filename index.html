@@ -6643,7 +6643,9 @@ function reportCheck(T){
     if(w<0 || (Number(p.quantity)||0)<0) add('red', `${lab}: negative weight or quantity`, w, '0 or more');
     if(p.grossLaborHours<0 || p.netLaborHours<0) add('red', `${lab}: negative labour hours`, p.grossLaborHours, '0 or more');
     if(p.grossPLH!=null) rec(`${lab}: PLH = lbs ÷ gross labour hours`, Math.round(p.grossPLH*10)/10, Math.round(w/p.grossLaborHours*10)/10);
-    else add('yellow', `${lab}: weight not entered — left out of PLH`, 'missing', 'add it in History'); });
+    else add('yellow', `${lab}: weight not entered — left out of PLH`, 'missing', 'add it in History');
+    const lost = (p.downtimeSegments||[]).filter(d=>d.status!=='NO_WORK' && duration(d.start,d.end)>0 && !recs.some(x=>x.machine===r.machine && x.status===d.status && x.startTime===d.start && x.endTime===d.end));
+    if(lost.length) add('red', `${lab}: labour still counts a stop that was changed or deleted in History (${lost.map(d=>fmtTime12(d.start)+'–'+fmtTime12(d.end)).join(', ')})`, 'stale', 'matches History'); }); // v205.63: edits made before this version
   MACHINES.forEach(m=>{ const rs = runs.filter(r=>r.machine===m); for(let i=0;i<rs.length;i++) for(let j=i+1;j<rs.length;j++){ if(busySpans(rs[i]).some(([a,b])=>busySpans(rs[j]).some(([c,d])=>rangesOverlap(a,b,c,d)))) add('red', `${shortM(m)}: two runs overlap (${fmtTime12(rs[i].startTime)} and ${fmtTime12(rs[j].startTime)}) — possible duplicate`, 'overlap', 'none'); } });
   recs.forEach(r=>{ if(r.durationMin<0 || (r.startTime && r.endTime && toMin(r.endTime) < toMin(r.startTime))) add('red', `${r.machine} ${fmtTime12(r.startTime)}: finish earlier than start`, r.endTime, 'after '+r.startTime); });
   { const all = plhRecordsInRange(T,T), s0 = computePLHSummary(all), lbs = MACHINES.reduce((t,m)=>t+computePLHSummary(all.filter(r=>r.machine===m)).totalWeight,0); if(s0.totalWeight || lbs) rec('Department lbs = sum of each machine', s0.totalWeight, lbs); }
