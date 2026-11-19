@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.73 - 2026-11-17 (Crew → History: remove a crew move logged by mistake; hours worked out again)';
+const APP_VERSION = 'v205.74 - 2026-11-18 (Film change: pick Forming / Non-forming / Both; rolls used in Daily and Weekly reports)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -259,6 +259,12 @@ const STATUSES = [
   {key:'PLANNED', label:'Planned Stop', color:'var(--planned)', dim:'var(--planned-dim)', pillClass:'planned'},
 ];
 const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change','Film Change','Label Change','Cleaning Between Products','Weight Adjustment','Recipe/Program Change','Other'];
+/* v205.74: Film change — which film. Every roll is the same size, so one change = one roll; Both = one of each */
+const FILM_TYPES = ['Forming','Non-forming','Both'];
+function filmRolls(film){ return film==='Both' ? {f:1, n:1} : film==='Forming' ? {f:1, n:0} : film==='Non-forming' ? {f:0, n:1} : {f:0, n:0}; }
+function filmUsage(start, end){ const M = {}; let any = false;
+  Store.records.filter(r=>r.status==='CHANGEOVER' && r.reason==='Film Change' && !r.side && r.date>=start && r.date<=end).forEach(r=>{ any = true; const m = M[r.machine] || (M[r.machine] = {f:0, n:0, changes:0, min:0, unknown:0}); const k = filmRolls(r.film); m.f += k.f; m.n += k.n; m.changes++; m.min += r.durationMin||0; if(!r.film) m.unknown++; });
+  if(!any) return null; const T = {f:0, n:0, changes:0, min:0, unknown:0}; Object.values(M).forEach(m=>Object.keys(T).forEach(k=>T[k]+=m[k])); return {M, T}; }
 /* v98: Planned stops (stretching, crew talk, town hall…) — recorded and shown in reports as their own line, but like Break / No Work they are NOT counted against efficiency, NOT in bottleneck rankings or the Upstream report, and never trigger the red downtime alarm. They still count as paid labour time, so PLH gross includes them and PLH net excludes them, same as any stop. */
 const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk','Metal Detector Test'];
 const METAL_DETECTOR_MACHINES = ['Variovac 1','Variovac 2','Variovac 3']; // v100: one-tap Metal Detector button shows on these lines
@@ -1869,6 +1875,7 @@ function dayLogSections(date, opts){
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
   if(used.length){ const sw = shortWhileSide(date); if(sw) side.push({k:'Short-staffed while side machines ran', v: sw.min ? `${fmtDur(sw.min)} (part of the ${fmtDur(sw.total)} short-staffed · see Staffing Report)` : 'none', red: sw.min>0}); } // v205.60: same count as the Staffing Report
   out.push({title:'SIDE MACHINES', rows:side});
+  { const fu = filmUsage(date, date); if(fu){ const rows = Object.keys(fu.M).sort().map(m=>{ const x = fu.M[m]; return {k: shortM(m), v: `${x.f} forming · ${x.n} non-forming roll${x.f+x.n===1?'':'s'} · ${fmtDur(x.min)} changing${x.unknown?` · ${x.unknown} film not recorded`:''}`}; }); if(Object.keys(fu.M).length>1) rows.push({k:'Total', v:`${fu.T.f} forming · ${fu.T.n} non-forming · ${fmtDur(fu.T.min)}`}); out.push({title:'FILM CHANGES (ROLLS USED)', rows}); } } // v205.74
   out.push({title:'SCALES', rows: scaleDayRows(date)}); // v174
   return out;
 }
@@ -5819,7 +5826,7 @@ function dtSearch(v){
 function dtReady(s){
   if(s.status==='NO_WORK' || s.status==='BREAK') return true;
   if(s.status==='WAITING') return !!s.waitReason && !!s.waitCategory && (s.waitReason!=='Other' || !!(s.waitReasonOther||'').trim());
-  if(s.status==='CHANGEOVER') return !!s.changeReason && (s.changeReason!=='Other' || !!(s.changeReasonOther||'').trim());
+  if(s.status==='CHANGEOVER') return !!s.changeReason && (s.changeReason!=='Other' || !!(s.changeReasonOther||'').trim()) && (s.changeReason!=='Film Change' || !!s.film);
   if(s.status==='PLANNED') return !!s.plannedReason && (s.plannedReason!=='Other' || !!(s.plannedReasonOther||'').trim());
   return false;
 }
@@ -5846,7 +5853,8 @@ function renderLiveDowntimeSetupCard(live){
   }
   if(s.status==='CHANGEOVER'){
     pick += `<div class="dt-lbl">Changeover reason</div><div class="dt-grid">${CHANGEOVER_REASONS.map(r=>dtTile(s,'CHANGEOVER','',r)).join('')}</div>
-      ${s.changeReason==='Other' ? `<div class="field" style="margin-top:10px;"><label>Specify</label><input id="dtOther" type="text" value="${escapeHtml(s.changeReasonOther||'')}" oninput="liveDowntimeSetup.changeReasonOther=this.value;dtSyncBtn()"></div>` : ''}`;
+      ${s.changeReason==='Other' ? `<div class="field" style="margin-top:10px;"><label>Specify</label><input id="dtOther" type="text" value="${escapeHtml(s.changeReasonOther||'')}" oninput="liveDowntimeSetup.changeReasonOther=this.value;dtSyncBtn()"></div>` : ''}
+      ${s.changeReason==='Film Change' ? `<div class="dt-lbl" style="margin-top:10px;">Which film?</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${FILM_TYPES.map(f=>`<button type="button" class="cb-btn" style="flex:1 1 30%;padding:12px 6px;font-size:13px;text-transform:none;${s.film===f?'border-color:var(--change);color:var(--change);background:var(--change-dim);':''}" onclick="liveDowntimeSetup.film='${f}';render()">${f==='Both'?'Both films':f+' film'}</button>`).join('')}</div>` : ''}`;
   }
   if(s.status==='PLANNED'){
     pick += `<div class="dt-lbl">Planned stop</div><div class="dt-grid">${[...PLANNED_REASONS,'Other'].map(r=>dtTile(s,'PLANNED','',r)).join('')}</div>
@@ -5855,7 +5863,7 @@ function renderLiveDowntimeSetupCard(live){
   }
   if(s.status==='NO_WORK') pick += `<div class="warnbanner" style="background:var(--nowork-dim);border-color:var(--nowork);color:var(--nowork);">This time will NOT be counted as downtime or against Efficiency %.</div>`;
   const sel = s.status==='WAITING' && s.waitReason ? `${(DT_CATS.find(x=>x[0]===s.waitCategory)||[])[1]||''} · ${s.waitReason==='Other'?(s.waitReasonOther||'Other'):s.waitReason}`
-    : s.status==='CHANGEOVER' && s.changeReason ? `Changeover · ${s.changeReason==='Other'?(s.changeReasonOther||'Other'):s.changeReason}`
+    : s.status==='CHANGEOVER' && s.changeReason ? `Changeover · ${s.changeReason==='Other'?(s.changeReasonOther||'Other'):s.changeReason}${s.changeReason==='Film Change' && s.film ? ` (${s.film})` : ''}`
     : s.status==='PLANNED' && s.plannedReason ? `Planned · ${s.plannedReason==='Other'?(s.plannedReasonOther||'Other'):s.plannedReason}` : '';
   return `<div class="live-card downtime">
     <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:12px;">${s.machine} — Log Downtime</h3>
@@ -5933,7 +5941,7 @@ async function confirmDowntime(){
   }
   let dtNotes = s.notes||'';
   if(s.status==='WAITING' && (reason==='Employee Shortage' || reason==='Employee Reassigned')){ const sn = sideShortageNote(); if(sn) dtNotes = (dtNotes ? dtNotes+' ' : '') + sn; }
-  live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:dtNotes});
+  live.downtimeSegments.push({start: now, end:null, status:s.status, reasonCategory, reason, classification, notes:dtNotes, ...(s.status==='CHANGEOVER' && s.changeReason==='Film Change' && s.film ? {film:s.film} : {})});
   live.status = 'DOWNTIME';
   liveDowntimeSetup = null;
   const ok = await Store.saveLiveRuns();
@@ -6172,7 +6180,7 @@ async function closeOutLiveRun(m, opts){
   (live.downtimeSegments||[]).forEach(d=>{
     const dur = duration(d.start, d.end);
     if(dur<=0) return;
-    toSave.push({id:uid(), date:live.date, machine:m, product:live.product, startTime:d.start, endTime:d.end, durationMin:dur, status:d.status, reasonCategory:d.reasonCategory, reason:d.reason, classification:d.classification, notes:d.notes||'', createdAt:Date.now()});
+    toSave.push({id:uid(), date:live.date, machine:m, product:live.product, startTime:d.start, endTime:d.end, durationMin:dur, status:d.status, reasonCategory:d.reasonCategory, reason:d.reason, classification:d.classification, ...(d.film ? {film:d.film} : {}), notes:d.notes||'', createdAt:Date.now()});
   });
 
   if(toSave.length===0) return {count:0, grossPLH:null};
@@ -6305,6 +6313,7 @@ function renderNewRecord(){
       <div class="field"><label>Changeover / Setup Reason</label>
         <select onchange="draft.changeReason=this.value; render()">${CHANGEOVER_REASONS.map(r=>`<option ${draft.changeReason===r?'selected':''}>${r}</option>`).join('')}</select>
       </div>
+      ${draft.changeReason==='Film Change' ? `<div class="field"><label>Which film?</label><select onchange="draft.film=this.value">${['',...FILM_TYPES].map(f=>`<option value="${f}" ${ (draft.film||'')===f?'selected':''}>${f ? (f==='Both'?'Both films':f+' film') : '— not recorded —'}</option>`).join('')}</select></div>` : ''}
       ${draft.changeReason==='Other' ? `<div class="field"><label>Specify Reason</label><input type="text" value="${draft.changeReasonOther}" oninput="draft.changeReasonOther=this.value" placeholder="Describe the changeover reason"></div>` : ''}` : ''}
     ${draft.status==='WAITING' ? `
       <div class="field"><label>Reason Category</label>
@@ -6415,7 +6424,7 @@ async function _saveRecordInner(){
     if(draft.status==='CHANGEOVER'){ reason = draft.changeReason==='Other' ? (draft.changeReasonOther||'Other') : draft.changeReason; }
     if(draft.status==='PLANNED'){ reasonCategory = 'Planned Stop'; reason = draft.plannedReason==='Other' ? (draft.plannedReasonOther||'Other') : draft.plannedReason; }
     if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
-    toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification});
+    toSave.push({...base, id:uid(), machine:draft.machine, product, reasonCategory, reason, classification, ...(draft.status==='CHANGEOVER' && reason==='Film Change' && draft.film ? {film:draft.film} : {})});
   }
   if(!confirmNoOverlap(toSave)) return;
   await Store.refreshRecords();
@@ -6524,7 +6533,7 @@ function renderHistory(){
     return `<div class="hist-item">
       <div class="hist-top"><span class="mach">${r.machine}</span><span class="pill ${si.pillClass}"><span class="dot" style="background:${si.color}"></span>${si.label}</span></div>
       <div class="hist-mid">${fmtDate(r.date)} · ${fmtTime12(r.startTime)} – ${fmtTime12(r.endTime)} · ${r.side?'ran ':''}${fmtDur(r.durationMin)}${r.side ? (()=>{ const pz = ((r.plh&&r.plh.downtimeSegments)||[]).reduce((t,d)=>t+duration(d.start,d.end),0); return pz ? ` (paused ${fmtDur(pz)})` : ''; })() : ''} ${r.product && r.product!==r.machine ?('· '+escapeHtml(r.product)):''}</div>
-      ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
+      ${r.reason ? `<div class="hist-mid">${escapeHtml(effectiveReasonLabel(r))}${r.film ? ` <b>· ${escapeHtml(r.film==='Both'?'both films':r.film+' film')}</b>` : ''} ${r.classification?`<span class="classtag ${r.classification==='upstream'?'up':'int'}">${r.classification.toUpperCase()}</span>`:''}</div>` : ''}
       ${r.notes ? `<div class="hist-mid" style="color:var(--text)">"${escapeHtml(r.notes)}"</div>` : ''}
       ${hasTimeline ? `<div style="cursor:pointer;color:var(--brk);font-size:12px;margin-top:6px;text-decoration:underline;" onclick="toggleTimeline('${r.id}')">${isExpanded?'▾':'▸'} View Timeline</div>` : ''}
       ${hasTimeline && isExpanded ? renderTimelineRows(r) : ''}
@@ -6683,6 +6692,7 @@ function editRecord(id){
   const isCustomWaiting = r.status==='WAITING' && r.reasonCategory && WAITING_CATEGORIES[r.reasonCategory] && !WAITING_CATEGORIES[r.reasonCategory].reasons.includes(r.reason);
   draft = {plannedReason: r.status==='PLANNED' ? (PLANNED_REASONS.includes(r.reason)?r.reason:'Other') : PLANNED_REASONS[0], plannedReasonOther: (r.status==='PLANNED' && !PLANNED_REASONS.includes(r.reason)) ? (r.reason||'') : '', date:r.date, machine:r.machine, breakMachines:[r.machine], product: PRODUCTS.includes(r.product)?r.product:'Other', productOther: PRODUCTS.includes(r.product)?'':r.product, startTime:r.startTime, endTime:r.endTime, status:r.status, changeReason: r.status==='CHANGEOVER' ? (isCustomChangeover?'Other':r.reason) : CHANGEOVER_REASONS[0], changeReasonOther: isCustomChangeover?r.reason:'', waitCategory: r.status==='WAITING'?r.reasonCategory:Object.keys(WAITING_CATEGORIES)[0], waitReason: r.status==='WAITING' ? (isCustomWaiting?'Other':r.reason) : '', waitReasonOther: isCustomWaiting?r.reason:'', notes:r.notes};
   draft._editId = id;
+  if(r.film) draft.film = r.film; // v205.74
   Router.go('new');
 }
 // override saveRecord to handle edit mode
@@ -6709,6 +6719,7 @@ saveRecord = async function(){
         if(draft.status==='WAITING'){ reasonCategory = draft.waitCategory; const wr = draft.waitReason || reasonsForMachine(draft.waitCategory, draft.machine)[0]; reason = wr==='Other' ? (draft.waitReasonOther||'Other') : wr; classification = reasonClassification(draft.waitCategory); }
         const old = Store.records[idx];
         let upd = {...old, date: draft.date||todayStr(), machine:draft.machine, product, startTime:draft.startTime, endTime:draft.endTime, durationMin:dur, status:draft.status, reasonCategory, reason, classification, notes:draft.notes};
+        if(draft.status==='CHANGEOVER' && reason==='Film Change' && draft.film) upd.film = draft.film; else delete upd.film; // v205.74
         const isLiveRun = old.status==='RUNNING' && old.plh && Array.isArray(old.plh.segments) && old.plh.segments.length;
         if(isLiveRun && draft.status==='RUNNING'){
           // v116: a Live Floor run keeps its real running minutes (its stops are separate records). If its start/finish changed, trim/stretch its segments and recalculate labour + PLH.
@@ -7024,6 +7035,7 @@ function renderWeeklyView(){
     return `<div class="card" style="border-color:${sx.short>0.2?'var(--wait)':'var(--line)'};"><h3>👥 Staffing This Period · ${sx.days} day${sx.days===1?'':'s'}</h3>${staffingRows(sx,true).map(r=> r.sub ? `<div class="cb-mut" style="font-size:10.5px;font-style:italic;margin-top:8px;">${escapeHtml(r.v)}</div>` : `<div class="statrow"><span class="lbl">${escapeHtml(r.k)}</span><span class="val" style="text-align:right;${r.red?'color:var(--wait);':''}${r.big?'font-size:15px;':''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}</div>`; })()}
   ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period', plhCoverage(weeklyRange.start,weeklyRange.end))}
   ${sideWeekHTML(weeklyRange.start, weeklyRange.end)}
+  ${filmWeekHTML(weeklyRange.start, weeklyRange.end)}
   <div class="card">
     <h3>Daily PLH Trend</h3>
     ${renderPLHTrendChart(dailyPLHSeries(weeklyRange.start,weeklyRange.end))}
@@ -7076,6 +7088,15 @@ function sideWeekHTML(start, end){ const rows = sideWeekRows(start, end);
   return `<div class="card"><h3>Side Machines This Period</h3><div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Reported separately — not part of line PLH above.</div>${rows.length ? rows.map(x=>`<div class="statrow"><span class="lbl">${escapeHtml(x.name)}</span><span class="val" style="font-size:12.5px;text-align:right;">${fmtDur(x.run)} on · ${fmtDur(x.labour)} labour<br>${x.plh!=null ? `${Math.round(x.lbs).toLocaleString('en-US')} lbs · ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting ? ` <span style="color:var(--change);">· ${x.cov.awaiting} awaiting weight</span>` : ''}</span></div>`).join('') : '<div class="empty">No side machines used.</div>'}</div>`; }
 function sideWeekText(start, end){ const rows = sideWeekRows(start, end); if(!rows.length) return '';
   return `\nSIDE MACHINES (reported separately, not in line PLH):\n` + rows.map(x=>`${x.name}: ${fmtDur(x.run)} on · ${fmtDur(x.labour)} labour · ${x.plh!=null ? `${Math.round(x.lbs)} lbs · ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting?` · ${x.cov.awaiting} awaiting weight`:''}`).join('\n') + '\n'; }
+function filmWeekHTML(start, end){ const fu = filmUsage(start, end); if(!fu) return '';
+  const ms = Object.keys(fu.M).sort(), td = 'padding:6px 4px;border-bottom:1px solid var(--line);font-size:13px;', tn = td+'text-align:right;font-variant-numeric:tabular-nums;';
+  return `<div class="card"><h3>Film Usage This Period</h3><div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">From Changeover → Film change. One change = one roll · Both = one of each.</div>
+    <table style="width:100%;border-collapse:collapse;"><tr><td style="${td}color:var(--muted);font-size:11px;"></td><td style="${tn}color:var(--muted);font-size:11px;">FORMING</td><td style="${tn}color:var(--muted);font-size:11px;">NON-FORMING</td><td style="${tn}color:var(--muted);font-size:11px;">CHANGE TIME</td></tr>
+    ${ms.map(m=>{ const x = fu.M[m]; return `<tr><td style="${td}">${escapeHtml(shortM(m))}</td><td style="${tn}">${x.f}</td><td style="${tn}">${x.n}</td><td style="${tn}">${fmtDur(x.min)}</td></tr>`; }).join('')}
+    <tr><td style="${td}font-weight:700;">Total</td><td style="${tn}font-weight:700;">${fu.T.f}</td><td style="${tn}font-weight:700;">${fu.T.n}</td><td style="${tn}font-weight:700;">${fmtDur(fu.T.min)}</td></tr></table>
+    ${fu.T.unknown ? `<div style="font-size:11.5px;color:var(--change);margin-top:6px;">${fu.T.unknown} film change${fu.T.unknown===1?'':'s'} without the film picked (before this update, or not chosen) — not in the roll counts.</div>` : ''}</div>`; }
+function filmWeekText(start, end){ const fu = filmUsage(start, end); if(!fu) return '';
+  return `\nFILM USAGE (rolls used):\n` + Object.keys(fu.M).sort().map(m=>{ const x = fu.M[m]; return `${shortM(m)}: ${x.f} forming · ${x.n} non-forming · ${fmtDur(x.min)} changing`; }).join('\n') + `\nTotal: ${fu.T.f} forming · ${fu.T.n} non-forming${fu.T.unknown?` (${fu.T.unknown} change${fu.T.unknown===1?'':'s'} without film picked)`:''}\n`; }
 function weeklySummaryText(){
   const rep = buildRangeReport(weeklyRange.start, weeklyRange.end);
   const t = rep.totals;
@@ -7087,7 +7108,7 @@ Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
 ${plhCoverage(weeklyRange.start, weeklyRange.end).text}
 ${plh.best ? 'Best (runs 15 min+): '+plhJobName(plh.best)+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}
 Note: ${PLH_DISCLAIMER}` : '';
-  const sideBlock = sideWeekText(weeklyRange.start, weeklyRange.end);
+  const sideBlock = sideWeekText(weeklyRange.start, weeklyRange.end) + filmWeekText(weeklyRange.start, weeklyRange.end);
   const sdays = []; for(let dt=weeklyRange.start; dt<=weeklyRange.end; dt=shiftDate(dt,1)) sdays.push(dt); const sxs = sdays.map(shortStaffFor).filter(Boolean), stot = sxs.reduce((t,x)=>t+x.total,0); // v205.40
   const staffBlock = sxs.length ? `
 SHORT-STAFFED: ${fmtDur(stot)} this period
@@ -7246,6 +7267,7 @@ function exportWeeklyPDF(){
     }
   }
 
+  { const fu = filmUsage(rep.startDate, rep.endDate); if(fu){ const ms = Object.keys(fu.M).sort(); ensure(40+(ms.length+1)*16); y+=6; section('FILM USAGE (ROLLS USED)'); ms.forEach(m=>{ const x = fu.M[m]; row(m, `${x.f} forming - ${x.n} non-forming - ${fmtDur(x.min)} changing`); }); row('Total', `${fu.T.f} forming - ${fu.T.n} non-forming - ${fu.T.changes} changes`); } } // v205.74
   { const sr = sideWeekRows(rep.startDate, rep.endDate); if(sr.length){ ensure(40+sr.length*16); y+=6; section('SIDE MACHINES (REPORTED SEPARATELY, NOT IN LINE PLH)'); sr.forEach(x=>row(x.name, pdfSafe(`${fmtDur(x.run)} on - ${fmtDur(x.labour)} labour - ${x.plh!=null ? `${Math.round(x.lbs)} lbs - ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting?` - ${x.cov.awaiting} awaiting weight`:''}`))); } } // v205.64
   ensure(100); y+=6; section('RECOMMENDED ACTIONS (LEAN/CI)');
   craftWeeklySuggestions(rep).forEach((idea,i)=>{
