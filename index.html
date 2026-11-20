@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.76 - 2026-11-19 (Film Usage: shorter footnote)';
+const APP_VERSION = 'v205.77 - 2026-11-20 (Film Usage: add film rolls by hand for days not tapped live — rolls only, no downtime)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -262,9 +262,11 @@ const CHANGEOVER_REASONS = ['Product Changeover','Machine Setup','Plate Change',
 /* v205.74: Film change — which film. Every roll is the same size, so one change = one roll; Both = one of each */
 const FILM_TYPES = ['Forming','Non-forming','Both'];
 function filmRolls(film){ return film==='Both' ? {f:1, n:1} : film==='Forming' ? {f:1, n:0} : film==='Non-forming' ? {f:0, n:1} : {f:0, n:0}; }
+function filmAddsIn(start, end){ const out = []; Object.keys(Store.dayLog||{}).filter(dt=>dt>=start && dt<=end).sort().forEach(dt=>((Store.dayLog[dt]||{}).filmAdds||[]).forEach(a=>out.push({...a, date:dt}))); return out; }
 function filmUsage(start, end){ const M = {}; let any = false;
-  Store.records.filter(r=>r.status==='CHANGEOVER' && r.reason==='Film Change' && !r.side && r.date>=start && r.date<=end).forEach(r=>{ any = true; const m = M[r.machine] || (M[r.machine] = {f:0, n:0, changes:0, min:0, unknown:0}); const k = filmRolls(r.film); m.f += k.f; m.n += k.n; m.changes++; m.min += r.durationMin||0; if(!r.film) m.unknown++; });
-  if(!any) return null; const T = {f:0, n:0, changes:0, min:0, unknown:0}; Object.values(M).forEach(m=>Object.keys(T).forEach(k=>T[k]+=m[k])); return {M, T}; }
+  Store.records.filter(r=>r.status==='CHANGEOVER' && r.reason==='Film Change' && !r.side && r.date>=start && r.date<=end).forEach(r=>{ any = true; const m = M[r.machine] || (M[r.machine] = {f:0, n:0, changes:0, min:0, unknown:0, byHand:0}); const k = filmRolls(r.film); m.f += k.f; m.n += k.n; m.changes++; m.min += r.durationMin||0; if(!r.film) m.unknown++; });
+  filmAddsIn(start, end).forEach(a=>{ any = true; const m = M[a.machine] || (M[a.machine] = {f:0, n:0, changes:0, min:0, unknown:0, byHand:0}); const k = filmRolls(a.film), c = Math.max(1, parseInt(a.count)||1); m.f += k.f*c; m.n += k.n*c; m.changes += c; m.byHand += c; }); // v205.77: added by hand — rolls only, no downtime
+  if(!any) return null; const T = {f:0, n:0, changes:0, min:0, unknown:0, byHand:0}; Object.values(M).forEach(m=>Object.keys(T).forEach(k=>T[k]+=m[k])); return {M, T}; }
 /* v98: Planned stops (stretching, crew talk, town hall…) — recorded and shown in reports as their own line, but like Break / No Work they are NOT counted against efficiency, NOT in bottleneck rankings or the Upstream report, and never trigger the red downtime alarm. They still count as paid labour time, so PLH gross includes them and PLH net excludes them, same as any stop. */
 const PLANNED_REASONS = ['Scheduled Stretching','Crew Talk','Town Hall Meeting','QA Crew Talk','Metal Detector Test'];
 const METAL_DETECTOR_MACHINES = ['Variovac 1','Variovac 2','Variovac 3']; // v100: one-tap Metal Detector button shows on these lines
@@ -4053,6 +4055,7 @@ function filmReportHTML(start, end, forPdf){
   if(start!==end){ const days = []; for(let dt=start; dt<=end; dt=shiftDate(dt,1)){ const x = filmUsage(dt, dt); if(x) days.push({dt, x}); }
     H.push(hd('2 · Day by day'));
     H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Day</td><td style="${th}text-align:right;">Forming</td><td style="${th}text-align:right;">Non-forming</td><td style="${th}">Where</td></tr>${days.map(o=>`<tr><td style="${td}">${new Date(o.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${tn}">${o.x.T.f}</td><td style="${tn}">${o.x.T.n}</td><td style="${td}font-size:11.5px;color:#555;">${Object.keys(o.x.M).sort().map(m=>{ const y = o.x.M[m]; return `${shortM(m)} ${y.f}F/${y.n}N`; }).join(' · ')}</td></tr>`).join('')}</table><div style="font-size:11px;color:#777;margin-top:4px;">F = forming rolls · N = non-forming rolls</div>`); }
+  { const adds = filmAddsIn(start, end); if(adds.length){ H.push(hd(`${start!==end?'3':'2'} · Added by hand`)); H.push(`<table style="width:100%;border-collapse:collapse;">${adds.map(a=>`<tr><td style="${td}">${new Date(a.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${td}">${escapeHtml(shortM(a.machine))}</td><td style="${td}">${a.count||1} × ${escapeHtml(a.film==='Both'?'both films':a.film.toLowerCase())}</td><td style="${td}font-size:11.5px;color:#555;">${escapeHtml(a.note||'')}</td>${forPdf?'':`<td style="${td}text-align:right;"><span style="color:#c0392b;cursor:pointer;font-size:12px;" onclick="removeFilmAdd('${a.date}','${a.id}')">✕ remove</span></td>`}</tr>`).join('')}</table><div style="font-size:11px;color:#777;margin-top:4px;">Entered by hand (no time recorded) — counted in rolls, not in change time or line downtime.</div>`); } }
   if(fu.T.unknown) H.push(`<div style="margin-top:10px;font-size:12px;color:#9a6200;">${fu.T.unknown} film change${fu.T.unknown===1?'':'s'} without the film picked — counted in changes and time, not in the rolls. Add the film in History to include ${fu.T.unknown===1?'it':'them'}.</div>`);
   H.push(`<div style="margin-top:12px;font-size:11.5px;color:#555;line-height:1.5;">Counted from Changeover → Film change on the Live Floor.</div>`);
   H.push(`<div style="border-top:1px solid #ddd;margin-top:14px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Film Usage — ${start===end?fmtDate(start):`${fmtDate(start)} – ${fmtDate(end)}`}</span><span>${PREPARED_BY}</span></div></div>`);
@@ -4063,7 +4066,27 @@ function renderFilmView(){
   <div class="card"><h3>🎞 Film Usage</h3><div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('yday','Yesterday')}${pb('7','Last 7')}</div><div class="btnrow" style="gap:6px;margin-top:6px;">${pb('30','Last 30')}${pb('month','This Month')}${pb('lmonth','Last Month')}</div>
     <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setFilmDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setFilmDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
     <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="copyFilm()">📋 Copy</button><button class="btn btn-secondary" onclick="exportFilmPDF()">Export PDF</button></div></div>
+  ${filmAddFormHTML()}
   <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${filmReportHTML(r.start, r.end)}</div>`; }
+/* v205.77: add film rolls by hand (e.g. a day you were off) — film usage only, never downtime */
+let filmAdd = null;
+function filmAddFormHTML(){ if(!filmAdd) return `<button class="btn btn-secondary" style="margin-bottom:12px;" onclick="filmAdd={date:todayStr(), machine:'', film:'', count:1, note:''};render()">＋ Add film rolls by hand</button>`;
+  const a = filmAdd, chip = (on, lab, js)=>`<button type="button" class="cb-btn" style="flex:1 1 30%;padding:11px 6px;font-size:13px;text-transform:none;${on?'border-color:var(--change);color:var(--change);background:var(--change-dim);':''}" onclick="${js};render()">${lab}</button>`;
+  return `<div class="card"><h3>＋ Add film rolls by hand</h3><div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">For a day the film change wasn't tapped live — e.g. when you were off. Counts as rolls used only, not as downtime.</div>
+    <div class="field"><label>Date</label><input type="date" value="${a.date}" onchange="filmAdd.date=this.value"></div>
+    <div class="dt-lbl">Variovac</div><div style="display:flex;gap:6px;">${VARIOVACS.map(m=>chip(a.machine===m, shortM(m), `filmAdd.machine='${m}'`)).join('')}</div>
+    <div class="dt-lbl" style="margin-top:10px;">Which film?</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${FILM_TYPES.map(f=>chip(a.film===f, f==='Both'?'Both films':f+' film', `filmAdd.film='${f}'`)).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;"><div class="field" style="flex:0 0 110px;"><label>How many</label><input type="number" min="1" step="1" inputmode="numeric" value="${a.count}" oninput="filmAdd.count=this.value"></div><div class="field" style="flex:1;"><label>Note (optional)</label><input type="text" value="${escapeHtml(a.note||'')}" placeholder="e.g. from Mandy's count" oninput="filmAdd.note=this.value"></div></div>
+    <div class="btnrow"><button class="btn btn-primary" onclick="saveFilmAdd()">Save</button><button class="btn btn-ghost" onclick="filmAdd=null;render()">Cancel</button></div></div>`; }
+async function saveFilmAdd(){ const a = filmAdd; if(!a) return; const c = parseInt(a.count);
+  if(!a.date){ toast('Pick a date'); return; } if(!a.machine){ toast('Pick a Variovac'); return; } if(!a.film){ toast('Pick the film'); return; } if(!(c>=1) || c>50){ toast('How many: 1 to 50'); return; }
+  const d = ensureDayLog(a.date); d.filmAdds = d.filmAdds || []; const entry = {id: uid(), machine:a.machine, film:a.film, count:c, note:(a.note||'').trim(), addedAt: new Date().toISOString()}; d.filmAdds.push(entry);
+  logChange(a.date, 'edit', null, {status:'FILM', machine:a.machine, startTime:'', endTime:'', durationMin:0, reason:`${c} × ${a.film} film added by hand`});
+  if(!(await Store.saveDayLog())) return; toast(`${c} × ${a.film==='Both'?'both films':a.film.toLowerCase()+' film'} added for ${shortM(a.machine)}`);
+  const r = filmRangeNow(); if(a.date < r.start || a.date > r.end){ r.start = a.date < r.start ? a.date : r.start; r.end = a.date > r.end ? a.date : r.end; r.preset = ''; }
+  filmAdd = null; render(); }
+async function removeFilmAdd(date, id){ const d = dayLogFor(date); if(!d || !d.filmAdds) return; const a = d.filmAdds.find(x=>x.id===id); if(!a) return;
+  if(!confirm(`Remove ${a.count||1} × ${a.film} film on ${shortM(a.machine)} (${fmtDate(date)})?`)) return; d.filmAdds = d.filmAdds.filter(x=>x.id!==id); await Store.saveDayLog(); toast('Removed'); render(); }
 async function exportFilmPDF(){ const r = filmRangeNow(); await buildHtmlReportPDF(filmReportHTML(r.start, r.end, true), `Film-Usage-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
 async function copyFilm(){ const r = filmRangeNow(), el = document.createElement('div'); el.innerHTML = filmReportHTML(r.start, r.end, true);
   el.querySelectorAll('tr').forEach(tr=>tr.appendChild(document.createTextNode('\n'))); el.querySelectorAll('td').forEach(td=>td.appendChild(document.createTextNode('  '))); document.body.appendChild(el);
