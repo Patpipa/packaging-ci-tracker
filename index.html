@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.75 - 2026-11-19 (Film Usage moved to its own report under Reports — out of the Daily and Weekly; Last 7 / months, Copy, Export PDF)';
+const APP_VERSION = 'v205.76 - 2026-11-19 (Film Usage: shorter footnote)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -4054,7 +4054,7 @@ function filmReportHTML(start, end, forPdf){
     H.push(hd('2 · Day by day'));
     H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Day</td><td style="${th}text-align:right;">Forming</td><td style="${th}text-align:right;">Non-forming</td><td style="${th}">Where</td></tr>${days.map(o=>`<tr><td style="${td}">${new Date(o.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${tn}">${o.x.T.f}</td><td style="${tn}">${o.x.T.n}</td><td style="${td}font-size:11.5px;color:#555;">${Object.keys(o.x.M).sort().map(m=>{ const y = o.x.M[m]; return `${shortM(m)} ${y.f}F/${y.n}N`; }).join(' · ')}</td></tr>`).join('')}</table><div style="font-size:11px;color:#777;margin-top:4px;">F = forming rolls · N = non-forming rolls</div>`); }
   if(fu.T.unknown) H.push(`<div style="margin-top:10px;font-size:12px;color:#9a6200;">${fu.T.unknown} film change${fu.T.unknown===1?'':'s'} without the film picked — counted in changes and time, not in the rolls. Add the film in History to include ${fu.T.unknown===1?'it':'them'}.</div>`);
-  H.push(`<div style="margin-top:12px;font-size:11.5px;color:#555;line-height:1.5;">Counted from Changeover → Film change on the Live Floor. Every roll is the same size, so one change = one roll; a change of both films = one forming + one non-forming roll.</div>`);
+  H.push(`<div style="margin-top:12px;font-size:11.5px;color:#555;line-height:1.5;">Counted from Changeover → Film change on the Live Floor.</div>`);
   H.push(`<div style="border-top:1px solid #ddd;margin-top:14px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Film Usage — ${start===end?fmtDate(start):`${fmtDate(start)} – ${fmtDate(end)}`}</span><span>${PREPARED_BY}</span></div></div>`);
   return H.join(''); }
 function renderFilmView(){
