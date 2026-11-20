@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.74 - 2026-11-18 (Film change: pick Forming / Non-forming / Both; rolls used in Daily and Weekly reports)';
+const APP_VERSION = 'v205.75 - 2026-11-19 (Film Usage moved to its own report under Reports — out of the Daily and Weekly; Last 7 / months, Copy, Export PDF)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -821,7 +821,7 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours'||v==='staffing'||v==='scales') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours'||v==='staffing'||v==='scales'||v==='film') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
@@ -841,6 +841,7 @@ function render(){
     case 'crewHours': html += renderCrewHoursView(); break;
     case 'staffing': html += renderStaffingView(); break;
     case 'scales': html += renderScaleReportView(); break;
+    case 'film': html += renderFilmView(); break;
     case 'plhLog': html += renderPLHLogView(); break;
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
     case 'upstreamImpact': html += renderUpstreamImpactView(); break;
@@ -1875,7 +1876,6 @@ function dayLogSections(date, opts){
   if(unused.length) side.push({k: unused.join(' / '), v:'not used'});
   if(used.length){ const sw = shortWhileSide(date); if(sw) side.push({k:'Short-staffed while side machines ran', v: sw.min ? `${fmtDur(sw.min)} (part of the ${fmtDur(sw.total)} short-staffed · see Staffing Report)` : 'none', red: sw.min>0}); } // v205.60: same count as the Staffing Report
   out.push({title:'SIDE MACHINES', rows:side});
-  { const fu = filmUsage(date, date); if(fu){ const rows = Object.keys(fu.M).sort().map(m=>{ const x = fu.M[m]; return {k: shortM(m), v: `${x.f} forming · ${x.n} non-forming roll${x.f+x.n===1?'':'s'} · ${fmtDur(x.min)} changing${x.unknown?` · ${x.unknown} film not recorded`:''}`}; }); if(Object.keys(fu.M).length>1) rows.push({k:'Total', v:`${fu.T.f} forming · ${fu.T.n} non-forming · ${fmtDur(fu.T.min)}`}); out.push({title:'FILM CHANGES (ROLLS USED)', rows}); } } // v205.74
   out.push({title:'SCALES', rows: scaleDayRows(date)}); // v174
   return out;
 }
@@ -4028,6 +4028,46 @@ function scaleReportHTML(start, end, forPdf){
   <div style="margin-top:12px;border:1px solid #d6dde6;border-radius:6px;padding:10px 12px;font-size:11.5px;color:#333;line-height:1.6;page-break-inside:avoid;"><div style="font-weight:700;color:#1e3a5f;margin-bottom:4px;">Scale reference — which scale serves which line</div><table style="border-collapse:collapse;font-size:11.5px;"><tr><td style="padding:2px 14px 2px 0;font-weight:700;">Scale 3</td><td style="padding:2px 0;">Variovac 3</td></tr><tr><td style="padding:2px 14px 2px 0;font-weight:700;">Scale 7</td><td style="padding:2px 0;">Variovac 1 and Variovac 2 (shared, nearest scale)</td></tr><tr><td style="padding:2px 14px 2px 0;font-weight:700;">Scale 5</td><td style="padding:2px 0;">Manual Pack · backup for Variovac 1 &amp; 2 when Scale 7 is down</td></tr></table></div></div>`);
   return H.join('');
 }
+/* v205.75: 🎞 Film Usage — its own report (out of the Daily / Weekly that managers read). Rolls from Changeover → Film change: one change = one roll, Both = one of each */
+let filmRange = null;
+function filmRangeNow(){ if(!filmRange){ const t = todayStr(), d = new Date(); d.setDate(d.getDate()-6); filmRange = {start: localDateStr(d), end: t, preset:'7'}; } return filmRange; }
+function setFilmPreset(p){ const t = todayStr(), now = new Date(), d = new Date();
+  if(p==='today') filmRange = {start:t, end:t, preset:p};
+  else if(p==='yday'){ d.setDate(d.getDate()-1); const y = localDateStr(d); filmRange = {start:y, end:y, preset:p}; }
+  else if(p==='month') filmRange = {start: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), end: t, preset:p};
+  else if(p==='lmonth') filmRange = {start: localDateStr(new Date(now.getFullYear(), now.getMonth()-1, 1)), end: localDateStr(new Date(now.getFullYear(), now.getMonth(), 0)), preset:p};
+  else { d.setDate(d.getDate()-(p==='7'?6:29)); filmRange = {start: localDateStr(d), end: t, preset:p}; }
+  render(); }
+function setFilmDate(w, v){ if(!v) return; const r = filmRangeNow(); r[w] = v; r.preset = ''; if(r.end < r.start){ if(w==='start') r.end = v; else r.start = v; } render(); }
+function filmReportHTML(start, end, forPdf){
+  const td = 'padding:6px 8px;border-bottom:1px solid #e3e7ec;font-size:12.5px;', tn = td+'text-align:right;font-variant-numeric:tabular-nums;', th = 'padding:6px 8px;border-bottom:2px solid #1e3a5f;font-size:10.5px;color:#555;text-transform:uppercase;';
+  const hd = t=>`<div style="font-size:13px;font-weight:800;color:#1e3a5f;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.04em;">${t}</div>`;
+  const H = [`<div style="background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};"><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Packaging Film Usage</div><div style="font-size:13px;color:#555;margin-top:2px;">Variovac forming &amp; non-forming film · rolls used · ${start===end?fmtDate(start):`${fmtDate(start)} – ${fmtDate(end)}`}</div>`];
+  const fu = filmUsage(start, end);
+  if(!fu){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No film changes recorded in this period.</div></div>`); return H.join(''); }
+  const workDays = new Set(Store.records.filter(r=>r.date>=start && r.date<=end && r.status==='RUNNING' && !r.side).map(r=>r.date)).size;
+  H.push(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">${[['Forming rolls', fu.T.f], ['Non-forming rolls', fu.T.n], ['Film changes', fu.T.changes], ['Change time', fmtDur(fu.T.min)]].map(([l,v])=>`<div style="flex:1 1 120px;border:1px solid #d6dde6;border-radius:6px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:#1e3a5f;">${v}</div><div style="font-size:11px;color:#666;text-transform:uppercase;">${l}</div></div>`).join('')}</div>`);
+  if(workDays>1) H.push(`<div style="font-size:12.5px;color:#333;margin-top:8px;">Over ${workDays} production days: about <b>${(fu.T.f/workDays).toFixed(1)}</b> forming and <b>${(fu.T.n/workDays).toFixed(1)}</b> non-forming rolls a day.</div>`);
+  H.push(hd('1 · By machine'));
+  H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}"></td><td style="${th}text-align:right;">Forming</td><td style="${th}text-align:right;">Non-forming</td><td style="${th}text-align:right;">Changes</td><td style="${th}text-align:right;">Change time</td></tr>${Object.keys(fu.M).sort().map(m=>{ const x = fu.M[m]; return `<tr><td style="${td}font-weight:700;white-space:nowrap;">${escapeHtml(m)}</td><td style="${tn}">${x.f}</td><td style="${tn}">${x.n}</td><td style="${tn}">${x.changes}</td><td style="${tn}">${fmtDur(x.min)}</td></tr>`; }).join('')}<tr><td style="${td}font-weight:800;">Total</td><td style="${tn}font-weight:800;">${fu.T.f}</td><td style="${tn}font-weight:800;">${fu.T.n}</td><td style="${tn}font-weight:800;">${fu.T.changes}</td><td style="${tn}font-weight:800;">${fmtDur(fu.T.min)}</td></tr></table>`);
+  if(start!==end){ const days = []; for(let dt=start; dt<=end; dt=shiftDate(dt,1)){ const x = filmUsage(dt, dt); if(x) days.push({dt, x}); }
+    H.push(hd('2 · Day by day'));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Day</td><td style="${th}text-align:right;">Forming</td><td style="${th}text-align:right;">Non-forming</td><td style="${th}">Where</td></tr>${days.map(o=>`<tr><td style="${td}">${new Date(o.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${tn}">${o.x.T.f}</td><td style="${tn}">${o.x.T.n}</td><td style="${td}font-size:11.5px;color:#555;">${Object.keys(o.x.M).sort().map(m=>{ const y = o.x.M[m]; return `${shortM(m)} ${y.f}F/${y.n}N`; }).join(' · ')}</td></tr>`).join('')}</table><div style="font-size:11px;color:#777;margin-top:4px;">F = forming rolls · N = non-forming rolls</div>`); }
+  if(fu.T.unknown) H.push(`<div style="margin-top:10px;font-size:12px;color:#9a6200;">${fu.T.unknown} film change${fu.T.unknown===1?'':'s'} without the film picked — counted in changes and time, not in the rolls. Add the film in History to include ${fu.T.unknown===1?'it':'them'}.</div>`);
+  H.push(`<div style="margin-top:12px;font-size:11.5px;color:#555;line-height:1.5;">Counted from Changeover → Film change on the Live Floor. Every roll is the same size, so one change = one roll; a change of both films = one forming + one non-forming roll.</div>`);
+  H.push(`<div style="border-top:1px solid #ddd;margin-top:14px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Film Usage — ${start===end?fmtDate(start):`${fmtDate(start)} – ${fmtDate(end)}`}</span><span>${PREPARED_BY}</span></div></div>`);
+  return H.join(''); }
+function renderFilmView(){
+  const r = filmRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setFilmPreset('${p}')">${l}</button>`;
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
+  <div class="card"><h3>🎞 Film Usage</h3><div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('yday','Yesterday')}${pb('7','Last 7')}</div><div class="btnrow" style="gap:6px;margin-top:6px;">${pb('30','Last 30')}${pb('month','This Month')}${pb('lmonth','Last Month')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setFilmDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setFilmDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
+    <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="copyFilm()">📋 Copy</button><button class="btn btn-secondary" onclick="exportFilmPDF()">Export PDF</button></div></div>
+  <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${filmReportHTML(r.start, r.end)}</div>`; }
+async function exportFilmPDF(){ const r = filmRangeNow(); await buildHtmlReportPDF(filmReportHTML(r.start, r.end, true), `Film-Usage-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
+async function copyFilm(){ const r = filmRangeNow(), el = document.createElement('div'); el.innerHTML = filmReportHTML(r.start, r.end, true);
+  el.querySelectorAll('tr').forEach(tr=>tr.appendChild(document.createTextNode('\n'))); el.querySelectorAll('td').forEach(td=>td.appendChild(document.createTextNode('  '))); document.body.appendChild(el);
+  const txt = el.innerText.replace(/\n{3,}/g,'\n\n'); el.remove(); try{ await navigator.clipboard.writeText(txt); toast('Copied'); }catch(e){ toast('Could not copy'); } }
 function renderScaleReportView(){
   const r = scaleRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setScalePreset('${p}')">${l}</button>`;
   return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
@@ -7035,7 +7075,6 @@ function renderWeeklyView(){
     return `<div class="card" style="border-color:${sx.short>0.2?'var(--wait)':'var(--line)'};"><h3>👥 Staffing This Period · ${sx.days} day${sx.days===1?'':'s'}</h3>${staffingRows(sx,true).map(r=> r.sub ? `<div class="cb-mut" style="font-size:10.5px;font-style:italic;margin-top:8px;">${escapeHtml(r.v)}</div>` : `<div class="statrow"><span class="lbl">${escapeHtml(r.k)}</span><span class="val" style="text-align:right;${r.red?'color:var(--wait);':''}${r.big?'font-size:15px;':''}">${escapeHtml(r.v).replace(/\n/g,'<br>')}</span></div>`).join('')}</div>`; })()}
   ${renderPLHCard(computePLHSummary(plhRecordsInRange(weeklyRange.start,weeklyRange.end)), 'PLH This Period', plhCoverage(weeklyRange.start,weeklyRange.end))}
   ${sideWeekHTML(weeklyRange.start, weeklyRange.end)}
-  ${filmWeekHTML(weeklyRange.start, weeklyRange.end)}
   <div class="card">
     <h3>Daily PLH Trend</h3>
     ${renderPLHTrendChart(dailyPLHSeries(weeklyRange.start,weeklyRange.end))}
@@ -7108,7 +7147,7 @@ Total Pounds: ${Math.round(plh.totalWeight)} · Jobs: ${plh.runCount}
 ${plhCoverage(weeklyRange.start, weeklyRange.end).text}
 ${plh.best ? 'Best (runs 15 min+): '+plhJobName(plh.best)+' — '+plh.best.plh.grossPLH.toFixed(0)+' PLH' : ''}
 Note: ${PLH_DISCLAIMER}` : '';
-  const sideBlock = sideWeekText(weeklyRange.start, weeklyRange.end) + filmWeekText(weeklyRange.start, weeklyRange.end);
+  const sideBlock = sideWeekText(weeklyRange.start, weeklyRange.end);
   const sdays = []; for(let dt=weeklyRange.start; dt<=weeklyRange.end; dt=shiftDate(dt,1)) sdays.push(dt); const sxs = sdays.map(shortStaffFor).filter(Boolean), stot = sxs.reduce((t,x)=>t+x.total,0); // v205.40
   const staffBlock = sxs.length ? `
 SHORT-STAFFED: ${fmtDur(stot)} this period
@@ -7267,7 +7306,6 @@ function exportWeeklyPDF(){
     }
   }
 
-  { const fu = filmUsage(rep.startDate, rep.endDate); if(fu){ const ms = Object.keys(fu.M).sort(); ensure(40+(ms.length+1)*16); y+=6; section('FILM USAGE (ROLLS USED)'); ms.forEach(m=>{ const x = fu.M[m]; row(m, `${x.f} forming - ${x.n} non-forming - ${fmtDur(x.min)} changing`); }); row('Total', `${fu.T.f} forming - ${fu.T.n} non-forming - ${fu.T.changes} changes`); } } // v205.74
   { const sr = sideWeekRows(rep.startDate, rep.endDate); if(sr.length){ ensure(40+sr.length*16); y+=6; section('SIDE MACHINES (REPORTED SEPARATELY, NOT IN LINE PLH)'); sr.forEach(x=>row(x.name, pdfSafe(`${fmtDur(x.run)} on - ${fmtDur(x.labour)} labour - ${x.plh!=null ? `${Math.round(x.lbs)} lbs - ${x.plh.toFixed(0)} PLH` : 'PLH n/a'}${x.cov.awaiting?` - ${x.cov.awaiting} awaiting weight`:''}`))); } } // v205.64
   ensure(100); y+=6; section('RECOMMENDED ACTIONS (LEAN/CI)');
   craftWeeklySuggestions(rep).forEach((idea,i)=>{
@@ -7338,6 +7376,7 @@ function renderReportsList(){
   let html = `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('weekly')">📊 Weekly Summary</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('scales')">🖥 Scale Downtime</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('film')">🎞 Film Usage</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="openStaffing(todayStr())">⚠ Staffing Report</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="openCrewHours(todayStr())">👥 Crew Hours & Positions</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
