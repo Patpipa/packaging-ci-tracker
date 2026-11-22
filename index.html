@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.80 - 2026-11-22 (Cross-dept help: anyone not on the packaging roster who is placed counts as cross-dept help, even without tapping Join — earlier days worked out from the crew log)';
+const APP_VERSION = 'v205.81 - 2026-11-22 (Data connection panel shows why a save failed, whether you are signed in, and the app version)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -674,6 +674,8 @@ function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ re
 function safeLocalSet(key, val){ try{ localStorage.setItem(key, val); return true; }catch(e){ return false; } }
 /* ===== v205.35: data-saving visibility — status pill (top bar), warning bar, and a tap-open connection panel ===== */
 const SaveState = {pending:0, pendSince:null, lastOk:null, lastLocal:null, failed:null, online:(typeof navigator==='undefined'||navigator.onLine!==false), offSince:null};
+/* v205.81: keep the reason a save failed, so the Data connection panel can show it */
+(function keepSaveErrors(){ try{ const ce = console.error.bind(console); console.error = function(...a){ try{ const t = a.map(x=>x && x.message ? `${x.code ? x.code+' — ' : ''}${x.message}` : String(x)).join(' '); if(/save|fail|denied|permission/i.test(t)) SaveState.lastErr = {at: Date.now(), t: t.slice(0,220)}; }catch(e){} return ce(...a); }; }catch(e){} })();
 (function wrapSaves(){
   ['saveRecords','saveProductLibrary','saveDayLog','saveSettings','saveDailyReports','saveLiveRuns'].forEach(k=>{
     const orig = Store[k]; if(typeof orig!=='function') return;
@@ -709,6 +711,9 @@ function syncPanelBody(){ const S = SaveState, st = syncStateNow(), row = (c,k,v
     + row(S.failed?r:(S.lastOk?g:y), 'Last successful save', S.lastOk ? `${syncClock(S.lastOk)} (cloud)` : 'none yet this session')
     + row(S.lastLocal?g:y, 'Local safety backup', S.lastLocal ? `On this phone · ${syncClock(S.lastLocal)}` : 'On this phone (offline cache)')
     + row(S.failed?r:(S.pending?o:g), 'Cloud sync', S.failed ? `Failed at ${syncClock(S.failed)} — tap Save now` : S.pending ? `${S.pending} change${S.pending===1?'':'s'} waiting` : 'Active · nothing waiting')
+    + (S.failed && S.lastErr ? `<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;color:#ff8a7a;word-break:break-word;">Reason: ${escapeHtml(S.lastErr.t)}</div>` : '')
+    + (()=>{ let u = null; try{ u = firebase.auth().currentUser; }catch(e){} return row(u?g:r, 'Signed in', u ? escapeHtml(u.email||'yes') : 'No — sign in again in ⚙ Settings'); })()
+    + `<div class="cb-mut" style="padding:6px 0 0;font-size:11.5px;">App version: ${escapeHtml(String(APP_VERSION).split(' - ')[0])}</div>`
     + `<div class="cb-mut" style="margin-top:10px;font-size:12px;line-height:1.45;">Green = everything reached the cloud. Orange = kept on this phone and will sync by itself when the signal is back — keep the app open, don't clear the browser. Red = a save failed; tap Save now.</div>`; }
 function openSyncPanel(){ let pn = document.getElementById('syncPanel'); if(pn){ pn.remove(); return; }
   pn = document.createElement('div'); pn.id = 'syncPanel';
