@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.77 - 2026-11-20 (Film Usage: add film rolls by hand for days not tapped live — rolls only, no downtime)';
+const APP_VERSION = 'v205.78 - 2026-11-22 (Storage: crew log saved one document per day instead of one for all days — avoids the 1 MB limit; old document kept as backup; older devices merged in)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -438,7 +438,7 @@ const Store = {
       const prodSnap = await prodRef.get();
       this.productLibrary = (prodSnap.exists && prodSnap.data().data) ? JSON.parse(prodSnap.data().data) : [];
 
-      try{ const daySnap = await dayRef.get(); this.dayLog = (daySnap.exists && daySnap.data().data) ? JSON.parse(daySnap.data().data) : {}; }catch(e){ this.dayLog = {}; }
+      try{ await this.loadDayLog(); }catch(e){ console.error('dayLog load failed', e); const bk = safeLocalGet('pct_daylog_backup'); try{ this.dayLog = bk ? (JSON.parse(bk)||{}) : {}; }catch(e2){ this.dayLog = {}; } if(bk) toast('Offline — crew log from this device'); }
       const settSnap = await settRef.get();
       this.settings = (settSnap.exists && settSnap.data().data) ? {...this.settings, ...JSON.parse(settSnap.data().data)} : this.settings;
 
@@ -480,12 +480,10 @@ const Store = {
           if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='products')) render();
         }
       }, err=>{ console.error('productLibrary listener error', err); });
-      dayRef.onSnapshot(snap=>{
-        if(!this._initialLoadDone) return;
-        if(snap.exists && snap.data().data){
-          this.dayLog = JSON.parse(snap.data().data);
-          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='dashboard')) render();
-        }
+      this.watchDayLog(); // v205.78: one document per day
+      dayRef.onSnapshot(snap=>{ // an older app version still saving the old single crew-log document — bring its changes across
+        if(!this._initialLoadDone || !snap.exists || !snap.data().data) return;
+        this.mergeLegacyDayLog(snap).catch(e=>console.error('dayLog legacy merge failed', e));
       }, err=>{ console.error('dayLog listener error', err); });
       settRef.onSnapshot(snap=>{
         if(!this._initialLoadDone) return;
@@ -591,12 +589,64 @@ const Store = {
       return true;
     }catch(e){ console.error('save productLibrary failed', e); toast('Save failed — check connection'); return false; }
   },
+  /* v205.78: the crew log is saved one document per day (day_YYYY-MM-DD) instead of one document for every day ever — the old way would pass Firestore's 1 MB limit within months, and every tap rewrote the whole history.
+     dayLogIndex lists the days (one field per day). The old 'dayLog' document is left untouched as a backup. */
+  dlSaved: {}, dlUpd: {}, _dlUnsubs: {},
+  dayDocId(d){ return 'day_' + d; },
+  dayKeyOk(d){ return /^\d{4}-\d{2}-\d{2}$/.test(d); },
+  async loadDayLog(){
+    const col = this.db.collection('tracker'); const idxSnap = await col.doc('dayLogIndex').get(); let idx = idxSnap.exists ? (idxSnap.data()||{}) : null;
+    if(!idx || !idx.migratedAt){
+      const legSnap = await col.doc('dayLog').get(); const legacy = (legSnap.exists && legSnap.data().data) ? (JSON.parse(legSnap.data().data)||{}) : {};
+      const days = Object.keys(legacy).filter(d=>this.dayKeyOk(d)).sort(), fields = {};
+      for(const d of days){ const json = JSON.stringify(legacy[d]); const at = Date.now(); await col.doc(this.dayDocId(d)).set({data: json, updatedAt: at}); this.dlSaved[d] = json; this.dlUpd[d] = at; fields['d_'+d] = true; }
+      idx = {...fields, migratedAt: Date.now(), legacySeenAt: (legSnap.exists && legSnap.data().updatedAt) || Date.now(), legacyDays: days.length};
+      await col.doc('dayLogIndex').set(idx);
+      const out = {}; days.forEach(d=>out[d] = legacy[d]); this.dayLog = out; this.dlIndex = idx;
+      if(days.length) setTimeout(()=>{ try{ toast(`Storage upgraded — crew log split into ${days.length} daily files`); }catch(e){} }, 1600);
+      return; }
+    const days = Object.keys(idx).filter(k=>k.startsWith('d_') && idx[k]).map(k=>k.slice(2)).sort(), out = {};
+    const snaps = await Promise.all(days.map(d=>col.doc(this.dayDocId(d)).get()));
+    snaps.forEach((sn,k)=>{ const d = days[k]; if(sn.exists && sn.data().data){ out[d] = JSON.parse(sn.data().data); this.dlSaved[d] = sn.data().data; this.dlUpd[d] = sn.data().updatedAt||0; } });
+    this.dayLog = out; this.dlIndex = idx;
+    try{ const legSnap = await col.doc('dayLog').get(); if(legSnap.exists && legSnap.data().data) await this.mergeLegacyDayLog(legSnap); }catch(e){}
+  },
+  watchDayLog(){
+    const col = this.db.collection('tracker');
+    const watch = d=>{ if(this._dlUnsubs[d]) return;
+      this._dlUnsubs[d] = col.doc(this.dayDocId(d)).onSnapshot(snap=>{
+        if(!this._initialLoadDone || !snap.exists) return; const raw = (snap.data()||{}).data; if(!raw || raw===this.dlSaved[d]) return;
+        this.dayLog = this.dayLog || {}; this.dayLog[d] = JSON.parse(raw); this.dlSaved[d] = raw; this.dlUpd[d] = snap.data().updatedAt||0;
+        if(typeof Router!=='undefined' && Router.current!=='new') render();
+      }, err=>console.error('day listener error', d, err)); };
+    const recent = ()=>{ const t = todayStr(); return [shiftDate(t,-1), t]; };
+    recent().forEach(watch); this._watchDay = watch;
+    col.doc('dayLogIndex').onSnapshot(async snap=>{ if(!snap.exists || !this._initialLoadDone) return; const idx = snap.data()||{}; this.dlIndex = idx;
+      for(const k of Object.keys(idx)){ if(!k.startsWith('d_') || !idx[k]) continue; const d = k.slice(2); if(this.dayLog && this.dayLog[d]) continue;
+        try{ const sn = await col.doc(this.dayDocId(d)).get(); if(sn.exists && sn.data().data){ this.dayLog[d] = JSON.parse(sn.data().data); this.dlSaved[d] = sn.data().data; this.dlUpd[d] = sn.data().updatedAt||0; } }catch(e){} }
+      recent().forEach(watch); }, err=>console.error('dayLog index listener error', err));
+  },
+  async mergeLegacyDayLog(snap){
+    const upd = snap.data().updatedAt || 0, seen = (this.dlIndex && this.dlIndex.legacySeenAt) || 0;
+    if(!this.dlIndex || !this.dlIndex.migratedAt || upd <= seen) return;
+    const legacy = JSON.parse(snap.data().data)||{}; let n = 0;
+    Object.keys(legacy).filter(d=>this.dayKeyOk(d)).forEach(d=>{ const j = JSON.stringify(legacy[d]); if(j!==this.dlSaved[d] && upd > (this.dlUpd[d]||0)){ this.dayLog[d] = legacy[d]; n++; } });
+    if(n){ await this.saveDayLog(); toast(`Crew log: brought in ${n} day${n===1?'':'s'} saved by a device on an older version`); }
+    this.dlIndex.legacySeenAt = upd; await this.db.collection('tracker').doc('dayLogIndex').set({legacySeenAt: upd}, {merge:true});
+  },
   async saveDayLog(){
     try{
-      const json = JSON.stringify(this.dayLog||{}); safeLocalSet('pct_daylog_backup', json); // v205.35: local safety copy
-      await this.db.collection('tracker').doc('dayLog').set({data: json, updatedAt: Date.now()});
+      const col = this.db.collection('tracker'), dl = this.dayLog || {}, newIdx = {};
+      { const keep = {}; const t = todayStr(); Object.keys(dl).filter(d=>d>=shiftDate(t,-31)).forEach(d=>keep[d]=dl[d]); safeLocalSet('pct_daylog_backup', JSON.stringify(keep)); } // local safety copy — last month only
+      for(const d of Object.keys(dl)){ if(!this.dayKeyOk(d)) continue; const json = JSON.stringify(dl[d]); if(json===this.dlSaved[d]) continue;
+        if(new Blob([json]).size > 1000000) throw new Error(`Crew log for ${d} is too large to save`);
+        const at = Date.now(); await col.doc(this.dayDocId(d)).set({data: json, updatedAt: at}); this.dlSaved[d] = json; this.dlUpd[d] = at;
+        if(!(this.dlIndex && this.dlIndex['d_'+d])) newIdx['d_'+d] = true;
+        if(this._watchDay && d>=shiftDate(todayStr(),-1)) this._watchDay(d); }
+      for(const d of Object.keys(this.dlSaved)){ if(dl[d]) continue; await col.doc(this.dayDocId(d)).set({data: '', updatedAt: Date.now()}); delete this.dlSaved[d]; newIdx['d_'+d] = false; } // a day removed (e.g. Delete Records in This Range)
+      if(Object.keys(newIdx).length){ await col.doc('dayLogIndex').set(newIdx, {merge:true}); this.dlIndex = {...(this.dlIndex||{}), ...newIdx}; }
       return true;
-    }catch(e){ console.error('save dayLog failed', e); toast('Save failed — check connection'); return false; }
+    }catch(e){ console.error('save dayLog failed', e); toast(String(e && e.message || '').includes('too large') ? e.message : 'Save failed — check connection'); return false; }
   },
   async saveSettings(){
     try{
