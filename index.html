@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.79 - 2026-11-22 (Crew Hours: per-person timeline chart removed; Where the hours went leaves out time not on the floor, shown as a note)';
+const APP_VERSION = 'v205.80 - 2026-11-22 (Cross-dept help: anyone not on the packaging roster who is placed counts as cross-dept help, even without tapping Join — earlier days worked out from the crew log)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -1890,8 +1890,8 @@ function dayLogSections(date, opts){
         p.segs.forEach(sg=>{ if(sg.g!=='Lent to other dept') return; const dp = String(sg.k||'').replace(/^Lent · /,'') || 'other dept'; const o = L[dp] || (L[dp] = {ppl:new Set(), mins:0, allDay:0}); o.ppl.add(p.name); o.mins += sg.b-sg.a; }); });
       const ks = Object.keys(L);
       crew.push({k:'Crew lent to other depts', v: ks.length ? ks.map(dp=>{ const o = L[dp], n = o.ppl.size; return `${dp} — ${n} ${n===1?'person':'people'}${o.mins?` · ${fmtDur(o.mins)}`:''}${o.allDay?`${o.mins?' + ':' · '}${o.allDay} all day`:''}`; }).join('\n') : 'none'}); } }
-  { const cd = crewDayOf(date), hs = Object.keys(cd).filter(n=>cd[n] && cd[n].helper); // v205.32: cross-dept help shown on its own line — count, dept and hours only (no names in the Daily Report)
-    { const pd = personDay(date), mins = hs.reduce((t,n)=>{ const p = pd && pd.people.find(x=>x.name===n); return t + (p ? chWorked(p) : 0); },0), depts = [...new Set(hs.map(n=>cd[n].dept||(helperOf(n)||{}).dept||'other dept'))];
+  { const cd = crewDayOf(date), pd0 = personDay(date), hs = [...new Set([...Object.keys(cd).filter(n=>cd[n] && cd[n].helper), ...((pd0 && pd0.people)||[]).map(p=>p.name).filter(n=>helperDay(date, n))])]; // v205.32: cross-dept help shown on its own line — count, dept and hours only (no names in the Daily Report) · v205.80: incl. help placed without Join
+    { const pd = pd0, mins = hs.reduce((t,n)=>{ const p = pd && pd.people.find(x=>x.name===n); return t + (p ? chWorked(p) : 0); },0), depts = [...new Set(hs.map(n=>(helperDay(date,n)||{}).dept||(helperOf(n)||{}).dept||'other dept'))];
       crew.push({k:'Cross-dept help', v: hs.length ? `${hs.length} ${hs.length===1?'person':'people'} from ${depts.join(', ')} · ${fmtDur(mins)}` : 'none'}); } }
   OFFLINE_ROLES.forEach(r=>{
     if(!roleIn(date,r)) crew.push({k:r, v:'off today'});
@@ -2167,7 +2167,15 @@ function baseRoster(){ const r = Store.settings && Store.settings.crewRoster; re
 const DEFAULT_HELPERS = [{n:'Lin', dept:'Burger Room'},{n:'Fernando', dept:'Burger Room'},{n:'Richard', dept:'Burger Room'},{n:'Krishan', dept:'Burger Room'}];
 function helperList(){ const h = Store.settings && Store.settings.helpers; return Array.isArray(h) ? h : DEFAULT_HELPERS.slice(); }
 function helperOf(n){ return helperList().find(h=>h.n===n) || null; }
-function helperDay(date, n){ const c = (((dayLogFor(date)||{}).crewDay)||{})[n]; return c && c.helper ? c : null; }
+function helperDay(date, n){ const c = (((dayLogFor(date)||{}).crewDay)||{})[n]; return c && c.helper ? autoHelperEnd(date, n, c) : (c ? null : inferHelper(date, n)); }
+/* an auto-added helper (placed without Join) who was taken off and not placed anywhere has gone back — same rule as earlier days */
+function autoHelperEnd(date, n, c){ if(!c || !c.auto || c.backAt) return c; const lg = (((dayLogFor(date)||{}).where)||{})[n]; if(!lg || !lg.length) return c; const last = lg.slice().sort((a,b)=>toMin(a.at)-toMin(b.at)).pop(); return last.w ? c : {...c, end: last.at, backAt: last.at}; }
+/* v205.80: anyone who isn't on the packaging roster but was placed somewhere (e.g. picked straight onto a machine without tapping Join) is cross-dept help —
+   from their first move until they were last taken off. Older days are worked out from the crew log; from now on syncWhere saves the record. */
+function inferHelper(date, n){ if(!n || OFFLINE_ROLES.includes(n) || baseRoster().includes(n)) return null; const d = dayLogFor(date); const lg = ((d && d.where) || {})[n]; if(!lg || !lg.some(e=>e.w)) return null;
+  const sorted = lg.slice().sort((a,b)=>toMin(a.at)-toMin(b.at)), first = sorted.find(e=>e.w), last = sorted[sorted.length-1];
+  const backAt = !last.w ? last.at : '';
+  return {st:'here', start: first.at, end: backAt, backAt, helper:true, dept: (helperOf(n)||{}).dept || 'Other dept', inferred:true}; }
 function crewRoster(){ const base = baseRoster(), T = todayStr(); const hj = helperList().map(h=>h.n).filter(n=>!base.includes(n) && helperDay(T, n)); return hj.length ? base.concat(hj) : base; }
 function trimmerList(){ const r = Store.settings && Store.settings.trimmerNames; return Array.isArray(r) ? r : []; }
 function namesOn(){ return crewRoster().length>0; }
@@ -2203,6 +2211,7 @@ async function syncWhere(){
     if(w!==last){ if(log.length && log[log.length-1].at===at){ log[log.length-1].w = w; delete log[log.length-1].gk; delete log[log.length-1].gsrc; if(log.length>1 && log[log.length-2].w===w) log.pop(); } else log.push({at, w}); ch = true;
       if(w==='Garbage run'){ const L = log[log.length-1]; if(map[n]==='Garbage run'){ const ge = garbageEvents(T).find(e=>!e.end && e.who===n); if(ge && ge.kind){ L.gk = ge.kind; L.gsrc = 'line'; } } else if(d.place[n] && d.place[n].gk) L.gk = d.place[n].gk; } } // v205.57: garbage run from a line card keeps its area in the time log
     if(!log.length) delete d.where[n];
+    if(w && !(d.crewDay && d.crewDay[n]) && !OFFLINE_ROLES.includes(n) && !baseRoster().includes(n)){ d.crewDay = d.crewDay || {}; d.crewDay[n] = {st:'here', start: (log.find(e=>e.w)||{at}).at, end:'', helper:true, dept: (helperOf(n)||{}).dept || 'Other dept', auto:true}; ch = true; } // v205.80: placed without Join = cross-dept help
   });
   OFFLINE_ROLES.forEach(r=>{ if(map[r] && !(d.offline||[]).some(o=>o.role===r && !o.end)){ d.offline = d.offline || []; d.offline.push({id: uid(), role: r, start: at, end: null, auto: true}); ch = true; } // v167: picked on a machine = On line
     if(!map[r]) (d.offline||[]).forEach(o=>{ if(o.role===r && !o.end && o.auto){ o.end = at; ch = true; } }); }); // v205.60: moved off the machine = off the line again
@@ -3579,7 +3588,7 @@ function crewUsual(){ const u = Store.settings && Store.settings.crewUsual; retu
 function crewDayOf(date){ return ((dayLogFor(date)||{}).crewDay) || {}; }
 function todaysCrewActive(){ return Object.keys(crewDayOf(todayStr())).length>0; }
 function crewDefault(n){ return {st:'here', start: crewUsual()[n] || '08:00', end:''}; }
-function crewRowOf(date, n){ return {...crewDefault(n), ...(crewDayOf(date)[n]||{})}; }
+function crewRowOf(date, n){ const c = crewDayOf(date)[n]; return {...crewDefault(n), ...(c ? autoHelperEnd(date, n, c) : (inferHelper(date, n) || {}))}; }
 const stPlace = r=>r.st==='lent' ? `Lent · ${r.dept==='Dicer / Grinding'?'Dicer / Grinding':(r.dept||'Other dept')}` : `Not here · ${r.st==='sick'?'Sick':r.st==='vacation'?'Vacation':'Absent'}`;
 /* the log the reports use: what was tapped, plus today's crew (start, half day end, sick / absent / lent all day) */
 function effectiveLog(date, n){
