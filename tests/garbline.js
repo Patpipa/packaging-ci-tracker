@@ -1,0 +1,16 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext()).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1500);
+  const R = await page.evaluate(async()=>{ toast=()=>{}; window.confirm=()=>true; window.CLOCK='08:00'; nowHHMM=()=>CLOCK; Router.go('live'); await confirmTodaysCrew(false); const T=todayStr();
+    const pick=(ctx,names)=>{ namePickHTML(ctx); names.forEach(n=>toggleName(ctx,pickLists[ctx].indexOf(n))); };
+    const at=t=>{ CLOCK=t; }; const sync=async()=>{ render(); await new Promise(r=>setTimeout(r,300)); await syncWhere(); };
+    startLiveRunSetup('Variovac 1'); pick('line',['Mandy','Harpreet','Stanley']); await confirmStartRun(); await sync();
+    at('09:00'); await garbageOut('Variovac 1','Packaging','Stanley'); await sync(); at('09:30'); await garbageBack('Variovac 1'); await sync();
+    at('10:30'); await garbageOut('Variovac 1','Trimmer','Harpreet'); await sync(); at('10:46'); await garbageBack('Variovac 1'); await sync();
+    at('11:00'); askGarbageKind=async()=>'Burger Room'; await sendNamesTo(['Mandy'],'Garbage run'); await sync(); at('11:22'); await sendNamesTo(['Mandy'],'Variovac 1'); await sync();
+    at('16:30');
+    const d=document.createElement('div'); d.innerHTML=crewReportHTML(T,T,true); const t=d.innerText;
+    const s=document.createElement('div'); s.innerHTML=staffingReportHTML(T,T,true); const st=s.innerText;
+    const w=t; const j=w.indexOf("4 · Time away"); return w.slice(j,j+260)+"\n----\n"+st.slice(st.search(/4 · Garbage/i), st.search(/4 · Garbage/i)+200);});
+  console.log(R); console.log(errs.join('|')||'no page errors'); await b.close(); })();

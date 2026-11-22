@@ -1,0 +1,12 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext()).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1200); await page.addScriptTag({content: fs.readFileSync(require('path').join(__dirname,'prelude.js'),'utf8')});
+  const R = await page.evaluate(async()=>{ const H = await window.__P(); const T=H.T; const txt=h=>{ const d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); const t=d.innerText; d.remove(); return t; };
+    await H.start('Variovac 1',['Mandy','Harpreet']); H.at('12:30'); await setCrewDay('Harpreet',{end:'12:30'}); await H.sync(); H.at('16:30'); await H.fin('Variovac 1',2000,1); await confirmEndShift(); await H.sync();
+    const P=personDay(T).people.filter(p=>!p.away); const all=P.reduce((t,p)=>t+p.total,0), nh=P.reduce((t,p)=>t+(p.grp['Not here']||0),0);
+    const t=txt(crewReportHTML(T,T,true)); const heads=(t.match(/^\d · [^\n]+/gm)||[]).join(' | ');
+    const tw=(t.match(/WHERE THE CREW'S HOURS WENT — ([^\n]+) IN TOTAL/i)||[])[1]; const note=(t.match(/Not on the floor:[^\n]*/)||[''])[0];
+    const tr=txt(crewReportHTML(shiftDate(T,-2),T,true)); const noteR=(tr.match(/Not on the floor:[^\n]*/)||[''])[0];
+    return {heads, totalShown:tw, expected: chDur(all-nh), notHere: chDur(nh), note, timeline: /CREW TIMELINE/i.test(t), noteR, rangeNotHereRow: /\nNot here\t/.test(tr.slice(tr.toUpperCase().indexOf("WHERE THE CREW")))}; });
+  console.log(JSON.stringify(R,null,1)); console.log(errs.join('|')||'no page errors'); await b.close(); })();

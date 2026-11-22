@@ -1,0 +1,15 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext()).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1500);
+  const R = await page.evaluate(async()=>{ toast=()=>{}; window.confirm=()=>true; window.CLOCK='08:00'; nowHHMM=()=>CLOCK; Router.go('live'); await confirmTodaysCrew(false); const T=todayStr();
+    const pick=(ctx,names)=>{ namePickHTML(ctx); names.forEach(n=>toggleName(ctx,pickLists[ctx].indexOf(n))); };
+    const S=async(t,f)=>{ CLOCK=t; await f(); render(); await new Promise(r=>setTimeout(r,100)); await syncWhere(); await syncSideBreaks(); };
+    await S('08:00', async()=>{ startLiveRunSetup('Variovac 3'); pick('line',['Sandeep','Stanley']); await confirmStartRun(); });
+    await S('09:50', async()=>{ askGarbageKind=async()=>'Packaging'; await sendNamesTo(['Sandeep'],'Garbage run'); });
+    await S('10:00', async()=>{ await startBreakAll(); }); await S('10:30', async()=>{ await endBreakAll(); });
+    await S('10:35', async()=>{ askGarbageKind=async()=>'Trimmer'; await sendNamesTo(['Sandeep'],'Garbage run'); });
+    await S('10:45', async()=>{ await sendNamesTo(['Sandeep'],'Variovac 3'); });
+    const pd=personDay(T).people.find(p=>p.name==='Sandeep');
+    return {place: placeGarbageMinFor(T,'Variovac 3',480,990), other: placeGarbageMinFor(T,'Variovac 1',480,990), crewGarb: Object.keys(pd.tot).filter(k=>/Garbage/.test(k)).map(k=>k+' '+pd.tot[k]), log: JSON.stringify(dayLogFor(T).where.Sandeep)}; });
+  console.log(JSON.stringify(R,null,1)); console.log(errs.join('|')||'no page errors'); await b.close(); })();

@@ -1,0 +1,13 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext({viewport:{width:430,height:900}})).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1200); await page.addScriptTag({content: fs.readFileSync(require('path').join(__dirname,'prelude.js'),'utf8')});
+  const R = await page.evaluate(async()=>{ const H = await window.__P(); const T=H.T; const out={}; const txt=h=>{ const d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); const t=d.innerText; d.remove(); return t; };
+    await H.start('Variovac 1',['Mandy','Harpreet']); await H.start('Variovac 2',['Stanley','Winston']); await H.start('Variovac 3',['Sandeep','Jeevan']); await H.start('Manual Pack',['Mohamad']); H.at('10:00');
+    await H.fin('Variovac 3',1000,10); await H.fin('Variovac 1','',''); await H.fin('Variovac 2','',''); await H.fin('Manual Pack','','');
+    let t=txt(renderPLHReportHTML(T,T)); out.before=(t.match(/⚠ \d+ runs? missing[^\n]*/)||[''])[0];
+    plhLogRange={preset:'today', start:T, end:T}; plhKind='lines'; Router.go('plhLog'); render(); const btn=[...document.querySelectorAll('button')].find(x=>/mark all 3 as not measured/i.test(x.innerText)); out.btn=!!btn; if(btn) btn.click(); await new Promise(r=>setTimeout(r,500));
+    t=txt(renderPLHReportHTML(T,T)); out.after={missing: /missing Quantity\/Weight/.test(t), nm:(t.match(/⊘[^\n]*/)||[''])[0], cov:(t.match(/Based on[^\n]*/)||[''])[0], plh:(t.match(/([\d.]+) lbs\/hr/)||[])[1]};
+    out.check=reportCheck(T).items.filter(i=>/weight not entered|awaiting/.test(i.name)).length;
+    return out; });
+  console.log(JSON.stringify(R,null,1)); console.log(errs.join('|')||'no page errors'); await b.close(); })();

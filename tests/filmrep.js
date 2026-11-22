@@ -1,0 +1,17 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext({viewport:{width:430,height:900}, deviceScaleFactor:2})).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1200); await page.addScriptTag({content: fs.readFileSync(require('path').join(__dirname,'prelude.js'),'utf8')});
+  const R = await page.evaluate(async()=>{ const H = await window.__P(); const T=H.T, Y=shiftDate(T,-1); const out={}; const txt=h=>{ const d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); const t=d.innerText; d.remove(); return t; };
+    const film=async(m,f)=>{ openDowntimeSetup(m); liveDowntimeSetup.status='CHANGEOVER'; liveDowntimeSetup.changeReason='Film Change'; liveDowntimeSetup.film=f; await confirmDowntime(); await H.sync(); };
+    const real=todayStr; todayStr=()=>Y; await confirmTodaysCrew(false);
+    H.at('08:00'); await H.start('Variovac 1',['Mandy','Harpreet']); await H.start('Variovac 3',['Sandeep','Jeevan']); H.at('09:00'); await film('Variovac 1','Forming'); H.at('09:10'); await H.resume('Variovac 1'); H.at('10:00'); await film('Variovac 3','Both'); H.at('10:20'); await H.resume('Variovac 3'); H.at('12:00'); await H.fin('Variovac 1',1000,1); await H.fin('Variovac 3',1000,1);
+    todayStr=real; H.at('08:00'); await H.start('Variovac 1',['Mandy','Harpreet']); await H.start('Variovac 2',['Stanley','Winston']); H.at('09:00'); await film('Variovac 1','Non-forming'); H.at('09:05'); await H.resume('Variovac 1'); H.at('11:00'); await film('Variovac 2','Forming'); H.at('11:10'); await H.resume('Variovac 2'); H.at('12:00'); await H.fin('Variovac 1',1000,1); await H.fin('Variovac 2',1000,1);
+    out.dailyHasFilm = /FILM/i.test(sectionsText(dayLogSections(T)));
+    weeklyRange={start:Y,end:T}; out.weeklyHasFilm = /FILM USAGE/i.test(weeklySummaryText()); Router.go('weekly'); render(); out.weeklyViewHasFilm=/Film Usage This Period/.test(document.body.innerText);
+    Router.go('reports'); render(); out.btn = [...document.querySelectorAll('button')].some(x=>/film usage/i.test(x.innerText));
+    filmRange={start:Y,end:T,preset:'7'}; const t=txt(filmReportHTML(Y,T,true)); out.text=t;
+    Router.go('film'); render(); window.scrollTo(0,0); return out; });
+  console.log(JSON.stringify({dailyHasFilm:R.dailyHasFilm, weeklyHasFilm:R.weeklyHasFilm, weeklyViewHasFilm:R.weeklyViewHasFilm, btn:R.btn},null,0)); console.log(R.text);
+  await page.screenshot({path:require('path').join(require('os').tmpdir(),'film-usage-sample.png'), fullPage:true});
+  console.log(errs.join('|')||'no page errors'); await b.close(); })();

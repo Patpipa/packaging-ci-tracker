@@ -1,0 +1,17 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext({viewport:{width:430,height:900}})).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1200); await page.addScriptTag({content: fs.readFileSync(require('path').join(__dirname,'prelude.js'),'utf8')});
+  const R = await page.evaluate(async()=>{ const H = await window.__P(); const T=H.T; const out={}; const txt=h=>{ const d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); const t=d.innerText; d.remove(); return t; }; const msgs=[]; toast=m=>msgs.push(m);
+    await H.start('Variovac 1',['Mandy','Harpreet']); H.at('09:00'); openDowntimeSetup('Variovac 1'); liveDowntimeSetup.status='CHANGEOVER'; liveDowntimeSetup.changeReason='Film Change'; liveDowntimeSetup.film='Forming'; await confirmDowntime(); await H.sync(); H.at('09:10'); await H.resume('Variovac 1'); H.at('10:00'); await H.fin('Variovac 1',1000,1);
+    const coBefore=Store.records.filter(r=>r.status==='CHANGEOVER').length;
+    Router.go('film'); render(); const openBtn=[...document.querySelectorAll('button')].find(x=>/add film rolls by hand/i.test(x.innerText)); out.btn=!!openBtn; openBtn.click();
+    filmAdd={date:shiftDate(T,-1), machine:'Variovac 2', film:'', count:2, note:'from Mandy'}; await saveFilmAdd(); out.refused=msgs.slice(-1)[0];
+    filmAdd.film='Non-forming'; await saveFilmAdd();
+    filmAdd={date:shiftDate(T,-3), machine:'Variovac 3', film:'Both', count:1, note:''}; await saveFilmAdd();
+    const r=filmRangeNow(); const fu=filmUsage(r.start,r.end); out.T=fu.T; out.coAfter=Store.records.filter(r=>r.status==='CHANGEOVER').length===coBefore;
+    out.down = buildRangeReport(r.start,r.end).totals.CHANGEOVER;
+    const t=txt(filmReportHTML(r.start,r.end,true)); out.byHand=(t.match(/ADDED BY HAND[\s\S]*?Entered by hand[^\n]*/)||[''])[0]; out.pdfNoRemove=!/remove/.test(t);
+    const add=dayLogFor(shiftDate(T,-1)).filmAdds[0]; await removeFilmAdd(shiftDate(T,-1), add.id); out.afterRemove=filmUsage(r.start,r.end).T;
+    return out; });
+  console.log(JSON.stringify(R,null,1)); console.log(errs.join('|')||'no page errors'); await b.close(); })();

@@ -1,0 +1,96 @@
+{
+ "step": {
+  "mandyStart": "07:00",
+  "crewTotal": 5,
+  "dtCrewEdit": true,
+  "mandyWhere0700": "Variovac 3",
+  "v3prefill": [
+   "Mandy"
+  ],
+  "v3names": [
+   "Mandy",
+   "Krishan"
+  ],
+  "stretchPeople": [
+   "Harpreet",
+   "Stanley",
+   "Winston",
+   "Sandeep"
+  ],
+  "harpWhere0800": "",
+  "harpWhere0815": "",
+  "v2namesClean": [
+   "Winston",
+   "Sandeep"
+  ],
+  "sandeep0920": "Other · Restocking boxes",
+  "recentOther": [
+   "Restocking boxes"
+  ],
+  "sandeep0930": "Set-up · Fajita",
+  "fajPrefill": [
+   "Sandeep"
+  ],
+  "fajOpen": true,
+  "afterSide": {
+   "m": "Fajita",
+   "names": [
+    "Sandeep"
+   ],
+   "sel": [
+    "Sandeep"
+   ],
+   "at": "11:50"
+  },
+  "sandeep1150": "Clean-up · Fajita",
+  "harp1231": "Not here · Went home",
+  "v1names1231": [
+   "Stanley"
+  ],
+  "leadOn": [
+   "Lead Hand"
+  ],
+  "v1after": [
+   "Stanley"
+  ],
+  "linkShown": true,
+  "fajOutput": {
+   "q": 85,
+   "w": 1240,
+   "from": "Variovac 2",
+   "dts": [
+    "Waiting for strogi meat"
+   ]
+  }
+ },
+ "hist": [
+  "Variovac 3 | Running | Nov 22, 2026 · 7:20 AM – 5:00 PM · 8h 55m | \"2 employees on station (Live Entry) · Qty/Weight not entered yet — add later from History\" | ▸ View Timeline | 📦 ADD QTY/WEIGHT (PLH) | ⊘ NOT MEASURED TODAY | ✎ | 🗑",
+  "Variovac 3 | Changeover | Nov 22, 2026 · 7:00 AM – 7:20 AM · 20m | Machine Setup | ✎ | 🗑",
+  "Variovac 3 | Planned Stop | Nov 22, 2026 · 8:00 AM – 8:15 AM · 15m | Scheduled Stretching | ✎ | 🗑",
+  "Variovac 3 | Break | Nov 22, 2026 · 10:00 AM – 10:30 AM · 30m | Break | ✎ | 🗑",
+  "Variovac 1 | Running | Nov 22, 2026 · 8:16 AM – 4:30 PM · 7h 44m | \"1–2 employees on station (staff changed) (Live Entry) · Qty/Weight not entered yet — add later from History\" | ▸ View Timeline | 📦 ADD QTY/WEIGHT (PLH) | ⊘ NOT MEASURED TODAY | ✎ | 🗑",
+  "Variovac 1 | Break | Nov 22, 2026 · 10:00 AM – 10:30 AM · 30m | Break | ✎ | 🗑",
+  "Variovac 2 | Running | Nov 22, 2026 · 8:16 AM – 4:00 PM · 6h 4m | \"1–2 employees on station (staff changed) (Live Entry) · Qty: 85 · Weight: 1240 lbs · Labour: 12.6h gross (758 min) / 10.6h net (638 min) · PLH: 98 gross / 117 net\" | ▸ View Timeline | ✎ EDIT QTY/WEIGHT (PLH) | ✎ | 🗑",
+  "Variovac 2 | Waiting | Nov 22, 2026 · 9:00 AM – 10:00 AM · 1h 0m | Required Cleaning INTERNAL | ✎ | 🗑",
+  "Variovac 2 | Break | Nov 22, 2026 · 10:00 AM – 10:30 AM · 30m | Break | ✎ | 🗑",
+  "Variovac 2 | Waiting | Nov 22, 2026 · 10:30 AM – 10:40 AM · 10m | Required Cleaning INTERNAL | ✎ | 🗑",
+  "Fajita | 🔧 Set-up | Nov 22, 2026 · 9:30 AM – 9:45 AM · 15m | 👥 1 person | Side machine · from Live · view only",
+  "Fajita | Running | Nov 22, 2026 · 9:45 AM – 11:50 AM · ran 1h 45m (paused 20m) | \"1 packaging on station (Side machine) · Qty: 85 · Weight: 1240 lbs\" | ▾ View Timeline | Segment 1: 9:45 AM–11:00 AM · 1 emp | Segment 2: 11:20 AM–11:50 AM · 1 emp | Downtime (Waiting for strogi meat): 11:00 AM–11:20 AM | ✎ EDIT QTY / LBS | ✎ | 🗑",
+  "Fajita | Paused | Nov 22, 2026 · 11:00 AM – 11:20 AM · 20m | Waiting for strogi meat | 👥 1 person | Side machine · from Live · view only",
+  "Fajita | 🧽 Clean-up | Nov 22, 2026 · 11:50 AM – 12:10 PM · 20m | 👥 1 person | Side machine · from Live · view only"
+ ],
+ "sideLog": "[{\"id\":\"rmwrl090zhrkls\",\"machine\":\"Fajita\",\"start\":\"09:45\",\"end\":\"11:50\",\"pack\":1,\"trim\":0,\"names\":[\"Sandeep\"],\"jobId\":\"rmwrl090zhrkls\",\"phase\":\"seal\",\"waits\":[{\"start\":\"11:00\",\"end\":\"11:20\",\"reason\":\"Waiting for strogi meat\"}]}]",
+ "sideRecs": 1,
+ "faj": [
+  "Fajita | 🔧 Set-up | Nov 22, 2026 · 9:30 AM – 9:45 AM · 15m | 👥 1 person | Side machine · from Live · view only",
+  "Fajita | Running | Nov 22, 2026 · 9:45 AM – 11:50 AM · ran 1h 45m (paused 20m) | \"1 packaging on station (Side machine) · Qty: 85 · Weight: 1240 lbs\" | ▾ View Timeline | Segment 1: 9:45 AM–11:00 AM · 1 emp | Segment 2: 11:20 AM–11:50 AM · 1 emp | Downtime (Waiting for strogi meat): 11:00 AM–11:20 AM | ✎ EDIT QTY / LBS | ✎ | 🗑",
+  "Fajita | Paused | Nov 22, 2026 · 11:00 AM – 11:20 AM · 20m | Waiting for strogi meat | 👥 1 person | Side machine · from Live · view only",
+  "Fajita | 🧽 Clean-up | Nov 22, 2026 · 11:50 AM – 12:10 PM · 20m | 👥 1 person | Side machine · from Live · view only"
+ ],
+ "wait": [
+  "Variovac 2 | Waiting | Nov 22, 2026 · 9:00 AM – 10:00 AM · 1h 0m | Required Cleaning INTER",
+  "Variovac 2 | Waiting | Nov 22, 2026 · 10:30 AM – 10:40 AM · 10m | Required Cleaning INTERN",
+  "Fajita | Paused | Nov 22, 2026 · 11:00 AM – 11:20 AM · 20m | Waiting for strogi meat | 👥 "
+ ],
+ "opts": "All Machines,Variovac 1,Variovac 2,Variovac 3,Manual Pack,Fajita,Slicer,Cutlet,Vacuum Sealer"
+}

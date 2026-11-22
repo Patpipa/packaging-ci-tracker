@@ -1,0 +1,14 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext()).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1500);
+  const R = await page.evaluate(async()=>{ toast=()=>{}; window.confirm=()=>true; window.CLOCK='08:00'; nowHHMM=()=>CLOCK; askSideKind=async()=>'start'; Router.go('live'); await confirmTodaysCrew(false); const T=todayStr();
+    const d0=ensureDayLog(T); d0.shift={}; await saveDayLogNow(); await setCrewDay('Jeevan',{st:'absent'});
+    const pick=(ctx,names)=>{ namePickHTML(ctx); names.forEach(n=>toggleName(ctx,pickLists[ctx].indexOf(n))); };
+    startLiveRunSetup('Variovac 2'); pick('line',['Stanley','Winston']); await confirmStartRun();
+    startLiveRunSetup('Variovac 3'); pick('line',['Sandeep','Mohamad','Mandy']); await confirmStartRun();
+    startLiveRunSetup('Manual Pack'); pick('line',['Harpreet']); await confirmStartRun();
+    CLOCK='09:00'; openSideSetup('Fajita'); namePickHTML('side'); window.__pl=pickLists.side.join(','); pick('side',['Mandy']); await confirmSide(); await sendNamesTo(['Lead Hand'],'Fajita');
+    CLOCK='10:00'; await sendNamesTo(['Harpreet'],'Lent · Warehouse'); await sendNamesTo(['Mandy'],'Manual Pack');
+    CLOCK='11:00'; const x=shortStaffFor(T); return {pl:window.__pl, tl: staffTimeline(x).map(g=>`${chFmtHM(g.a)}-${chFmtHM(g.b)} ${g.status}: ${g.t}${g.where?'  || WHERE: '+g.where:''}`)}; });
+  console.log(JSON.stringify(R,null,1)); console.log(errs.join('|')||'no page errors'); await b.close(); })();

@@ -1,0 +1,12 @@
+const { chromium } = require('playwright'); const fs=require('fs');
+(async()=>{ const b = await chromium.launch(); const page = await (await b.newContext()).newPage(); const errs=[]; page.on('pageerror', e=>errs.push(e.message));
+  await page.route('**/*', r=>{ const u=r.request().url(); if(u.includes('firebase-app-compat')) return r.fulfill({body: fs.readFileSync(__dirname+'/fakefb.js','utf8'), contentType:'application/javascript'}); if(u.startsWith('file:')) return r.continue(); return r.fulfill({body:'',contentType:'application/javascript'}); });
+  await page.goto('file://'+process.argv[2]); await page.waitForTimeout(1200); await page.addScriptTag({content: fs.readFileSync(require('path').join(__dirname,'prelude.js'),'utf8')});
+  const R = await page.evaluate(async()=>{ const H = await window.__P(); const T=H.T; const txt=h=>{ const d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); const t=d.innerText; d.remove(); return t; };
+    const down=async(sc)=>{ tapScale(sc); scaleSetup.reason=SCALE_REASONS[0]; await confirmScaleDown(); }; const up=async(sc)=>{ tapScale(sc); await scaleBackUp(); };
+    await H.start('Variovac 1',['Mandy','Harpreet']); await H.start('Variovac 2',['Stanley','Winston']); await H.start('Variovac 3',['Sandeep','Jeevan']); await H.start('Manual Pack',['Mohamad']);
+    H.at('08:30'); await down('Scale 7'); H.at('09:00'); await down('Scale 5'); H.at('09:15'); await up('Scale 5'); H.at('09:30'); await up('Scale 7'); H.at('10:00'); await down('Scale 3'); H.at('10:20'); await up('Scale 3');
+    H.at('12:00'); for(const m of ['Variovac 1','Variovac 2','Variovac 3','Manual Pack']) await H.fin(m,1000,1); H.at('12:30'); await down('Scale 3'); H.at('13:00'); await up('Scale 3'); H.at('17:00');
+    const x=scaleEffectFor(T); const t=txt(scaleReportHTML(T,T,true)); const i=t.indexOf('1 · EFFECT'), j=t.toUpperCase().indexOf('2 · BY SCALE');
+    return {sum:x.sum, text: t.slice(t.toUpperCase().indexOf('1 · EFFECT'), j)}; });
+  console.log(JSON.stringify(R.sum)); console.log(R.text); console.log(errs.join('|')||'no page errors'); await b.close(); })();
