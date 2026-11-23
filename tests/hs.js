@@ -49,4 +49,4 @@ const { chromium } = require('playwright'); const fs=require('fs');
     Router.go('history'); render(); const fr2=Store.records.find(r=>r.side); if(fr2){ expandedTimelineIds.add(fr2.id); render(); }
     R.hist=[...document.querySelectorAll('.hist-item')].map(e=>e.innerText.replace(/\n+/g,' | ')); R.sideLog=JSON.stringify(dayLogFor(T).side);
     R.sideRecs=Store.records.filter(r=>r.side).length; histFilters.machine='Fajita'; render(); R.faj=[...document.querySelectorAll('.hist-item')].map(e=>e.innerText.replace(/\n+/g,' | ')); histFilters.machine=''; histFilters.status='WAITING'; render(); R.wait=[...document.querySelectorAll('.hist-item')].map(e=>e.innerText.replace(/\n+/g,' | ').slice(0,90)); histFilters.status=''; R.opts=[...document.querySelectorAll('.filterbar select')][1].innerText.replace(/\n/g,','); return R; });
-  fs.writeFileSync(__dirname+'/hs.json', JSON.stringify(R,null,1)); console.log(errs.join('\n')||'no page errors'); await b.close(); })();
+  fs.writeFileSync(require('path').join(require('os').tmpdir(),'hs.json'), JSON.stringify(R,null,1)); console.log(errs.join('\n')||'no page errors'); await b.close(); })();

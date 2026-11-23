@@ -52,4 +52,4 @@ const { chromium } = require('playwright'); const fs=require('fs');
     const scr={}; for(const v of ['dashboard','live','crew','history','reports','weekly','settings','crewHours','upstreamImpact','plhLog']){ try{ Router.go(v); scr[v]=document.getElementById('app')?'ok':'ok'; }catch(e){ scr[v]='ERR '+e.message; } } R.screens=scr;
     R.recs = Store.records.filter(r=>r.date===T && r.status==='RUNNING').map(r=>`${r.machine} ${r.startTime}-${r.endTime} gross=${r.plh&&(r.plh.grossLaborHours*60).toFixed(0)} net=${r.plh&&(r.plh.netLaborHours*60).toFixed(0)} notes=${(r.notes||'').slice(0,60)}`);
     R.text = crewHoursText(T,T); const el=document.createElement('div'); el.innerHTML=crewReportHTML(T,T); R.html=el.innerText; R.goHome=goHomeCandidates(); R.toasts=__t; return R; });
-  fs.writeFileSync(__dirname+'/day3.json', JSON.stringify(R,null,1)); console.log(errs.join('\n')||'no page errors'); await b.close(); })();
+  fs.writeFileSync(require('path').join(require('os').tmpdir(),'day3.json'), JSON.stringify(R,null,1)); console.log(errs.join('\n')||'no page errors'); await b.close(); })();
