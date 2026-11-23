@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.81 - 2026-11-22 (Data connection panel shows why a save failed, whether you are signed in, and the app version)';
+const APP_VERSION = 'v205.82 - 2026-11-22 (Internal Delay Report under Reports — packaging-side stops and changeovers by area, reason, machine and day; day / week / month; Copy + PDF)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -878,7 +878,7 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='crewHours'||v==='staffing'||v==='scales'||v==='film') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='internalDelay'||v==='crewHours'||v==='staffing'||v==='scales'||v==='film') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
@@ -902,6 +902,7 @@ function render(){
     case 'plhLog': html += renderPLHLogView(); break;
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
     case 'upstreamImpact': html += renderUpstreamImpactView(); break;
+    case 'internalDelay': html += renderInternalView(); break;
     case 'addPLHData': html += renderAddPLHDataForm(); break;
     case 'live': html += renderLive(); break;
     case 'crew': html += renderCrewTab(); break;
@@ -7469,7 +7470,8 @@ function renderReportsList(){
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="openStaffing(todayStr())">⚠ Staffing Report</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="openCrewHours(todayStr())">👥 Crew Hours & Positions</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
-  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('upstreamImpact')">🏭 Upstream Impact Summary</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('upstreamImpact')">🏭 Upstream Impact Summary</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('internalDelay')">🔧 Internal Delay Report</button>`;
   if(!list.length){ html += '<div class="empty">No daily reports yet. Press End Shift on the dashboard to generate one.</div>'; return html; }
   html += list.map(r=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
@@ -8146,6 +8148,72 @@ function afterRender(){
 const _origGo = Router.go.bind(Router);
 Router.go = function(view,arg){ _origGo(view,arg); if(view==='endShift'){ document.getElementById('main').innerHTML = renderEndShiftConfirm(); } if(view==='new'){ if(!draft) draft=freshDraft(); } };
 
+/* ============ v205.82: 🔧 INTERNAL DELAY REPORT ============
+The packaging-side twin of the Upstream Impact Summary: stops packaging can fix itself — internal waiting (machine / equipment, materials, labour, cleaning, QA) plus changeovers.
+Day / week / month / own dates, name-free, Copy + PDF. Worked out only when opened — nothing stored. */
+let internalRange = null;
+function internalRangeNow(){ if(!internalRange){ const t = todayStr(), d = new Date(); d.setDate(d.getDate()-6); internalRange = {start: localDateStr(d), end: t, preset:'7'}; } return internalRange; }
+function setInternalPreset(p){ const t = todayStr(), now = new Date(), d = new Date();
+  if(p==='today') internalRange = {start:t, end:t, preset:p};
+  else if(p==='yday'){ d.setDate(d.getDate()-1); const y = localDateStr(d); internalRange = {start:y, end:y, preset:p}; }
+  else if(p==='month') internalRange = {start: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), end: t, preset:p};
+  else if(p==='lmonth') internalRange = {start: localDateStr(new Date(now.getFullYear(), now.getMonth()-1, 1)), end: localDateStr(new Date(now.getFullYear(), now.getMonth(), 0)), preset:p};
+  else { d.setDate(d.getDate()-(p==='7'?6:29)); internalRange = {start: localDateStr(d), end: t, preset:p}; }
+  render(); }
+function setInternalDate(w, v){ if(!v) return; const r = internalRangeNow(); r[w] = v; r.preset = ''; if(r.end < r.start){ if(w==='start') r.end = v; else r.start = v; } render(); }
+function internalAreaOf(r){ return r.status==='CHANGEOVER' ? 'Changeovers' : (r.reasonCategory || 'Other'); }
+function computeInternalDelay(start, end){
+  const recs = Store.records.filter(r=>!r.side && r.date>=start && r.date<=end);
+  const wait = recs.filter(r=>r.status==='WAITING'), co = recs.filter(r=>r.status==='CHANGEOVER');
+  const intW = wait.filter(r=>r.classification!=='upstream'), upW = wait.filter(r=>r.classification==='upstream');
+  const items = intW.concat(co), sum = l=>l.reduce((t,r)=>t+(r.durationMin||0),0);
+  const areas = {}, reasons = {}, mach = {}, days = {};
+  items.forEach(r=>{ const a = internalAreaOf(r), m = r.durationMin||0;
+    (areas[a] = areas[a] || {min:0, n:0}); areas[a].min += m; areas[a].n++;
+    const k = effectiveReasonLabel(r) || r.status; const g = reasons[k] || (reasons[k] = {reason:k, area:a, min:0, n:0, machines:new Set(), notes:[]}); g.min += m; g.n++; g.machines.add(shortM(r.machine)); const nt = String(r.notes||'').replace(/\(Live Entry\)/g,'').trim(); if(nt && g.notes.length<2 && !g.notes.includes(nt)) g.notes.push(nt);
+    (mach[r.machine] = mach[r.machine] || {wait:0, co:0}); if(r.status==='CHANGEOVER') mach[r.machine].co += m; else mach[r.machine].wait += m;
+    (days[r.date] = days[r.date] || {wait:0, co:0}); if(r.status==='CHANGEOVER') days[r.date].co += m; else days[r.date].wait += m; });
+  const coTypes = {}; co.forEach(r=>{ const k = r.reason==='Film Change' && r.film ? `Film Change — ${r.film==='Both'?'both films':r.film.toLowerCase()}` : (effectiveReasonLabel(r) || 'Changeover'); const g = coTypes[k] || (coTypes[k] = {min:0, n:0}); g.min += r.durationMin||0; g.n++; });
+  return {intWait: sum(intW), co: sum(co), up: sum(upW), total: sum(items), allStops: sum(wait)+sum(co), n: items.length, areas, reasons: Object.values(reasons).map(g=>({...g, machines:[...g.machines].sort()})).sort((a,b)=>b.min-a.min), mach, days, coTypes}; }
+function internalReportHTML(start, end, forPdf){
+  const td = 'padding:6px 8px;border-bottom:1px solid #e3e7ec;font-size:12.5px;vertical-align:top;', tn = td+'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;', th = 'padding:6px 8px;border-bottom:2px solid #1e3a5f;font-size:10.5px;color:#555;text-transform:uppercase;';
+  const hd = t=>`<div style="font-size:13px;font-weight:800;color:#1e3a5f;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.04em;">${t}</div>`;
+  const span = start===end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`;
+  const H = [`<div style="background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};"><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Internal Delay Report</div><div style="font-size:13px;color:#555;margin-top:2px;">Packaging stops packaging can act on — internal waiting and changeovers · ${span}</div>`];
+  const x = computeInternalDelay(start, end);
+  if(!x.n){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No internal waiting or changeovers recorded in this period.</div>`); }
+  else {
+    const days = Math.round((new Date(end+'T12:00:00')-new Date(start+'T12:00:00'))/86400000)+1, pS = shiftDate(start, -days), pE = shiftDate(start, -1), p = computeInternalDelay(pS, pE);
+    const delta = p.n ? x.total - p.total : null, pct = v=>x.allStops ? Math.round(v/x.allStops*100) : 0;
+    H.push(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">${[['Internal delay', fmtDur(x.total)], ['Internal waiting', fmtDur(x.intWait)], ['Changeovers', fmtDur(x.co)], ['Share of all stops', pct(x.total)+'%']].map(([l,v])=>`<div style="flex:1 1 120px;border:1px solid #d6dde6;border-radius:6px;padding:10px 12px;"><div style="font-size:21px;font-weight:800;color:#1e3a5f;">${v}</div><div style="font-size:11px;color:#666;text-transform:uppercase;">${l}</div></div>`).join('')}</div>`);
+    H.push(`<div style="font-size:12.5px;color:#333;margin-top:8px;line-height:1.5;">All stops this period: ${fmtDur(x.allStops)} — upstream waiting ${fmtDur(x.up)} (${pct(x.up)}%) · internal waiting ${fmtDur(x.intWait)} (${pct(x.intWait)}%) · changeovers ${fmtDur(x.co)} (${pct(x.co)}%).${delta!=null ? ` <b style="color:${delta>0?'#c0392b':'#2e9e5b'};">${delta>0?'▲ up':'▼ down'} ${fmtDur(Math.abs(delta))}</b> on the ${days===1?'day':days+' days'} before (${fmtDur(p.total)}).` : ''}</div>`);
+    const AO = ['Machine / Equipment','Changeovers','Materials / Warehouse','Labour / Operational','Cleaning / Sanitation','QA / Pre-Op','Other'], aKeys = Object.keys(x.areas).sort((a,b)=>x.areas[b].min-x.areas[a].min);
+    H.push(hd('1 · By area'));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Area</td><td style="${th}text-align:right;">Time</td><td style="${th}text-align:right;">Stops</td><td style="${th}text-align:right;">Share</td></tr>${aKeys.map(a=>`<tr><td style="${td}font-weight:700;">${escapeHtml(a)}</td><td style="${tn}">${fmtDur(x.areas[a].min)}</td><td style="${tn}">${x.areas[a].n}</td><td style="${tn}">${Math.round(x.areas[a].min/x.total*100)}%</td></tr>`).join('')}</table>`);
+    H.push(hd('2 · Top reasons'));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Reason</td><td style="${th}text-align:right;">Time</td><td style="${th}text-align:right;">Times</td><td style="${th}text-align:right;">Avg</td></tr>${x.reasons.slice(0,10).map((g,i)=>`<tr><td style="${td}"><b>${i+1}. ${escapeHtml(g.reason)}</b><div style="font-size:11px;color:#777;">${escapeHtml(g.area)} · ${escapeHtml(g.machines.join(', '))}</div>${g.notes.map(n=>`<div style="font-size:11px;color:#555;font-style:italic;">“${escapeHtml(n)}”</div>`).join('')}</td><td style="${tn}">${fmtDur(g.min)}</td><td style="${tn}">${g.n}</td><td style="${tn}">${fmtDur(Math.round(g.min/g.n))}</td></tr>`).join('')}</table>${x.reasons.length>10?`<div style="font-size:11px;color:#777;margin-top:4px;">+ ${x.reasons.length-10} smaller reasons</div>`:''}`);
+    H.push(hd('3 · By machine'));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}"></td><td style="${th}text-align:right;">Internal waiting</td><td style="${th}text-align:right;">Changeovers</td><td style="${th}text-align:right;">Total</td></tr>${MACHINES.filter(m=>x.mach[m]).map(m=>{ const v = x.mach[m]; return `<tr><td style="${td}font-weight:700;white-space:nowrap;">${escapeHtml(m)}</td><td style="${tn}">${fmtDur(v.wait)}</td><td style="${tn}">${fmtDur(v.co)}</td><td style="${tn}font-weight:700;">${fmtDur(v.wait+v.co)}</td></tr>`; }).join('')}</table>`);
+    const ct = Object.keys(x.coTypes).sort((a,b)=>x.coTypes[b].min-x.coTypes[a].min);
+    if(ct.length){ H.push(hd('4 · Changeover times'));
+      H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Type</td><td style="${th}text-align:right;">Times</td><td style="${th}text-align:right;">Average</td><td style="${th}text-align:right;">Total</td></tr>${ct.map(k=>{ const g = x.coTypes[k], pg = p.coTypes[k]; const pa = pg ? Math.round(pg.min/pg.n) : null, a = Math.round(g.min/g.n); return `<tr><td style="${td}">${escapeHtml(k)}</td><td style="${tn}">${g.n}</td><td style="${tn}font-weight:700;">${fmtDur(a)}${pa!=null && pa!==a ? `<div style="font-size:10.5px;font-weight:400;color:${a<pa?'#2e9e5b':'#c0392b'};">was ${fmtDur(pa)}</div>` : ''}</td><td style="${tn}">${fmtDur(g.min)}</td></tr>`; }).join('')}</table><div style="font-size:11px;color:#777;margin-top:4px;">Average per changeover — the number quick-changeover work should bring down. "was" = the same length of time before.</div>`); }
+    if(start!==end){ const ds = Object.keys(x.days).sort(); H.push(hd(`${ct.length?5:4} · Day by day`));
+      H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Day</td><td style="${th}text-align:right;">Internal waiting</td><td style="${th}text-align:right;">Changeovers</td><td style="${th}text-align:right;">Total</td></tr>${ds.map(d=>{ const v = x.days[d]; return `<tr><td style="${td}white-space:nowrap;">${new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${tn}">${fmtDur(v.wait)}</td><td style="${tn}">${fmtDur(v.co)}</td><td style="${tn}font-weight:700;">${fmtDur(v.wait+v.co)}</td></tr>`; }).join('')}</table>`); }
+  }
+  H.push(`<div style="margin-top:12px;font-size:11.5px;color:#555;line-height:1.5;">Internal = waiting caused inside packaging or its own supplies (machine / equipment, materials, labour, cleaning, QA) plus changeovers. Waiting caused by MAREL, trimmers and other departments is in the Upstream Impact Summary. Breaks, planned stops and no-work time are not delays and are left out.</div>`);
+  H.push(`<div style="border-top:1px solid #ddd;margin-top:14px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Internal Delay Report — ${span}</span><span>${PREPARED_BY}</span></div></div>`);
+  return H.join(''); }
+function renderInternalView(){
+  const r = internalRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setInternalPreset('${p}')">${l}</button>`;
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
+  <div class="card"><h3>🔧 Internal Delay Report</h3><div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('yday','Yesterday')}${pb('7','Last 7')}</div><div class="btnrow" style="gap:6px;margin-top:6px;">${pb('30','Last 30')}${pb('month','This Month')}${pb('lmonth','Last Month')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setInternalDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setInternalDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
+    <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="copyInternal()">📋 Copy</button><button class="btn btn-secondary" onclick="exportInternalPDF()">Export PDF</button></div></div>
+  <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${internalReportHTML(r.start, r.end)}</div>`; }
+async function exportInternalPDF(){ const r = internalRangeNow(); await buildHtmlReportPDF(internalReportHTML(r.start, r.end, true), `Internal-Delay-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
+async function copyInternal(){ const r = internalRangeNow(), el = document.createElement('div'); el.innerHTML = internalReportHTML(r.start, r.end, true);
+  el.querySelectorAll('tr').forEach(tr=>tr.appendChild(document.createTextNode('\n'))); el.querySelectorAll('td').forEach(td=>td.appendChild(document.createTextNode('  '))); document.body.appendChild(el);
+  const txt = el.innerText.replace(/\n{3,}/g,'\n\n'); el.remove(); try{ await navigator.clipboard.writeText(txt); toast('Copied'); }catch(e){ toast('Could not copy'); } }
 /* ============ UPSTREAM IMPACT SUMMARY ============
 One-page summary of packaging WAITING time caused by upstream departments, for cross-department meetings. Packaging measures; the owning department decides the fix — so the page states measured facts only. (Agreed Actions table removed in v96: planning is handled by the manager/supervisor with the departments involved.)
 Department mapping is fixed here. Any upstream reason not listed (incl. future new reasons) falls into "Others" so it's never silently dropped. Matching uses the renamed label (REASON_RENAMES) so old records map correctly too. */
