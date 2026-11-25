@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.82 - 2026-11-22 (Internal Delay Report under Reports — packaging-side stops and changeovers by area, reason, machine and day; day / week / month; Copy + PDF)';
+const APP_VERSION = 'v205.83 - 2026-11-24 (Box for each product — set its usual box in the Product Library, or when asked once at finish / adding QTY; tagged counter)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5559,13 +5559,32 @@ function updateProductSearch(el){
   const newEl = document.getElementById('productSearchInput');
   if(newEl){ newEl.focus(); newEl.setSelectionRange(pos,pos); }
 }
+/* ============ v205.83: 📦 BOX FOR EACH PRODUCT (Phase 1 of box usage) ============
+Each product in the library remembers its usual box. Set once — from the Product Library list, or the first time the product is finished / given its QTY.
+Phase 2 (later): daily box counts + Box Usage report + "ran out" box swaps. Nothing here changes any existing number. */
+const BOX_TYPES = [
+  {key:'s3-plain', group:'Steak Box #3', label:'Plain'}, {key:'s3-buckhead', group:'Steak Box #3', label:'Buckhead'}, {key:'s3-fireriver', group:'Steak Box #3', label:'Fireriver'}, {key:'s3-12pp-buckhead', group:'Steak Box #3', label:'12PP Buckhead'},
+  {key:'t3-plain', group:'Trim Box #3', label:'Plain'},
+  {key:'r57-plain', group:'Rebox #57', label:'Plain'}, {key:'r57-buckhead', group:'Rebox #57', label:'Buckhead'}];
+function boxName(k){ const b = BOX_TYPES.find(x=>x.key===k); return b ? `${b.group} · ${b.label}` : ''; }
+function boxSelectHTML(cur, onchange){ const groups = [...new Set(BOX_TYPES.map(b=>b.group))];
+  return `<select onchange="${onchange}" style="padding:9px;font-size:13.5px;font-weight:700;width:100%;${cur?'':'border-color:var(--wait);color:var(--wait);'}"><option value="" ${cur?'':'selected'}>📦 Box not set — pick one</option>${groups.map(g=>`<optgroup label="${g}">${BOX_TYPES.filter(b=>b.group===g).map(b=>`<option value="${b.key}" ${cur===b.key?'selected':''}>${g} · ${b.label}</option>`).join('')}</optgroup>`).join('')}</select>`; }
+async function setProductBox(id, key){ id = String(id||'').trim(); if(!id) return; let n = 0;
+  Store.productLibrary.forEach(it=>{ if(String(it.id||'').trim()===id){ if(key) it.box = key; else delete it.box; n++; } });
+  if(!n) return; await Store.saveProductLibrary(); toast(key ? `Saved — ${id} goes in ${boxName(key)}` : 'Box cleared'); render(); }
+async function setProductBoxIdx(i, key){ const it = Store.productLibrary[i]; if(!it) return; if(it.id) return setProductBox(it.id, key); if(key) it.box = key; else delete it.box; await Store.saveProductLibrary(); toast(key ? `Saved — ${boxName(key)}` : 'Box cleared'); render(); }
+/* shown on Finish Run and on Add QTY / LBS: asks once when the product has no box yet, otherwise a quiet one-line reminder */
+function boxAskHTML(target){ if(!target) return '';
+  if(target.box) return `<div style="font-size:11.5px;color:var(--muted);margin:-6px 0 12px;">📦 Box: <b style="color:var(--text);">${escapeHtml(boxName(target.box))}</b> <span style="opacity:.8;">(from library)</span></div>`;
+  const k = escapeHtml(String(target.id||'')).replace(/'/g,"\\'");
+  return `<div style="border:1px dashed var(--amber);border-radius:10px;padding:10px;margin:-4px 0 14px;"><div style="font-size:12.5px;font-weight:700;color:var(--amber);margin-bottom:6px;">📦 What box is ${escapeHtml(target.id||'')} ${escapeHtml(target.name||'')} packed in?</div>${target.id ? boxSelectHTML('', `setProductBox('${k}', this.value)`) : `<div class="cb-mut">Give this product an ID in the Product Library to save its box.</div>`}<div style="font-size:11px;color:var(--muted);margin-top:5px;">Asked once — the library remembers it for every run of this product.</div></div>`; }
 function openProductPicker(target, machine){
   liveProductPicker = {target, machine, query:'', addMode: target==='library', newId:'', newName:'', newTargetPLH:'', editIndex:null};
   render();
 }
 function editLibraryProduct(i){
   const item = Store.productLibrary[i];
-  liveProductPicker = {target:'library', machine:null, query:'', addMode:true, newId:item.id||'', newName:item.name||'', newTargetPLH:item.targetPLH||'', editIndex:i};
+  liveProductPicker = {target:'library', machine:null, query:'', addMode:true, newId:item.id||'', newName:item.name||'', newTargetPLH:item.targetPLH||'', newBox:item.box||'', editIndex:i};
   render();
 }
 async function deleteLibraryProduct(i){
@@ -5597,7 +5616,7 @@ function renderProductResults(results){
   const list = results.length ? results.map((item,i)=>`
     <button class="btn btn-secondary" style="justify-content:flex-start;text-align:left;flex-direction:column;align-items:flex-start;padding:14px;margin-bottom:8px;" onclick="pickProductByIndex(${i})">
       <div style="font-weight:600;">${escapeHtml(item.name)}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px;">${item.id?`ID ${escapeHtml(item.id)} · `:''}${escapeHtml(item.category||'Product')}${item.targetPLH?` · Target ${item.targetPLH} PLH`:''}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">${item.id?`ID ${escapeHtml(item.id)} · `:''}${escapeHtml(item.category||'Product')}${item.targetPLH?` · Target ${item.targetPLH} PLH`:''}${item.box?` · 📦 ${escapeHtml(boxName(item.box))}`:''}</div>
     </button>`).join('') : `<div class="empty">No products found${Store.productLibrary.length?' matching that search':' yet — add your first one below'}.</div>`;
   return `${list}
     <button class="btn btn-ghost" style="margin-top:6px;" onclick="liveProductPicker.addMode=true; render()">Can't find it? Add New Product</button>
@@ -5614,6 +5633,7 @@ function renderAddProductForm(){
     <div class="field"><label>Product ID (optional)</label><input type="text" value="${escapeHtml(p.newId||'')}" oninput="liveProductPicker.newId=this.value" placeholder="e.g. 651630"></div>
     <div class="field"><label>Product Description</label><input type="text" value="${escapeHtml(p.newName||'')}" oninput="liveProductPicker.newName=this.value" placeholder="e.g. Striploin Steak 18oz"></div>
     <div class="field"><label>Target PLH (optional, lbs/labour-hour)</label><input type="number" min="0" value="${escapeHtml(p.newTargetPLH||'')}" oninput="liveProductPicker.newTargetPLH=this.value" placeholder="e.g. 225"></div>
+    <div class="field"><label>Box (its usual box)</label>${boxSelectHTML(p.newBox||'', 'liveProductPicker.newBox=this.value')}</div>
     <div class="btnrow">
       ${p.editIndex==null ? `<button class="btn btn-ghost" onclick="liveProductPicker.addMode=false; render()">Back to Search</button>` : `<button class="btn btn-ghost" onclick="liveProductPicker=null; render()">Cancel</button>`}
       <button class="btn btn-primary" onclick="confirmAddProduct()">${p.editIndex!=null ? 'Save Changes' : (p.target==='library' ? 'Add Product' : 'Add & Select')}</button>
@@ -5626,7 +5646,8 @@ async function confirmAddProduct(){
   const id = (p.newId||'').trim();
   const targetPLH = parseFloat(p.newTargetPLH)||null;
   if(p.editIndex!=null){
-    Store.productLibrary[p.editIndex] = {id, name, category:'', targetPLH};
+    const old = Store.productLibrary[p.editIndex] || {}; const nb = {...old, id, name, category: old.category||'', targetPLH}; if(p.newBox) nb.box = p.newBox; else delete nb.box;
+    Store.productLibrary[p.editIndex] = nb;
     await Store.saveProductLibrary();
     liveProductPicker = null;
     toast('Product updated');
@@ -5650,7 +5671,7 @@ async function confirmAddProduct(){
       return;
     }
   }
-  Store.productLibrary.push({id, name, category:'', targetPLH});
+  Store.productLibrary.push({id, name, category:'', targetPLH, ...(p.newBox ? {box:p.newBox} : {})});
   await Store.saveProductLibrary();
   if(p.target==='library'){ liveProductPicker=null; toast('Product added'); render(); return; }
   applyPickedProduct(id ? `${id} ${name}` : name, id);
@@ -5692,8 +5713,10 @@ function findDuplicateProductGroups(){
   Object.values(byName).forEach(idxs=>{ if(idxs.length>1){ groups.push({type:'Same Name', idxs}); idxs.forEach(i=>dupeIdxSet.add(i)); } });
   return {groups, dupeIdxSet};
 }
+let productsBoxFilter = false;
 function renderProductsView(){
-  const items = Store.productLibrary.map((item,i)=>({...item,_idx:i})).sort((a,b)=> a.name.localeCompare(b.name));
+  const all = Store.productLibrary.map((item,i)=>({...item,_idx:i})).sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+  const tagged = all.filter(x=>x.box).length, items = productsBoxFilter ? all.filter(x=>!x.box) : all;
   const {groups, dupeIdxSet} = findDuplicateProductGroups();
   const dupeBanner = groups.length ? `
     <div class="card" style="border-color:var(--wait);background:rgba(224,90,80,0.08);margin-bottom:14px;">
@@ -5703,17 +5726,21 @@ function renderProductsView(){
     </div>` : '';
   return `
   <button class="btn btn-primary" style="margin-bottom:14px;" onclick="openProductPicker('library')">+ Add Product</button>
-  <div style="color:var(--muted);font-size:13px;margin-bottom:12px;">${items.length} product${items.length===1?'':'s'} in your library</div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:8px;">${all.length} product${all.length===1?'':'s'} in your library</div>
+  ${all.length ? `<div class="card" style="padding:12px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div><b>📦 ${tagged} of ${all.length}</b> <span class="cb-mut">products have a box</span></div><button class="btn ${productsBoxFilter?'btn-primary':'btn-secondary'}" style="width:auto;margin:0;padding:8px 10px;font-size:12px;" onclick="productsBoxFilter=!productsBoxFilter;render()">${productsBoxFilter?'Show all':'Box not set only'}</button></div>
+    <div style="height:6px;background:var(--panel2);border-radius:4px;margin-top:8px;overflow:hidden;"><div style="height:100%;width:${Math.round(tagged/all.length*100)}%;background:var(--run);"></div></div>
+    <div class="cb-mut" style="margin-top:6px;font-size:11.5px;">Pick each product's usual box below. Running out and using another box is noted on the day (coming next) — the box here stays the usual one.</div></div>` : ''}
   ${dupeBanner}
   ${items.length ? items.map(item=>`
     <div class="hist-item" ${dupeIdxSet.has(item._idx)?'style="border-color:var(--wait);"':''}>
       <div class="hist-top"><span class="mach">${escapeHtml(item.name)}</span>${dupeIdxSet.has(item._idx)?'<span class="pill wait">⚠️ DUPLICATE</span>':''}${item.targetPLH?`<span class="pill run">${item.targetPLH} PLH</span>`:''}</div>
       <div class="hist-mid">${item.id?`ID ${escapeHtml(item.id)}`:'No ID set'}</div>
+      <div style="margin:6px 0 4px;">${boxSelectHTML(item.box||'', `setProductBoxIdx(${item._idx}, this.value)`)}</div>
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editLibraryProduct(${item._idx})">✎</div>
         <div class="iconsmall" onclick="deleteLibraryProduct(${item._idx})">🗑</div>
       </div></div>
-    </div>`).join('') : '<div class="empty">No products yet — tap + Add Product to start building your library, anytime you have a spare moment.</div>'}
+    </div>`).join('') : (productsBoxFilter ? '<div class="empty">✓ Every product has its box.</div>' : '<div class="empty">No products yet — tap + Add Product to start building your library, anytime you have a spare moment.</div>')}
   `;
 }
 function employeeGrid(current, onPick){
@@ -6120,6 +6147,7 @@ function renderLiveFinishCard(live){
       <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('active','${s.machine}')">${live.product ? escapeHtml(live.product) : 'No product selected yet'}</button>
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin:-6px 0 12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
+    ${boxAskHTML(target)}
     <div class="timerow">
       <div class="field"><label>Quantity Produced (optional)</label><input type="number" min="0" placeholder="e.g. 120" value="${s.quantity}" oninput="liveFinishSetup.quantity=this.value"></div>
       <div class="field"><label>Total Weight, lbs (optional)</label><input type="number" min="0" placeholder="e.g. 3600" value="${s.weight}" oninput="liveFinishSetup.weight=this.value"></div>
@@ -6713,7 +6741,8 @@ function renderAddPLHDataForm(){
     ${r.side ? '' : `<div class="field"><label>Product</label>
       <button class="btn btn-secondary" style="justify-content:flex-start;" onclick="openProductPicker('addPLHData','${r.id}')">📋 ${r.product ? escapeHtml(r.product) : 'Tap to select, or skip'}</button>
     </div>
-    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>`}
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">${target && target.targetPLH ? `Target ${target.targetPLH} PLH` : 'No target set for this product'}</div>
+    ${boxAskHTML(target)}`}
     ${!hasSegments ? `<div class="field"><label>Employees on Station (for this whole window)</label>${employeeGrid(plhFormEmployees, 'setPLHFormEmployees')}</div>` : ''}
     <div class="timerow">
       ${r.side ? sideCodesFormHTML(r) : `<div class="field"><label>Quantity Produced</label><input type="number" min="0" id="plhQtyInput" placeholder="e.g. 120" value="${r.plh?r.plh.quantity||'':''}"></div>
