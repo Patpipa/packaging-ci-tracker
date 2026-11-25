@@ -49,4 +49,4 @@ const { chromium } = require('playwright'); const fs=require('fs');
     const scr={}; for(const v of ['dashboard','live','crew','history','reports','weekly','settings','crewHours','upstreamImpact','plhLog','scales']){ try{ Router.go(v); render(); scr[v]='ok'; }catch(e){ scr[v]='ERR '+e.message; } } R.screens=scr;
     const el=document.createElement('div'); el.innerHTML=crewReportHTML(T,T); R.crewRep = el.innerText.split('\n').filter(l=>/Winston|Jeevan|Krishan/.test(l)).slice(0,6);
     return R; });
-  fs.writeFileSync(__dirname+'/full.json', JSON.stringify(R,null,1)); console.log(errs.join('\n')||'no page errors'); await b.close(); })();
+  fs.writeFileSync(require('path').join(require('os').tmpdir(),'full.json'), JSON.stringify(R,null,1)); console.log(errs.join('\n')||'no page errors'); await b.close(); })();
