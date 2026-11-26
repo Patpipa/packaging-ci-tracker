@@ -23,6 +23,14 @@ const { chromium } = require('playwright'); const fs=require('fs');
     const doc = await Store.db.collection('tracker').doc('productLibrary').get(); const saved = JSON.parse(doc.data().data); o.cloud = saved.filter(x=>x.box).length===3;
     o.numbersSame = rec.plh.weightLbs===1000 && rec.plh.quantity===44;
     Router.go('products'); render(); window.scrollTo(0,0); return o; });
+  // v205.84 search: real typing keeps focus and filters by number / name / words
+  await page.fill('#prodSearch',''); await page.type('#prodSearch','6036');
+  const S = await page.evaluate(async()=>{ const t=document.getElementById('prodList').innerText; const r={ byNum: t.includes('Earls Sirloin') && !t.includes('Stew Trim'), focus: document.activeElement && document.activeElement.id==='prodSearch' };
+    setProductsQuery('ribeye fire'); r.words = document.getElementById('prodList').innerText.includes('Fireriver Ribeye') && !document.getElementById('prodList').innerText.includes('Earls');
+    setProductsQuery('zzz'); r.none = /No product matches/.test(document.getElementById('prodList').innerText);
+    setProductsQuery('stew'); await setProductBoxIdx(Store.productLibrary.findIndex(x=>x.id==='605201'),'r57-plain'); r.keepsQuery = document.getElementById('prodSearch').value==='stew' && Store.productLibrary.find(x=>x.id==='605201').box==='r57-plain' && !document.getElementById('prodList').innerText.includes('Earls');
+    productsQuery=''; render(); return r; });
+  Object.assign(R, S);
   await page.screenshot({path:require('path').join(require('os').tmpdir(),'boxlib.png')});
   console.log(JSON.stringify(R)); const ok = Object.values(R).every(v=>v===true);
   console.log(errs.join('|')||'no page errors'); console.log(ok&&!errs.length?'PASS':'FAIL'); await b.close(); })();
