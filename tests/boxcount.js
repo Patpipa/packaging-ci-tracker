@@ -30,7 +30,7 @@ const { chromium } = require('playwright'); const fs=require('fs'); const path=r
     // yesterday not counted
     openBoxes(Y); await markBoxesNotCounted(); o.yNot = boxDay(Y).status==='not counted';
     const u = boxUsage(Y,T); o.usage = {total:u.total, counted:u.counted, prod:u.prod, notCounted:u.notCounted.length, unset:u.unset};
-    const txt = H.txt(boxReportHTML(Y,T,true)); o.rep = /108/.test(txt) && /Not counted:/.test(txt) && /Box swaps — ran out/i.test(txt) && /Box not set/.test(txt) && /Prepared by Walter/.test(txt);
+    const txt = H.txt(boxReportHTML(Y,T,true)); o.rep = /108/.test(txt) && !/Share/i.test(txt) && /Avg \/ day/i.test(txt) && !/Avg/i.test(H.txt(boxReportHTML(T,T,true))) && /Not counted:/.test(txt) && /Box swaps — ran out/i.test(txt) && /Box not set/.test(txt) && /Prepared by Walter/.test(txt);
     o.names = ['Mandy','Harpreet','Stanley','Winston','Sandeep','Mohamad'].filter(n=>txt.includes(n));
     // tag the unset product: its 12 move into a box
     await setProductBox('604112','s3-plain'); o.afterTag = boxDay(T).fin['s3-plain']===42 && boxDay(T).unsetQty===0 && boxDay(T).total===108;
