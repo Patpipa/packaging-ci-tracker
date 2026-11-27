@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.87 - 2026-11-26 (Product picker: new Rebox & Cuts group — rebox, short rib, sliced, flat iron, tender/tenderloin, striploin; EARLS stays in EARLS)';
+const APP_VERSION = 'v205.88 - 2026-11-26 (Product picker groups: EARLS · Ribeye · Tenderloin · Striploin · Sirloin · Rebox · Sliced · Diced · Ground · Burger Patty — CMPS group removed)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5619,18 +5619,23 @@ async function deleteLibraryProduct(i){
 Opens on tiles instead of a long list: the products run lately on top, then one tile per group (EARLS, CMPS, Steaks…).
 A product's group comes from a keyword in its name, unless a group is set by hand in the Product Library (Edit).
 Nothing here changes any saved record or number — it only changes how a product is found. */
-const PRODUCT_GROUP_RULES = [ // first match wins — customers before cuts
+/* v205.88: Walter's groups — EARLS kept together; everything else by what the product is.
+   Checked in this order (first match wins): EARLS → Rebox → what was done to it (Burger Patty, Ground, Diced, Sliced) → the cut (Striploin, Tenderloin, Ribeye, Sirloin). Anything else → Other. */
+const PRODUCT_GROUP_RULES = [
   ['EARLS', /\bEARLS?\b/i],
-  // v205.87: one folder for rebox, short rib, sliced, flat iron, tender / tenderloin and striploin — anything EARLS stays in EARLS (rule above wins)
-  ['Rebox & Cuts', /RE-?BOX|SHORT\s*-?RIBS?|SLICED?|FLAT\s*-?IRON|TENDER|STRIP\s*-?LOIN/i],
-  ['CMPS', /\bCMPS\b/i],
-  ['Fajita', /FAJITA/i], ['Cutlet', /CUTLET|SCHNITZEL/i],
-  ['Ground & Burger', /GROUND|BURGER|PATT(Y|IE)/i], ['Diced & Stew', /DICED|\bDICE\b|CUBE|STEW/i],
-  ['Steaks', /STEAK|STRIPLOIN|SIRLOIN|RIBEYE|TENDERLOIN|NEW YORK|\bNY\b|T-?BONE|FILET/i],
-  ['Chicken', /CHICKEN|CHKN/i], ['Pork', /PORK/i]];
+  ['Rebox', /RE-?BOX/i],
+  ['Burger Patty', /BURGER|PATT(Y|IES?)/i],
+  ['Ground', /GROUND|\bGRIND/i],
+  ['Diced', /DICED?\b|CUBE|STEW/i],
+  ['Sliced', /SLICED?\b/i],
+  ['Striploin', /STRIP\s*-?LOIN|NEW\s*YORK|\bNY\b/i],
+  ['Tenderloin', /TENDER/i],
+  ['Ribeye', /RIB\s*-?EYE/i],
+  ['Sirloin', /SIRLOIN/i]];
+const PRODUCT_GROUP_SHOW = ['EARLS','Ribeye','Tenderloin','Striploin','Sirloin','Rebox','Sliced','Diced','Ground','Burger Patty']; // tile order on screen
 function productAutoGroup(item){ const n = String((item&&item.name)||''); const r = PRODUCT_GROUP_RULES.find(([,re])=>re.test(n)); return r ? r[0] : 'Other'; }
 function productGroup(item){ const g = String((item&&item.group)||'').trim(); return g || productAutoGroup(item); }
-function productGroupList(){ const order = PRODUCT_GROUP_RULES.map(r=>r[0]); const counts = {};
+function productGroupList(){ const order = PRODUCT_GROUP_SHOW; const counts = {};
   Store.productLibrary.forEach(it=>{ const g = productGroup(it); counts[g] = (counts[g]||0)+1; });
   const own = Object.keys(counts).filter(g=>!order.includes(g) && g!=='Other').sort((a,b)=>a.localeCompare(b));
   return [...own, ...order.filter(g=>counts[g]), ...(counts.Other?['Other']:[])].map(g=>({g, n:counts[g]})); }
