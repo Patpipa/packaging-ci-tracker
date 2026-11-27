@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.86 - 2026-11-26 (Select Product opens on tiles — Recent + Groups like EARLS/CMPS, number pad, full ID picks itself)';
+const APP_VERSION = 'v205.87 - 2026-11-26 (Product picker: new Rebox & Cuts group — rebox, short rib, sliced, flat iron, tender/tenderloin, striploin; EARLS stays in EARLS)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5620,7 +5620,10 @@ Opens on tiles instead of a long list: the products run lately on top, then one 
 A product's group comes from a keyword in its name, unless a group is set by hand in the Product Library (Edit).
 Nothing here changes any saved record or number — it only changes how a product is found. */
 const PRODUCT_GROUP_RULES = [ // first match wins — customers before cuts
-  ['EARLS', /\bEARLS?\b/i], ['CMPS', /\bCMPS\b/i],
+  ['EARLS', /\bEARLS?\b/i],
+  // v205.87: one folder for rebox, short rib, sliced, flat iron, tender / tenderloin and striploin — anything EARLS stays in EARLS (rule above wins)
+  ['Rebox & Cuts', /RE-?BOX|SHORT\s*-?RIBS?|SLICED?|FLAT\s*-?IRON|TENDER|STRIP\s*-?LOIN/i],
+  ['CMPS', /\bCMPS\b/i],
   ['Fajita', /FAJITA/i], ['Cutlet', /CUTLET|SCHNITZEL/i],
   ['Ground & Burger', /GROUND|BURGER|PATT(Y|IE)/i], ['Diced & Stew', /DICED|\bDICE\b|CUBE|STEW/i],
   ['Steaks', /STEAK|STRIPLOIN|SIRLOIN|RIBEYE|TENDERLOIN|NEW YORK|\bNY\b|T-?BONE|FILET/i],
