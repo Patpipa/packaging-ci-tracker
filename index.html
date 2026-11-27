@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.88 - 2026-11-26 (Product picker groups: EARLS · Ribeye · Tenderloin · Striploin · Sirloin · Rebox · Sliced · Diced · Ground · Burger Patty — CMPS group removed)';
+const APP_VERSION = 'v205.89 - 2026-11-26 (Product picker groups: + Bone-In, Specialty, Byproduct; RBX goes to Rebox; 601136 and tender tips to Byproduct)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5619,11 +5619,16 @@ async function deleteLibraryProduct(i){
 Opens on tiles instead of a long list: the products run lately on top, then one tile per group (EARLS, CMPS, Steaks…).
 A product's group comes from a keyword in its name, unless a group is set by hand in the Product Library (Edit).
 Nothing here changes any saved record or number — it only changes how a product is found. */
-/* v205.88: Walter's groups — EARLS kept together; everything else by what the product is.
-   Checked in this order (first match wins): EARLS → Rebox → what was done to it (Burger Patty, Ground, Diced, Sliced) → the cut (Striploin, Tenderloin, Ribeye, Sirloin). Anything else → Other. */
+/* v205.89: Walter's groups — EARLS kept together; everything else by what the product is.
+   Checked in this order (first match wins): EARLS → Rebox (REBOX / RBX) → Byproduct → Specialty → Bone-In → Burger Patty / Ground / Diced / Sliced → the cut. Anything else → Other.
+   A group typed by hand in the Product Library (Edit → Group) always wins. */
+const PRODUCT_GROUP_IDS = {'601136':'Byproduct'}; // by product number
 const PRODUCT_GROUP_RULES = [
   ['EARLS', /\bEARLS?\b/i],
-  ['Rebox', /RE-?BOX/i],
+  ['Rebox', /RE-?BOX|\bRBX/i],
+  ['Byproduct', /BY-?\s*PRODUCT|\bTRIM(S|MINGS?)?\b|STROG|TENDER\s*-?TIPS?\b/i],
+  ['Specialty', /FLAT\s*-?IRON|FAJITA|SHORT\s*-?RIBS?|CUTLET|PORK\s*-?CHOPS?|MEAT\s*-?BOX/i],
+  ['Bone-In', /PORTERHOUSE|COWBOY|\bCWBY\b|T\s*-?BONE|TOMAHAWK|BONE\s*-?IN/i],
   ['Burger Patty', /BURGER|PATT(Y|IES?)/i],
   ['Ground', /GROUND|\bGRIND/i],
   ['Diced', /DICED?\b|CUBE|STEW/i],
@@ -5632,8 +5637,8 @@ const PRODUCT_GROUP_RULES = [
   ['Tenderloin', /TENDER/i],
   ['Ribeye', /RIB\s*-?EYE/i],
   ['Sirloin', /SIRLOIN/i]];
-const PRODUCT_GROUP_SHOW = ['EARLS','Ribeye','Tenderloin','Striploin','Sirloin','Rebox','Sliced','Diced','Ground','Burger Patty']; // tile order on screen
-function productAutoGroup(item){ const n = String((item&&item.name)||''); const r = PRODUCT_GROUP_RULES.find(([,re])=>re.test(n)); return r ? r[0] : 'Other'; }
+const PRODUCT_GROUP_SHOW = ['EARLS','Ribeye','Tenderloin','Striploin','Sirloin','Bone-In','Rebox','Sliced','Diced','Ground','Burger Patty','Specialty','Byproduct']; // tile order on screen
+function productAutoGroup(item){ const byId = PRODUCT_GROUP_IDS[String((item&&item.id)||'').trim()]; if(byId) return byId; const n = String((item&&item.name)||''); const r = PRODUCT_GROUP_RULES.find(([,re])=>re.test(n)); return r ? r[0] : 'Other'; }
 function productGroup(item){ const g = String((item&&item.group)||'').trim(); return g || productAutoGroup(item); }
 function productGroupList(){ const order = PRODUCT_GROUP_SHOW; const counts = {};
   Store.productLibrary.forEach(it=>{ const g = productGroup(it); counts[g] = (counts[g]||0)+1; });
