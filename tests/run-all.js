@@ -6,7 +6,7 @@ const { spawnSync } = require('child_process'); const path = require('path'); co
 const app = path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const node = process.execPath, here = __dirname;
 const run = (file, args=[], timeout=240000)=>spawnSync(node, [path.join(here, file), app, ...args], {encoding:'utf8', timeout, cwd: here});
-const REG = ['crewemb','staffrep','audit','full','hs','day3','garbline','garbplace','lentnb','noisy2','wt','tl','miss','acct','places2','places3','crew29','plh','rcheck','helpback','notmeas','markall','scalefx','accrun','rmmove','film','filmadd','filmrep','daysplit','crewnh','helpinf','savefail','internal','boxlib'];
+const REG = ['crewemb','staffrep','audit','full','hs','day3','garbline','garbplace','lentnb','noisy2','wt','tl','miss','acct','places2','places3','crew29','plh','rcheck','helpback','notmeas','markall','scalefx','accrun','rmmove','film','filmadd','filmrep','daysplit','crewnh','helpinf','savefail','internal','boxlib','boxcount'];
 let bad = 0; const t0 = Date.now();
 console.log(`Testing ${app}\n`);
 console.log('1 · Regression scripts (each plays a floor scenario; fails on any page error or crash)');

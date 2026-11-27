@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.92 - 2026-11-26 (Product picker: sliced, ground or diced chicken / turkey go to Sliced, Ground, Diced)';
+const APP_VERSION = 'v205.93 - 2026-11-26 (Box counts — Boxes used card on the Dashboard (fills from runs, scale summary wins, ran-out swaps) and Reports → 📦 Box Usage)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -878,12 +878,12 @@ function machineMostWaiting(recs){
 const Router = { current:'dashboard',
   go(view, arg){ this.current = view; this.arg = arg; render(); document.querySelectorAll('nav .tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===mapTab(view))); }
 };
-function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='internalDelay'||v==='crewHours'||v==='staffing'||v==='scales'||v==='film') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
+function mapTab(v){ if(v==='new'||v==='newRecordDetail') return 'history'; /* v182: manual entry lives under History */ if(v==='reports'||v==='reportView'||v==='endShift'||v==='weekly'||v==='plhLog'||v==='downtimeAnalysis'||v==='upstreamImpact'||v==='internalDelay'||v==='crewHours'||v==='staffing'||v==='scales'||v==='film'||v==='boxReport') return 'reports'; if(v==='history'||v==='addPLHData') return 'history'; if(v==='live') return 'live'; if(v==='crew') return 'crew'; if(v==='products') return 'dashboard'; return 'dashboard'; }
 
 function render(){
   try{ applyPaidBreakRule(Store.records); }catch(e){ console.error(e); }
   const m = document.getElementById('main');
-  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis', upstreamImpact:'Upstream Impact'};
+  const titles = {dashboard:'Dashboard', new:'New Record', history:'History', reports:'Daily Reports', reportView:'Daily Report', weekly:'Weekly Summary', endShift:'End Shift', settings:'Settings', live:'Live Floor', plhLog:'Production Log', products:'Product Library', boxes:'Boxes Used', boxReport:'Box Usage', addPLHData:'Add PLH Data', downtimeAnalysis:'Downtime Analysis', upstreamImpact:'Upstream Impact'};
   document.getElementById('pageTitle').textContent = (Router.current==='new' && draft && draft._editId) ? 'Edit Record' : (Router.current==='addPLHData' && (Store.records.find(x=>x.id===plhDataFormId)||{}).side) ? 'Side Machine Output' : (titles[Router.current] || 'CI Tracker');
   updateClock();
   let html = '';
@@ -903,6 +903,8 @@ function render(){
     case 'downtimeAnalysis': html += renderDowntimeAnalysisView(); break;
     case 'upstreamImpact': html += renderUpstreamImpactView(); break;
     case 'internalDelay': html += renderInternalView(); break;
+    case 'boxReport': html += renderBoxReportView(); break;
+    case 'boxes': html += renderBoxesView(); break;
     case 'addPLHData': html += renderAddPLHDataForm(); break;
     case 'live': html += renderLive(); break;
     case 'crew': html += renderCrewTab(); break;
@@ -4644,6 +4646,7 @@ function renderDashboard(){
   return `
     ${renderCrewAlertLine()}
     ${renderBreakAllBar()}
+    ${boxesDashHTML()}
     <div class="card">
       <h3>Today · ${fmtDate(todayStr())}</h3>
       ${open3DButton()}
@@ -7589,6 +7592,7 @@ function renderReportsList(){
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('plhLog')">📦 PLH Production Log</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('scales')">🖥 Scale Downtime</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('film')">🎞 Film Usage</button>`;
+  html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="Router.go('boxReport')">📦 Box Usage</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:10px;" onclick="openStaffing(todayStr())">⚠ Staffing Report</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="openCrewHours(todayStr())">👥 Crew Hours & Positions</button>`;
   html += `<button class="btn btn-secondary" style="margin-bottom:14px;" onclick="Router.go('downtimeAnalysis')">🚨 Downtime Analysis</button>`;
@@ -8334,6 +8338,143 @@ function renderInternalView(){
   <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${internalReportHTML(r.start, r.end)}</div>`; }
 async function exportInternalPDF(){ const r = internalRangeNow(); await buildHtmlReportPDF(internalReportHTML(r.start, r.end, true), `Internal-Delay-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
 async function copyInternal(){ const r = internalRangeNow(), el = document.createElement('div'); el.innerHTML = internalReportHTML(r.start, r.end, true);
+  el.querySelectorAll('tr').forEach(tr=>tr.appendChild(document.createTextNode('\n'))); el.querySelectorAll('td').forEach(td=>td.appendChild(document.createTextNode('  '))); document.body.appendChild(el);
+  const txt = el.innerText.replace(/\n{3,}/g,'\n\n'); el.remove(); try{ await navigator.clipboard.writeText(txt); toast('Copied'); }catch(e){ toast('Could not copy'); } }
+/* ============ v205.93: 📦 BOX COUNTS (Phase 2) ============
+Boxes used per day, per box type (BOX_TYPES).
+ • From runs: every Variovac / Manual Pack run with a QTY counts its boxes under its product's box (Product Library). Fajita / Slicer / Cutlet jobs are skipped — their QTY is the
+   same boxes already counted on the Variovac that packed them. Vacuum Sealer codes count when the code starts with a product number from the library.
+ • From the scale summary: a number typed on the Boxes card replaces the runs number for that box on that day (the summary wins, never added twice).
+ • Ran out → used another box: the swap moves those boxes for that day; the product's usual box in the library never changes.
+Stored on the day's crew-log doc (boxes / boxSwaps). Its own report only — not in the Daily or the Weekly. */
+const BOX_GROUPS = [...new Set(BOX_TYPES.map(b=>b.group))];
+function boxProductOf(id){ id = String(id||'').trim(); return id ? Store.productLibrary.find(it=>String(it.id||'').trim()===id) : null; }
+function boxIdFromText(t){ const m = String(t||'').match(/\b(\d{6})\b/); return m ? m[1] : ''; }
+/* what the runs say for one day: per box key, plus boxes whose product has no box yet, plus coverage */
+function boxAuto(date){
+  const by = {}, unset = {}, swapsDone = []; let runs = 0, withQty = 0;
+  const add = (pid, name, q)=>{ const it = boxProductOf(pid); if(it && it.box && BOX_TYPES.some(b=>b.key===it.box)) by[it.box] = (by[it.box]||0) + q;
+    else { const k = pid || name || '?'; const u = unset[k] || (unset[k] = {id: pid, name: (it && it.name) || name || '', qty:0}); u.qty += q; } };
+  Store.records.filter(r=>r.date===date && r.status==='RUNNING' && r.plh).forEach(r=>{
+    if(r.side){ if(r.machine!=='Vacuum Sealer') return; // Fajita / Slicer / Cutlet: counted on the Variovac that packed them
+      const cs = (r.plh.codes && r.plh.codes.length) ? r.plh.codes : [{code: r.product||'', qty: r.plh.quantity}];
+      cs.forEach(c=>{ const q = parseInt(c.qty,10)||0, pid = boxIdFromText(c.code); if(q>0 && pid && boxProductOf(pid)) add(pid, '', q); }); return; }
+    runs++; const q = parseInt(r.plh.quantity,10)||0; if(!(q>0)) return; withQty++;
+    add(String(r.plh.productId||'').trim() || boxIdFromText(r.product), String(r.product||'').replace(/^\d{6}\s*/,''), q); });
+  const d = dayLogFor(date) || {};
+  (d.boxSwaps||[]).forEach(s=>{ const n = parseInt(s.n,10)||0; if(!(n>0) || !s.out || !s.used || s.out===s.used) return; const mv = Math.min(n, by[s.out]||0); if(mv>0){ by[s.out] -= mv; if(!by[s.out]) delete by[s.out]; by[s.used] = (by[s.used]||0) + mv; } swapsDone.push({...s, moved: mv}); });
+  return {by, unset: Object.values(unset).sort((a,b)=>b.qty-a.qty), runs, withQty, swaps: swapsDone}; }
+/* the day's numbers the reports use: typed summary number if there is one, otherwise the runs number */
+function boxDay(date){ const d = dayLogFor(date) || {}, b = d.boxes || {}, ov = b.ov || {}, a = boxAuto(date);
+  const fin = {}, src = {};
+  BOX_TYPES.forEach(t=>{ if(ov[t.key]!=null && ov[t.key]!==''){ fin[t.key] = parseInt(ov[t.key],10)||0; src[t.key] = 'summary'; } else if(a.by[t.key]){ fin[t.key] = a.by[t.key]; src[t.key] = 'runs'; } });
+  const unsetQty = a.unset.reduce((t,u)=>t+u.qty,0);
+  const total = Object.values(fin).reduce((t,v)=>t+v,0) + unsetQty;
+  const status = b.notCounted ? 'not counted' : b.savedAt ? 'checked' : (total ? 'from runs' : 'none');
+  return {fin, src, auto:a, unsetQty, total, status, savedAt: b.savedAt||null, swaps: d.boxSwaps||[]}; }
+/* ---------- the Boxes page (Dashboard card → this page; also from the report for any past day) ---------- */
+let boxEdit = null; // {date, ov:{}, swap:{out,used,n,note}}
+function openBoxes(date){ date = date || todayStr(); const b = ((dayLogFor(date)||{}).boxes)||{}; boxEdit = {date, ov: {...(b.ov||{})}, swap:{out:'', used:'', n:'', note:''}}; Router.go('boxes'); }
+function boxesDashHTML(){ const T = todayStr(), x = boxDay(T);
+  if(!x.auto.runs && !x.total && x.status==='none') return '';
+  const col = x.status==='checked' ? 'var(--run)' : x.status==='not counted' ? 'var(--muted)' : 'var(--change)';
+  const line = x.status==='checked' ? `✓ ${x.total} boxes — checked` : x.status==='not counted' ? 'Not counted today' : `${x.total} boxes so far from runs · ${x.auto.withQty} of ${x.auto.runs} runs have QTY`;
+  return `<div class="card" style="padding:12px 14px;cursor:pointer;border-color:${col};" onclick="openBoxes()"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div><div style="font-weight:800;">📦 Boxes used today</div><div class="cb-mut" style="font-size:12.5px;margin-top:2px;color:${col};">${line}${x.auto.unset.length?` · <span style="color:var(--wait);">${x.unsetQty} box not set</span>`:''}</div></div><span class="cb-mut" style="font-size:20px;">›</span></div></div>`; }
+function setBoxDate(v){ if(!v) return; openBoxes(v); }
+function boxSel(cur, js, ph){ return `<select onchange="${js}" style="flex:1;min-width:0;padding:9px;font-size:13px;"><option value="">${ph}</option>${BOX_GROUPS.map(g=>`<optgroup label="${g}">${BOX_TYPES.filter(b=>b.group===g).map(b=>`<option value="${b.key}" ${cur===b.key?'selected':''}>${g.replace('Steak Box','Steak').replace('Trim Box','Trim')} · ${b.label}</option>`).join('')}</optgroup>`).join('')}</select>`; }
+function renderBoxesView(){
+  if(!boxEdit){ const b0 = ((dayLogFor(todayStr())||{}).boxes)||{}; boxEdit = {date: todayStr(), ov: {...(b0.ov||{})}, swap:{out:'', used:'', n:'', note:''}}; }
+  const e = boxEdit, x = boxDay(e.date), a = x.auto, isT = e.date===todayStr();
+  const pill = (t,c)=>`<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:800;background:${c}22;color:${c};margin-left:6px;vertical-align:middle;">${t}</span>`;
+  const rows = BOX_GROUPS.map(g=>`<div style="font-size:11px;font-weight:800;color:var(--amber);letter-spacing:.06em;margin:12px 0 0;text-transform:uppercase;">${g}</div>${BOX_TYPES.filter(b=>b.group===g).map(b=>{
+      const ov = e.ov[b.key], has = ov!=null && ov!=='', runs = a.by[b.key]||0;
+      const tag = has ? pill('scale summary','#4FB3C2') : runs ? pill('from runs','#3FA35B') : '';
+      const sub = has ? (runs ? `runs counted ${runs}` : 'typed from the summary') : runs ? `from your runs` : 'none yet';
+      return `<div class="cb-row" style="justify-content:space-between;gap:8px;"><div style="min-width:0;"><div style="font-weight:700;font-size:14px;">${b.label}${tag}</div><div class="cb-mut" style="font-size:11px;">${sub}</div></div>
+        <input type="number" inputmode="numeric" min="0" step="1" value="${has?escapeHtml(String(ov)):''}" placeholder="${runs||'—'}" oninput="boxEdit.ov['${b.key}']=this.value" style="width:92px;padding:10px;font-size:17px;font-weight:700;text-align:right;"></div>`; }).join('')}`).join('');
+  const unset = a.unset.length ? `<div style="margin-top:12px;border:1px solid var(--wait);border-radius:10px;padding:10px 12px;"><div style="font-weight:800;color:var(--wait);font-size:13px;">📦 Box not set · ${x.unsetQty} boxes</div>${a.unset.map(u=>`<div class="cb-mut" style="font-size:12px;margin-top:3px;">${escapeHtml(u.id||'')} ${escapeHtml(u.name||'')} — ${u.qty}</div>`).join('')}<div class="cb-mut" style="font-size:11px;margin-top:5px;">Still counted in the day's total. Pick the product's box in the Product Library and these move to the right box.</div><button class="btn btn-secondary" style="margin-top:8px;padding:9px;" onclick="productsBoxFilter=true;Router.go('products')">Open Product Library</button></div>` : '';
+  const sw = e.swap, swaps = x.swaps;
+  const swapList = swaps.map(s=>{ const done = a.swaps.find(z=>z.id===s.id); return `<div class="cb-row" style="gap:8px;"><div style="flex:1;min-width:0;font-size:12.5px;"><b>Out of ${escapeHtml(boxName(s.out))}</b> → used ${escapeHtml(boxName(s.used))} · ${s.n} box${s.n==1?'':'es'}${s.note?`<div class="cb-mut" style="font-size:11.5px;font-style:italic;">“${escapeHtml(s.note)}”</div>`:''}${done && done.moved < (parseInt(s.n,10)||0) ? `<div class="cb-mut" style="font-size:11px;">${done.moved} moved from runs — the rest isn't in the runs count</div>` : ''}</div><button class="cb-btn" style="flex:0 0 auto;width:auto;padding:6px 11px;" onclick="removeBoxSwap('${s.id}')">✕</button></div>`; }).join('');
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('dashboard')">← Dashboard</button>
+  <div class="card"><h3>📦 Boxes used</h3>
+    <div style="display:flex;gap:8px;align-items:center;margin:2px 0 8px;"><input type="date" value="${e.date}" onchange="setBoxDate(this.value)" style="padding:8px;flex:1;min-width:0;">${isT?'':`<button class="btn btn-secondary" style="width:auto;margin:0;padding:9px 12px;" onclick="openBoxes()">Today</button>`}</div>
+    <div class="cb-mut" style="font-size:12.5px;line-height:1.45;">Filled in from ${isT?"today's":"that day's"} runs. Check against the scale summary and type over any number — the summary wins. Leave a box empty to keep the runs number.</div>
+    <div class="cb-mut" style="font-size:12px;margin-top:6px;color:${a.runs && a.withQty<a.runs ? 'var(--change)' : 'var(--muted)'};">${a.runs ? `${a.withQty} of ${a.runs} run${a.runs===1?'':'s'} have QTY${a.withQty<a.runs?' — check the summary for the rest':''}` : 'No Variovac / Manual Pack runs recorded this day'}</div>
+    ${rows}${unset}
+    <div style="display:flex;justify-content:space-between;font-weight:800;font-size:15px;padding-top:12px;"><span>Total</span><span>${x.total} boxes</span></div>
+    <div class="cb-mut" style="font-size:11px;">Total shown is what's saved now — Save to update it with numbers you typed.</div>
+    <button class="btn btn-primary" style="margin-top:10px;" onclick="saveBoxes()">✓ Save boxes for ${fmtDate(e.date)}</button>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="markBoxesNotCounted()">${x.status==='not counted'?'↺ Count this day again':'Not counted this day'}</button>
+    ${x.savedAt ? `<div class="cb-mut" style="font-size:11px;margin-top:6px;text-align:center;">Last saved ${new Date(x.savedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}${localDateStr(new Date(x.savedAt))!==e.date?' on '+fmtDate(localDateStr(new Date(x.savedAt))):''} — save again any time, the last save counts.</div>` : ''}</div>
+  <div class="card" style="border-style:dashed;border-color:var(--amber);"><h3 style="color:var(--amber);">⚠ Ran out? Note a box swap</h3>
+    ${swapList}
+    <div style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span class="cb-mut" style="width:52px;font-size:12px;">Out of</span>${boxSel(sw.out, "boxEdit.swap.out=this.value", 'Pick the box you ran out of')}</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span class="cb-mut" style="width:52px;font-size:12px;">Used</span>${boxSel(sw.used, "boxEdit.swap.used=this.value", 'Pick the box used instead')}</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span class="cb-mut" style="width:52px;font-size:12px;">Boxes</span><input type="number" inputmode="numeric" min="1" value="${escapeHtml(String(sw.n||''))}" oninput="boxEdit.swap.n=this.value" placeholder="qty" style="width:80px;padding:9px;"><input type="text" value="${escapeHtml(sw.note||'')}" oninput="boxEdit.swap.note=this.value" placeholder="Note — e.g. order not in yet" style="flex:1;min-width:0;padding:9px;"></div>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="addBoxSwap()">＋ Add swap</button>
+    <div class="cb-mut" style="font-size:11px;margin-top:6px;">The boxes move from the box you ran out of to the one you used, for this day only. Each product keeps its usual box in the library.</div></div>`; }
+async function saveBoxes(){ const e = boxEdit; if(!e) return; const ov = {};
+  for(const t of BOX_TYPES){ const v = e.ov[t.key]; if(v==null || String(v).trim()==='') continue; const n = Number(v); if(!(n>=0) || !Number.isInteger(n) || n>5000){ toast(`${t.group} · ${t.label}: whole number 0 – 5000`); return; } ov[t.key] = n; }
+  const d = ensureDayLog(e.date); d.boxes = {ov, savedAt: new Date().toISOString()};
+  logChange(e.date, 'edit', null, {status:'BOXES', machine:'', startTime:'', endTime:'', durationMin:0, reason:'Boxes used saved'});
+  if(!(await Store.saveDayLog())) return; toast(`Boxes saved for ${fmtDate(e.date)} — ${boxDay(e.date).total} in total`); render(); }
+async function markBoxesNotCounted(){ const e = boxEdit; if(!e) return; const d = ensureDayLog(e.date), b = d.boxes || {};
+  if(b.notCounted){ delete b.notCounted; d.boxes = b; } else { if(!confirm(`Mark ${fmtDate(e.date)} as not counted? It shows as "not counted" in the Box Usage report — not as zero.`)) return; d.boxes = {...b, notCounted:true}; }
+  if(!(await Store.saveDayLog())) return; render(); }
+async function addBoxSwap(){ const e = boxEdit; if(!e) return; const s = e.swap, n = parseInt(s.n,10);
+  if(!s.out){ toast('Pick the box you ran out of'); return; } if(!s.used){ toast('Pick the box you used instead'); return; } if(s.out===s.used){ toast('Pick two different boxes'); return; } if(!(n>=1) || n>5000){ toast('How many boxes: 1 – 5000'); return; }
+  const d = ensureDayLog(e.date); d.boxSwaps = d.boxSwaps || []; d.boxSwaps.push({id: uid(), out:s.out, used:s.used, n, note:(s.note||'').trim(), addedAt: new Date().toISOString()});
+  if(!(await Store.saveDayLog())) return; e.swap = {out:'', used:'', n:'', note:''}; toast('Swap noted'); render(); }
+async function removeBoxSwap(id){ const e = boxEdit; if(!e) return; const d = dayLogFor(e.date); if(!d || !d.boxSwaps) return; if(!confirm('Remove this box swap?')) return; d.boxSwaps = d.boxSwaps.filter(s=>s.id!==id); await Store.saveDayLog(); render(); }
+/* ---------- 📦 Box Usage report ---------- */
+let boxRange = null;
+function boxRangeNow(){ if(!boxRange){ const t = todayStr(), d = new Date(); d.setDate(d.getDate()-6); boxRange = {start: localDateStr(d), end: t, preset:'7'}; } return boxRange; }
+function setBoxPreset(p){ const t = todayStr(), now = new Date(), d = new Date();
+  if(p==='today') boxRange = {start:t, end:t, preset:p};
+  else if(p==='yday'){ d.setDate(d.getDate()-1); const y = localDateStr(d); boxRange = {start:y, end:y, preset:p}; }
+  else if(p==='month') boxRange = {start: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), end: t, preset:p};
+  else if(p==='lmonth') boxRange = {start: localDateStr(new Date(now.getFullYear(), now.getMonth()-1, 1)), end: localDateStr(new Date(now.getFullYear(), now.getMonth(), 0)), preset:p};
+  else { d.setDate(d.getDate()-(p==='7'?6:29)); boxRange = {start: localDateStr(d), end: t, preset:p}; }
+  render(); }
+function setBoxRangeDate(w, v){ if(!v) return; const r = boxRangeNow(); r[w] = v; r.preset = ''; if(r.end < r.start){ if(w==='start') r.end = v; else r.start = v; } render(); }
+function boxUsage(start, end){ const days = [], T = {}, G = {}; let unset = 0, total = 0, prod = 0, counted = 0, notCounted = [], noData = [];
+  for(let dt=start; dt<=end; dt=shiftDate(dt,1)){ const hasProd = Store.records.some(r=>r.date===dt && r.status==='RUNNING' && !r.side); const x = boxDay(dt); if(hasProd) prod++;
+    if(x.status==='not counted'){ notCounted.push(dt); continue; }
+    if(!x.total){ if(hasProd) noData.push(dt); continue; }
+    counted++; days.push({dt, x}); total += x.total; unset += x.unsetQty;
+    Object.entries(x.fin).forEach(([k,v])=>{ T[k] = (T[k]||0)+v; const g = (BOX_TYPES.find(b=>b.key===k)||{}).group; G[g] = (G[g]||0)+v; }); }
+  return {days, T, G, unset, total, prod, counted, notCounted, noData}; }
+function boxReportHTML(start, end, forPdf){
+  const td = 'padding:6px 8px;border-bottom:1px solid #e3e7ec;font-size:12.5px;vertical-align:top;', tn = td+'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;', th = 'padding:6px 8px;border-bottom:2px solid #1e3a5f;font-size:10.5px;color:#555;text-transform:uppercase;';
+  const hd = t=>`<div style="font-size:13px;font-weight:800;color:#1e3a5f;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.04em;">${t}</div>`;
+  const span = start===end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`;
+  const H = [`<div style="background:#fff;color:#1a1a2e;font-family:Arial,Helvetica,sans-serif;padding:${forPdf?'26px 30px':'18px 14px'};"><div style="font-size:22px;font-weight:800;color:#1e3a5f;">Box Usage</div><div style="font-size:13px;color:#555;margin-top:2px;">Boxes used by type · from the scale summary and recorded runs · ${span}</div>`];
+  const u = boxUsage(start, end); let n = 0;
+  if(!u.counted){ H.push(`<div style="margin-top:20px;font-size:14px;color:#666;">No box counts in this period.</div>`); }
+  else {
+    H.push(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">${[['Boxes used', u.total.toLocaleString('en-US')], ['Avg / counted day', Math.round(u.total/u.counted)], ['Days counted', `${u.counted} of ${Math.max(u.prod, u.counted)}`]].map(([l,v])=>`<div style="flex:1 1 110px;border:1px solid #d6dde6;border-radius:6px;padding:10px 12px;"><div style="font-size:21px;font-weight:800;color:#1e3a5f;">${v}</div><div style="font-size:11px;color:#666;text-transform:uppercase;">${l}</div></div>`).join('')}</div>`);
+    const miss = u.notCounted.concat(u.noData).sort(); if(miss.length) H.push(`<div style="font-size:12px;color:#9a6200;margin-top:8px;">Not counted: ${miss.map(d=>new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})).join(', ')} — left out of the totals, not counted as zero.</div>`);
+    H.push(hd(`${++n} · By box`));
+    H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Box</td><td style="${th}text-align:right;">Boxes</td><td style="${th}text-align:right;">Avg / day</td><td style="${th}text-align:right;">Share</td></tr>${BOX_GROUPS.filter(g=>u.G[g]).map(g=>`<tr><td style="${td}font-weight:800;">${escapeHtml(g)}</td><td style="${tn}font-weight:800;">${u.G[g].toLocaleString('en-US')}</td><td style="${tn}">${Math.round(u.G[g]/u.counted)}</td><td style="${tn}">${Math.round(u.G[g]/u.total*100)}%</td></tr>${BOX_TYPES.filter(b=>b.group===g && u.T[b.key]).map(b=>`<tr><td style="${td}padding-left:22px;">${escapeHtml(b.label)}</td><td style="${tn}">${u.T[b.key].toLocaleString('en-US')}</td><td style="${tn}">${Math.round(u.T[b.key]/u.counted)}</td><td style="${tn}">${Math.round(u.T[b.key]/u.total*100)}%</td></tr>`).join('')}`).join('')}${u.unset ? `<tr><td style="${td}font-weight:800;color:#c0392b;">Box not set</td><td style="${tn}font-weight:800;color:#c0392b;">${u.unset}</td><td style="${tn}">${Math.round(u.unset/u.counted)}</td><td style="${tn}">${Math.round(u.unset/u.total*100)}%</td></tr>` : ''}<tr><td style="${td}font-weight:800;border-top:2px solid #1e3a5f;">Total</td><td style="${tn}font-weight:800;border-top:2px solid #1e3a5f;">${u.total.toLocaleString('en-US')}</td><td style="${tn}border-top:2px solid #1e3a5f;">${Math.round(u.total/u.counted)}</td><td style="${tn}border-top:2px solid #1e3a5f;">100%</td></tr></table>${u.unset ? `<div style="font-size:11px;color:#777;margin-top:4px;">Box not set = runs of products whose box isn't picked yet in the Product Library.</div>` : ''}`);
+    if(start!==end){ const gs = BOX_GROUPS.filter(g=>u.G[g]); H.push(hd(`${++n} · Day by day`));
+      H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Day</td>${gs.map(g=>`<td style="${th}text-align:right;">${escapeHtml(g.replace('Steak Box','Steak').replace('Trim Box','Trim'))}</td>`).join('')}${u.unset?`<td style="${th}text-align:right;">Not set</td>`:''}<td style="${th}text-align:right;">Total</td></tr>${u.days.map(({dt,x})=>{ const gv = g=>BOX_TYPES.filter(b=>b.group===g).reduce((t,b)=>t+(x.fin[b.key]||0),0); return `<tr><td style="${td}white-space:nowrap;">${new Date(dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}${x.status==='from runs'?' <span style="color:#9a6200;font-size:10.5px;">(runs only)</span>':''}</td>${gs.map(g=>`<td style="${tn}">${gv(g)||'—'}</td>`).join('')}${u.unset?`<td style="${tn}">${x.unsetQty||'—'}</td>`:''}<td style="${tn}font-weight:700;">${x.total}</td></tr>`; }).join('')}</table><div style="font-size:11px;color:#777;margin-top:4px;">"runs only" = from recorded runs, not yet checked against the scale summary.</div>`); }
+    const sws = []; for(let dt=start; dt<=end; dt=shiftDate(dt,1)) ((dayLogFor(dt)||{}).boxSwaps||[]).forEach(s=>sws.push({...s, dt}));
+    if(sws.length){ const nb = sws.reduce((t,s)=>t+(parseInt(s.n,10)||0),0); H.push(hd(`${++n} · Box swaps — ran out`));
+      H.push(`<table style="width:100%;border-collapse:collapse;"><tr><td style="${th}">Day</td><td style="${th}">Ran out of → used instead</td><td style="${th}text-align:right;">Boxes</td></tr>${sws.map(s=>`<tr><td style="${td}white-space:nowrap;">${new Date(s.dt+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td><td style="${td}">${escapeHtml(boxName(s.out))} → ${escapeHtml(boxName(s.used))}${s.note?`<div style="font-size:11px;color:#555;font-style:italic;">“${escapeHtml(s.note)}”</div>`:''}</td><td style="${tn}">${s.n}</td></tr>`).join('')}</table><div style="font-size:11.5px;color:#333;margin-top:5px;">Ran out ${sws.length} time${sws.length===1?'':'s'} · ${nb} box${nb===1?'':'es'} packed in a different box than usual.</div>`); }
+  }
+  H.push(`<div style="margin-top:12px;font-size:11.5px;color:#555;line-height:1.5;">Counted per day from the scale summary where it was entered; otherwise from each run's QTY and the product's usual box in the Product Library. Fajita / Slicer / Cutlet product is counted once, on the Variovac that packed it. Damaged or wasted boxes are not on the scale summary and are not included.</div>`);
+  H.push(`<div style="border-top:1px solid #ddd;margin-top:14px;padding-top:8px;font-size:10px;color:#999;display:flex;justify-content:space-between;gap:10px;"><span>Box Usage — ${span}</span><span>${PREPARED_BY}</span></div></div>`);
+  return H.join(''); }
+function renderBoxReportView(){
+  const r = boxRangeNow(), pb = (p,l)=>`<button class="btn ${r.preset===p?'btn-primary':'btn-secondary'}" style="padding:9px 4px;font-size:12.5px;margin:0;" onclick="setBoxPreset('${p}')">${l}</button>`;
+  return `<button class="btn btn-ghost" style="margin-bottom:10px;" onclick="Router.go('reports')">← Reports</button>
+  <div class="card"><h3>📦 Box Usage</h3><div class="btnrow" style="gap:6px;">${pb('today','Today')}${pb('yday','Yesterday')}${pb('7','Last 7')}</div><div class="btnrow" style="gap:6px;margin-top:6px;">${pb('30','Last 30')}${pb('month','This Month')}${pb('lmonth','Last Month')}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;"><input type="date" value="${r.start}" onchange="setBoxRangeDate('start', this.value)" style="padding:8px;flex:1;min-width:0;"><span class="cb-mut">to</span><input type="date" value="${r.end}" onchange="setBoxRangeDate('end', this.value)" style="padding:8px;flex:1;min-width:0;"></div>
+    <div class="btnrow" style="margin-top:10px;"><button class="btn btn-secondary" onclick="copyBoxReport()">📋 Copy</button><button class="btn btn-secondary" onclick="exportBoxPDF()">Export PDF</button></div>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="openBoxes(boxRangeNow().end)">✎ Enter or fix a day's boxes</button></div>
+  <div style="border-radius:12px;overflow:hidden;margin-bottom:16px;">${boxReportHTML(r.start, r.end)}</div>`; }
+async function exportBoxPDF(){ const r = boxRangeNow(); await buildHtmlReportPDF(boxReportHTML(r.start, r.end, true), `Box-Usage-${r.start}${r.end!==r.start?'_to_'+r.end:''}.pdf`); }
+async function copyBoxReport(){ const r = boxRangeNow(), el = document.createElement('div'); el.innerHTML = boxReportHTML(r.start, r.end, true);
   el.querySelectorAll('tr').forEach(tr=>tr.appendChild(document.createTextNode('\n'))); el.querySelectorAll('td').forEach(td=>td.appendChild(document.createTextNode('  '))); document.body.appendChild(el);
   const txt = el.innerText.replace(/\n{3,}/g,'\n\n'); el.remove(); try{ await navigator.clipboard.writeText(txt); toast('Copied'); }catch(e){ toast('Could not copy'); } }
 /* ============ UPSTREAM IMPACT SUMMARY ============
