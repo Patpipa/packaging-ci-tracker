@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.91 - 2026-11-26 (Product picker: steak strips go to Striploin; new Chicken / Turkey folder — diced chicken stays in Diced)';
+const APP_VERSION = 'v205.92 - 2026-11-26 (Product picker: sliced, ground or diced chicken / turkey go to Sliced, Ground, Diced)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -5632,8 +5632,8 @@ const PRODUCT_GROUP_RULES = [
   ['Burger Patty', /BURGER|PATT(Y|IES?)/i],
   ['Ground', /GROUND|\bGRIND/i],
   ['Diced', /DICED?\b|CUBE|STEW/i],
-  ['Chicken / Turkey', /CHICKEN|CHKN|TURKEY/i], // after Diced, so diced chicken stays in Diced
   ['Sliced', /SLICED?\b/i],
+  ['Chicken / Turkey', /CHICKEN|CHKN|TURKEY/i], // after Ground, Diced and Sliced — sliced / ground / diced chicken stays in those folders
   ['Striploin', /STRIP\s*-?LOIN|STEAK\s*-?STRIPS?|NEW\s*YORK|\bNY\b/i],
   ['Tenderloin', /TENDER/i],
   ['Ribeye', /RIB\s*-?EYE/i],
