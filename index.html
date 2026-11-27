@@ -242,7 +242,7 @@ nav.tabbar .tab .ic{font-size:18px;}
 
 <script>
 /* ============ DATA / CONSTANTS ============ */
-const APP_VERSION = 'v205.84 - 2026-11-26 (Product Library search — find a product by number or name and set its box)';
+const APP_VERSION = 'v205.86 - 2026-11-26 (Select Product opens on tiles — Recent + Groups like EARLS/CMPS, number pad, full ID picks itself)';
 /* RGB colors matching the app's on-screen status colors, used to keep PDF exports visually consistent and scannable */
 const PDF_COLOR = {
   amber:[224,160,48], run:[63,163,91], wait:[214,83,74], change:[217,143,43],
@@ -470,14 +470,14 @@ const Store = {
         if(snap.exists && snap.data().data){
           this.liveRuns = JSON.parse(snap.data().data);
           safeLocalSet('pct_live_runs_backup', snap.data().data);
-          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='dashboard')) render();
+          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='dashboard') && !isTypingInField()) render();
         }
       }, err=>{ console.error('liveRuns listener error', err); });
       prodRef.onSnapshot(snap=>{
         if(!this._initialLoadDone) return;
         if(snap.exists && snap.data().data){
           this.productLibrary = JSON.parse(snap.data().data);
-          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='products')) render();
+          if(typeof Router!=='undefined' && (Router.current==='live'||Router.current==='products')){ if(!isTypingInField()) render(); else if(document.getElementById('productResults') && liveProductPicker) document.getElementById('productResults').innerHTML = pickBrowseHTML(); }
         }
       }, err=>{ console.error('productLibrary listener error', err); });
       this.watchDayLog(); // v205.78: one document per day
@@ -5552,12 +5552,32 @@ function renderLive(){
 }
 /* ---- Searchable Product Picker (grows as you add products) ---- */
 let productPickerResultsCache = [];
+/* v205.85: only the results list is redrawn while typing — the search box itself is never replaced,
+   so the iPhone keyboard stays on numbers (it used to flip back to letters after every digit). */
+function productResultsNow(){
+  const q = ((liveProductPicker&&liveProductPicker.query)||'').toLowerCase();
+  return Store.productLibrary.filter(item=>{
+    if(!q) return true;
+    return (item.id && String(item.id).toLowerCase().includes(q)) || (item.name && item.name.toLowerCase().includes(q));
+  }).slice(0,30);
+}
 function updateProductSearch(el){
-  const pos = el.selectionStart;
+  if(!liveProductPicker) return;
   liveProductPicker.query = el.value;
-  render();
-  const newEl = document.getElementById('productSearchInput');
-  if(newEl){ newEl.focus(); newEl.setSelectionRange(pos,pos); }
+  const box = document.getElementById('productResults');
+  if(box) box.innerHTML = pickBrowseHTML();
+  else render();
+  /* v205.86: a full product ID that matches exactly one product picks it straight away */
+  const q = el.value.trim();
+  if(liveProductPicker.target!=='library' && /^\d{6}$/.test(q)){
+    const hits = Store.productLibrary.filter(it=>String(it.id||'').trim()===q);
+    if(hits.length===1){ const p0 = liveProductPicker; setTimeout(()=>{ if(liveProductPicker===p0 && String(p0.query||'').trim()===q){ el.blur(); pickProductItem(hits[0]); } }, 250); }
+  }
+}
+/* true while someone is typing in a search/text box — background refreshes wait so the keyboard isn't knocked out */
+function isTypingInField(){
+  const a = document.activeElement;
+  return !!(a && (a.tagName==='TEXTAREA' || (a.tagName==='INPUT' && /^(text|search|number|tel)$/i.test(a.type||'text'))));
 }
 /* ============ v205.83: 📦 BOX FOR EACH PRODUCT (Phase 1 of box usage) ============
 Each product in the library remembers its usual box. Set once — from the Product Library list, or the first time the product is finished / given its QTY.
@@ -5584,7 +5604,7 @@ function openProductPicker(target, machine){
 }
 function editLibraryProduct(i){
   const item = Store.productLibrary[i];
-  liveProductPicker = {target:'library', machine:null, query:'', addMode:true, newId:item.id||'', newName:item.name||'', newTargetPLH:item.targetPLH||'', newBox:item.box||'', editIndex:i};
+  liveProductPicker = {target:'library', machine:null, query:'', addMode:true, newId:item.id||'', newName:item.name||'', newTargetPLH:item.targetPLH||'', newBox:item.box||'', newGroup:item.group||'', editIndex:i};
   render();
 }
 async function deleteLibraryProduct(i){
@@ -5595,19 +5615,67 @@ async function deleteLibraryProduct(i){
   toast('Product deleted');
   render();
 }
+/* ============ v205.86: PRODUCT PICKER — Recent + Groups + number pad + auto-pick ============
+Opens on tiles instead of a long list: the products run lately on top, then one tile per group (EARLS, CMPS, Steaks…).
+A product's group comes from a keyword in its name, unless a group is set by hand in the Product Library (Edit).
+Nothing here changes any saved record or number — it only changes how a product is found. */
+const PRODUCT_GROUP_RULES = [ // first match wins — customers before cuts
+  ['EARLS', /\bEARLS?\b/i], ['CMPS', /\bCMPS\b/i],
+  ['Fajita', /FAJITA/i], ['Cutlet', /CUTLET|SCHNITZEL/i],
+  ['Ground & Burger', /GROUND|BURGER|PATT(Y|IE)/i], ['Diced & Stew', /DICED|\bDICE\b|CUBE|STEW/i],
+  ['Steaks', /STEAK|STRIPLOIN|SIRLOIN|RIBEYE|TENDERLOIN|NEW YORK|\bNY\b|T-?BONE|FILET/i],
+  ['Chicken', /CHICKEN|CHKN/i], ['Pork', /PORK/i]];
+function productAutoGroup(item){ const n = String((item&&item.name)||''); const r = PRODUCT_GROUP_RULES.find(([,re])=>re.test(n)); return r ? r[0] : 'Other'; }
+function productGroup(item){ const g = String((item&&item.group)||'').trim(); return g || productAutoGroup(item); }
+function productGroupList(){ const order = PRODUCT_GROUP_RULES.map(r=>r[0]); const counts = {};
+  Store.productLibrary.forEach(it=>{ const g = productGroup(it); counts[g] = (counts[g]||0)+1; });
+  const own = Object.keys(counts).filter(g=>!order.includes(g) && g!=='Other').sort((a,b)=>a.localeCompare(b));
+  return [...own, ...order.filter(g=>counts[g]), ...(counts.Other?['Other']:[])].map(g=>({g, n:counts[g]})); }
+function libItemForId(id){ id = String(id||'').trim(); return id ? Store.productLibrary.find(it=>String(it.id||'').trim()===id) : null; }
+/* last products run, newest first — from finished runs and runs still going */
+function recentProducts(max){ max = max||8; const seen = new Set(), out = [];
+  const runs = [];
+  Object.values(Store.liveRuns||{}).forEach(l=>{ if(l && l.productId) runs.push([(l.date||'')+'~'+String(l.startedAt||''), l.productId]); });
+  (Store.records||[]).forEach(r=>{ const id = r.plh && r.plh.productId; if(id) runs.push([(r.date||'')+' '+(r.startTime||''), id]); });
+  runs.sort((a,b)=>b[0].localeCompare(a[0]));
+  for(const [,id] of runs){ const k = String(id).trim(); if(seen.has(k)) continue; seen.add(k); const it = libItemForId(k); if(it) out.push(it); if(out.length>=max) break; }
+  return out; }
+function pickKbMode(){ return safeLocalGet('pct_pick_kb')==='abc' ? 'abc' : '123'; }
+function togglePickKb(){ const m = pickKbMode()==='123' ? 'abc' : '123'; safeLocalSet('pct_pick_kb', m);
+  const el = document.getElementById('productSearchInput'), b = document.getElementById('pickKbBtn');
+  if(b) b.textContent = m==='123' ? 'ABC' : '123';
+  if(el){ el.setAttribute('inputmode', m==='123' ? 'numeric' : 'text'); el.placeholder = m==='123' ? 'Type product ID…' : 'Search product ID or name…'; el.blur(); el.focus(); } }
+function pickProductItem(item){ if(!item) return; applyPickedProduct(item.id ? `${item.id} ${item.name}` : item.name, item.id||''); }
+function pickTileHTML(item, i, list){ return `<button class="btn btn-secondary" style="margin:0;padding:12px 10px;flex-direction:column;align-items:flex-start;text-align:left;justify-content:flex-start;min-height:74px;" onclick="pickProductByIndex(${i})">
+    <div style="font-weight:700;font-size:13.5px;line-height:1.25;">${escapeHtml(item.name)}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;">${item.id?`ID ${escapeHtml(item.id)}`:'No ID'}${item.box?` · 📦 ${escapeHtml(boxName(item.box))}`:''}</div></button>`; }
+let pickGroupsCache = [];
+function setPickGroupIdx(i){ const x = pickGroupsCache[i]; if(x) setPickGroup(x.g); }
+function setPickGroup(g){ if(!liveProductPicker) return; liveProductPicker.group = g; const b = document.getElementById('pickBrowse'); if(b) b.innerHTML = pickBrowseHTML(); else render(); const sh = document.getElementById('pickSheet'); if(sh) sh.scrollTop = 0; }
+function pickBrowseHTML(){ const p = liveProductPicker; const q = String(p.query||'').trim();
+  if(q) return renderProductResults(productResultsNow());
+  if(!Store.productLibrary.length) return renderProductResults([]);
+  if(p.group){ const items = Store.productLibrary.filter(it=>productGroup(it)===p.group).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+    productPickerResultsCache = items;
+    return `<button class="btn btn-ghost" style="margin:0 0 10px;justify-content:flex-start;" onclick="setPickGroup(null)">← All groups</button>
+      <div class="dt-lbl" style="margin-bottom:8px;">${escapeHtml(p.group)} · ${items.length} product${items.length===1?'':'s'}</div>
+      ${items.map((it,i)=>`<div style="margin-bottom:8px;">${pickTileHTML(it,i)}</div>`).join('')}
+      <button class="btn btn-ghost" style="margin-top:6px;" onclick="closeProductPicker()">Cancel</button>`; }
+  const rec = recentProducts(8); productPickerResultsCache = rec;
+  const groups = pickGroupsCache = productGroupList();
+  return `${rec.length ? `<div class="dt-lbl" style="margin-bottom:8px;">🕘 Recent</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">${rec.map((it,i)=>pickTileHTML(it,i)).join('')}</div>` : ''}
+    <div class="dt-lbl" style="margin-bottom:8px;">📁 Groups</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">${groups.map(({g,n},gi)=>`<div class="statusopt" style="cursor:pointer;color:var(--text);padding:14px 6px;" onclick="setPickGroupIdx(${gi})">${escapeHtml(g)}<div style="font-family:Inter;font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:0;">${n}</div></div>`).join('')}</div>
+    <button class="btn btn-ghost" style="margin-top:6px;" onclick="liveProductPicker.addMode=true; render()">Can't find it? Add New Product</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeProductPicker()">Cancel</button>`; }
 function closeProductPicker(){ liveProductPicker=null; render(); }
 function renderProductPickerOverlay(){
   const p = liveProductPicker;
-  const q = (p.query||'').toLowerCase();
-  const results = Store.productLibrary.filter(item=>{
-    if(!q) return true;
-    return (item.id && item.id.toLowerCase().includes(q)) || (item.name && item.name.toLowerCase().includes(q));
-  }).slice(0,30);
   const title = p.addMode ? (p.editIndex!=null ? 'Edit Product' : 'Add New Product') : 'Select Product';
   return `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:flex-end;" onclick="if(event.target===this) closeProductPicker()">
-    <div style="background:var(--panel);width:100%;max-height:85vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));">
+    <div id="pickSheet" style="background:var(--panel);width:100%;max-height:85vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));">
       <h3 style="font-family:'Oswald';font-size:16px;margin-bottom:14px;">${title}</h3>
-      ${p.addMode ? renderAddProductForm() : `<input type="text" id="productSearchInput" placeholder="Search product ID or name..." value="${escapeHtml(p.query)}" oninput="updateProductSearch(this)" style="margin-bottom:14px;">${renderProductResults(results)}`}
+      ${p.addMode ? renderAddProductForm() : `<div style="display:flex;gap:8px;margin-bottom:14px;"><input type="text" id="productSearchInput" inputmode="${pickKbMode()==='123'?'numeric':'text'}" placeholder="${pickKbMode()==='123'?'Type product ID…':'Search product ID or name…'}" value="${escapeHtml(p.query)}" oninput="updateProductSearch(this)" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;margin:0;font-size:16px;"><button id="pickKbBtn" class="btn btn-secondary" style="width:auto;margin:0;padding:10px 14px;font-weight:700;" onmousedown="event.preventDefault()" onclick="togglePickKb()">${pickKbMode()==='123'?'ABC':'123'}</button></div><div id="productResults">${pickBrowseHTML()}</div>`}
     </div>
   </div>`;
 }
@@ -5634,6 +5702,7 @@ function renderAddProductForm(){
     <div class="field"><label>Product Description</label><input type="text" value="${escapeHtml(p.newName||'')}" oninput="liveProductPicker.newName=this.value" placeholder="e.g. Striploin Steak 18oz"></div>
     <div class="field"><label>Target PLH (optional, lbs/labour-hour)</label><input type="number" min="0" value="${escapeHtml(p.newTargetPLH||'')}" oninput="liveProductPicker.newTargetPLH=this.value" placeholder="e.g. 225"></div>
     <div class="field"><label>Box (its usual box)</label>${boxSelectHTML(p.newBox||'', 'liveProductPicker.newBox=this.value')}</div>
+    <div class="field"><label>Group (for the picker tiles)</label><input type="text" list="pickGroupList" value="${escapeHtml(p.newGroup||'')}" oninput="liveProductPicker.newGroup=this.value" placeholder="Auto: ${escapeHtml(productAutoGroup({name:p.newName||''}))} — type to change"><datalist id="pickGroupList">${productGroupList().map(x=>`<option value="${escapeHtml(x.g).replace(/"/g,'&quot;')}">`).join('')}</datalist><div style="font-size:11px;color:var(--muted);margin-top:4px;">Leave blank to sort it by its name (EARLS, CMPS, Steaks…). Type a group to put it somewhere else.</div></div>
     <div class="btnrow">
       ${p.editIndex==null ? `<button class="btn btn-ghost" onclick="liveProductPicker.addMode=false; render()">Back to Search</button>` : `<button class="btn btn-ghost" onclick="liveProductPicker=null; render()">Cancel</button>`}
       <button class="btn btn-primary" onclick="confirmAddProduct()">${p.editIndex!=null ? 'Save Changes' : (p.target==='library' ? 'Add Product' : 'Add & Select')}</button>
@@ -5646,7 +5715,7 @@ async function confirmAddProduct(){
   const id = (p.newId||'').trim();
   const targetPLH = parseFloat(p.newTargetPLH)||null;
   if(p.editIndex!=null){
-    const old = Store.productLibrary[p.editIndex] || {}; const nb = {...old, id, name, category: old.category||'', targetPLH}; if(p.newBox) nb.box = p.newBox; else delete nb.box;
+    const old = Store.productLibrary[p.editIndex] || {}; const nb = {...old, id, name, category: old.category||'', targetPLH}; if(p.newBox) nb.box = p.newBox; else delete nb.box; const ng = String(p.newGroup||'').trim(); if(ng) nb.group = ng; else delete nb.group;
     Store.productLibrary[p.editIndex] = nb;
     await Store.saveProductLibrary();
     liveProductPicker = null;
@@ -5671,7 +5740,7 @@ async function confirmAddProduct(){
       return;
     }
   }
-  Store.productLibrary.push({id, name, category:'', targetPLH, ...(p.newBox ? {box:p.newBox} : {})});
+  Store.productLibrary.push({id, name, category:'', targetPLH, ...(p.newBox ? {box:p.newBox} : {}), ...(String(p.newGroup||'').trim() ? {group:String(p.newGroup).trim()} : {})});
   await Store.saveProductLibrary();
   if(p.target==='library'){ liveProductPicker=null; toast('Product added'); render(); return; }
   applyPickedProduct(id ? `${id} ${name}` : name, id);
@@ -5725,7 +5794,7 @@ function productsListHTML(){
   return `${q ? `<div class="cb-mut" style="margin:0 2px 8px;font-size:12px;">${items.length} match${items.length===1?'':'es'} for “${escapeHtml(q)}”</div>` : ''}${items.length ? items.map(item=>`
     <div class="hist-item" ${dupeIdxSet.has(item._idx)?'style="border-color:var(--wait);"':''}>
       <div class="hist-top"><span class="mach">${escapeHtml(item.name)}</span>${dupeIdxSet.has(item._idx)?'<span class="pill wait">⚠️ DUPLICATE</span>':''}${item.targetPLH?`<span class="pill run">${item.targetPLH} PLH</span>`:''}</div>
-      <div class="hist-mid">${item.id?`ID ${escapeHtml(item.id)}`:'No ID set'}</div>
+      <div class="hist-mid">${item.id?`ID ${escapeHtml(item.id)}`:'No ID set'} · 📁 ${escapeHtml(productGroup(item))}${item.group?'':' <span style="opacity:.7;">(auto)</span>'}</div>
       <div style="margin:6px 0 4px;">${boxSelectHTML(item.box||'', `setProductBoxIdx(${item._idx}, this.value)`)}</div>
       <div class="hist-bot"><span></span><div class="hist-actions">
         <div class="iconsmall" onclick="editLibraryProduct(${item._idx})">✎</div>
@@ -8628,7 +8697,7 @@ async function startApp(){
   render();
   if(!safeLocalGet(TOUR_SEEN_KEY)) openTour(true);
   setInterval(updateClock, 30000);
-  setInterval(()=>{ if(Router.current==='live'||Router.current==='dashboard') render(); }, 30000);
+  setInterval(()=>{ if((Router.current==='live'||Router.current==='dashboard') && !isTypingInField()) render(); }, 30000); // v205.85: wait while typing
 
   /* Self-heal a stale Firestore connection or a stale local cache: iOS can tear down the connection while the tab is backgrounded (phone locked, app switched away, or the device hopped between wifi/cellular). Firestore's offline persistence can silently keep showing old cached data with no error at all when this happens — so on returning to the app, force a genuine server read (bypassing the local cache) for whatever's currently live, rather than trusting the ambient listener to have caught up on its own. This is what keeps two devices (e.g. iPad on the floor, phone during a break) from disagreeing about what's actually running after switching between them. */
   let wasHidden = false;
